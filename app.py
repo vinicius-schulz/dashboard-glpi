@@ -53,6 +53,14 @@ client = GLPIClient(GLPI_URL, GLPI_USER_TOKEN)
 
 @st.cache_data(show_spinner=True, ttl=600)
 def fetch_data(dini: pd.Timestamp, dfim: pd.Timestamp, max_tix: int):
+    """Fluxo principal de coleta de dados.
+
+    - Abre sessão no GLPI e descobre grupos do usuário.
+    - Descobre SIDs de Group_Ticket.
+    - Busca todos os tickets vinculados aos grupos e filtra apenas os com type=3 (observador).
+    - Carrega detalhes dos tickets e aplica janela por data de criação.
+    Retorna: (DataFrame normalizado, metadados do processo).
+    """
     client.init_session(get_full=True)
     try:
         if not client.my_group_ids:

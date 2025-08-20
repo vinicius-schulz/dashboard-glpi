@@ -10,9 +10,10 @@ from glpi_client import GLPIClient
 # -------------------- Descoberta de SIDs (Group_Ticket) --------------------
 
 def discover_group_ticket_sids(client: GLPIClient) -> Tuple[int, int]:
-    """
-    Retorna (sid_ticket_id, sid_group_id) para Group_Ticket.
-    Fallback para (3,4) se não encontrar.
+    """Descobre os SIDs de campos em Group_Ticket.
+
+    Retorna uma tupla (sid_ticket_id, sid_group_id) para uso nas buscas.
+    Caso não encontre nos metadados, usa fallback (3, 4).
     """
     opts = client.list_search_options("Group_Ticket")
     sid_ticket, sid_group = None, None
@@ -44,9 +45,10 @@ def find_ticket_ids_by_group_links(
     sid_group: int,
     range_chunk: int = 2000,
 ) -> Set[int]:
-    """
-    Retorna o conjunto de ticket_ids ligados a qualquer um dos 'group_ids' (qualquer type).
-    Usa search/Group_Ticket com criteria em sid_group e forcedisplay sid_ticket.
+    """Busca tickets relacionados a grupos em Group_Ticket (qualquer type).
+
+    - Faz paginação por "range" na rota search/Group_Ticket.
+    - Retorna o conjunto de Ticket.id vinculados a qualquer grupo em group_ids.
     """
     ticket_ids: Set[int] = set()
     for gid in group_ids:
@@ -90,11 +92,11 @@ def filter_observer_tickets(
     group_ids: List[int],
     max_tickets: int,
 ) -> List[int]:
-    """
-    Mantém apenas tickets em que pelo menos um vínculo Group_Ticket tem:
-      - groups_id ∈ group_ids
-      - type == 3 (observador)
-    Consulta Ticket/<id>/Group_Ticket ticket-a-ticket.
+    """Filtra tickets onde o grupo é Observador (type == 3).
+
+    Mantém apenas os tickets que possuem vínculo Group_Ticket com:
+    - groups_id presente em group_ids, e
+    - type == 3 (observador).
     """
     gids = set(group_ids)
     out: List[int] = []
@@ -123,6 +125,11 @@ def fetch_ticket_details(
     dt_ini: Optional[pd.Timestamp],
     dt_fim: Optional[pd.Timestamp],
 ) -> pd.DataFrame:
+    """Carrega detalhes dos tickets e aplica filtro por data de criação.
+
+    Colunas retornadas: ticket_id, created_at, solved_at, closed_at, status,
+    priority, urgency, impact, ttr_deadline, category, assigned_user, assigned_group.
+    """
     rows: List[Dict[str, Any]] = []
     for tid in ticket_ids:
         try:

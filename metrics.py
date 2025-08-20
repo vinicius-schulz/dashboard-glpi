@@ -7,6 +7,10 @@ import pandas as pd
 
 
 def normalize_ticket_df(df: pd.DataFrame) -> pd.DataFrame:
+    """Converte campos de data para datetime ingênuo (sem timezone).
+
+    Campos: created_at, solved_at, closed_at, ttr_deadline.
+    """
     for c in ["created_at", "solved_at", "closed_at", "ttr_deadline"]:
         if c in df.columns:
             df[c] = pd.to_datetime(df[c], errors="coerce", utc=True).dt.tz_convert(None)
@@ -14,6 +18,7 @@ def normalize_ticket_df(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def created_resolved(df: pd.DataFrame, freq: str = "D"):
+    """Computa séries temporais de criados, resolvidos e backlog na frequência informada."""
     s_created = (
         df.set_index("created_at").sort_index().assign(v=1)["v"].resample(freq).sum().fillna(0)
     )
@@ -25,6 +30,7 @@ def created_resolved(df: pd.DataFrame, freq: str = "D"):
 
 
 def backlog_status(df: pd.DataFrame):
+    """Distribuição do backlog aberto por status (considera closed_at nulo)."""
     open_mask = df["closed_at"].isna()
     return (
         df[open_mask].groupby("status", dropna=False)["ticket_id"].count().sort_values(ascending=False)
@@ -32,6 +38,11 @@ def backlog_status(df: pd.DataFrame):
 
 
 def sla_solution(df: pd.DataFrame, now=None) -> Dict[str, Any]:
+    """Calcula indicadores de SLA de solução e estatísticas de lead time.
+
+    Retorna: tickets_com_deadline, cumpridos, violados_abertos, pct_cumpridos,
+    lead_mediana_dias, lead_p95_dias.
+    """
     now = now or pd.Timestamp.now()
     tmp = df.copy()
     tmp["deadline"] = pd.to_datetime(tmp.get("ttr_deadline"), errors="coerce")
@@ -60,6 +71,7 @@ def sla_solution(df: pd.DataFrame, now=None) -> Dict[str, Any]:
 
 
 def composition(df: pd.DataFrame):
+    """Composição por categoria, prioridade e impacto."""
     cat = (
         df.groupby("category", dropna=True)["ticket_id"].count().sort_values(ascending=False).head(15)
     )
@@ -69,6 +81,7 @@ def composition(df: pd.DataFrame):
 
 
 def load_by_assignee(df: pd.DataFrame):
+    """Carga de tickets por usuário e grupo atribuídos (top 20)."""
     out = {}
     if "assigned_user" in df.columns:
         out["by_user"] = (
@@ -82,6 +95,7 @@ def load_by_assignee(df: pd.DataFrame):
 
 
 def aging_buckets(df: pd.DataFrame, now=None):
+    """Distribuição de idade (em dias) dos chamados abertos por faixas."""
     now = now or pd.Timestamp.now()
     open_df = df[df["closed_at"].isna()].copy()
     open_df["age_days"] = (
