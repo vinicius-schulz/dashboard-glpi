@@ -1,0 +1,7 @@
+requests>=2.32
+pandas>=2.2
+python-dotenv>=1.0
+tenacity>=8.2
+matplotlib>=3.8
+streamlit>=1.36
+
