@@ -34,9 +34,11 @@ pip install -r requirements.txt
 
 - Crie um arquivo chamado .env na raiz do projeto com o seguinte conteúdo:
 
+```bash
 GLPI_URL=https://sua-instancia-glpi/apirest.php
 GLPI_USER_TOKEN=seu_user_token_aqui
 GLPI_GROUP_IDS=12,34,56
+```
 
 
 
