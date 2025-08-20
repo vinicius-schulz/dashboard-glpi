@@ -48,6 +48,19 @@ GLPI_GROUP_IDS=12,34,56
 
 ### 5. Executar a aplicação
 
+Use o Streamlit para rodar a UI:
+
 ```bash
-python app.py
+streamlit run app.py
 ```
+
+Se preferir, defina variáveis em `.env`:
+
+```
+GLPI_URL=https://sua-instancia-glpi/apirest.php
+GLPI_USER_TOKEN=seu_user_token_aqui
+# opcional
+MAX_TICKETS=800
+```
+
+Observação: os grupos do usuário são lidos automaticamente via `getFullSession (session.glpigroups)`.
