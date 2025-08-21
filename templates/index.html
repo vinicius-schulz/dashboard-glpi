@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GLPI — Observador: Meus grupos</title>
+  <link rel="stylesheet" href="/static/css/styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header>
+    <h1>Tickets GLPI • Observador = Meus grupos</h1>
+  </header>
+
+  <section class="controls">
+    <label>Granularidade:
+      <select id="gran">
+        <option value="Diário">Diário</option>
+        <option value="Semanal">Semanal</option>
+      </select>
+    </label>
+    <label>Início: <input type="date" id="start" value="{{ default_start }}" /></label>
+    <label>Fim: <input type="date" id="end" value="{{ default_end }}" /></label>
+    <label>Limite tickets: <input type="number" id="max" min="50" step="50" value="{{ default_max }}" /></label>
+    <button id="apply">Aplicar</button>
+  </section>
+
+  <section id="meta"></section>
+
+  <section class="grid">
+    <div class="card">
+      <h2>Criados vs Resolvidos</h2>
+      <canvas id="chartCreatedResolved"></canvas>
+    </div>
+    <div class="card">
+      <h2>Backlog (tendência)</h2>
+      <canvas id="chartBacklog"></canvas>
+    </div>
+    <div class="card">
+      <h2>Backlog por Status</h2>
+      <canvas id="chartBacklogStatus"></canvas>
+    </div>
+  </section>
+
+  <section class="grid">
+    <div class="card">
+      <h2>SLA de Solução</h2>
+      <pre id="sla"></pre>
+    </div>
+    <div class="card">
+      <h2>Aging dos Abertos</h2>
+      <canvas id="chartAging"></canvas>
+    </div>
+  </section>
+
+  <section class="grid">
+    <div class="card"><h2>Composição por Categoria</h2><canvas id="chartCat"></canvas></div>
+    <div class="card"><h2>Prioridade</h2><canvas id="chartPr"></canvas></div>
+    <div class="card"><h2>Impacto</h2><canvas id="chartImp"></canvas></div>
+  </section>
+
+  <section class="grid">
+    <div class="card"><h2>Carga por Usuário</h2><canvas id="chartUser"></canvas></div>
+    <div class="card"><h2>Carga por Grupo</h2><canvas id="chartGroup"></canvas></div>
+  </section>
+
+  <footer>
+    <small>Filtro aplicado: Observador = Meus grupos (via Group_Ticket type=3). Status = Todos.</small>
+  </footer>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

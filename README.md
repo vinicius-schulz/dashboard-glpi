@@ -37,30 +37,36 @@ pip install -r requirements.txt
 ```bash
 GLPI_URL=https://sua-instancia-glpi/apirest.php
 GLPI_USER_TOKEN=seu_user_token_aqui
-GLPI_GROUP_IDS=12,34,56
 ```
 
 
 
 - GLPI_URL: URL base da API REST do GLPI (normalmente termina com /apirest.php)
 - GLPI_USER_TOKEN: Token pessoal gerado nas preferências do seu usuário no GLPI
-- GLPI_GROUP_IDS: Lista de IDs dos grupos que você quer monitorar, separados por vírgula
 
-### 5. Executar a aplicação
+### 5. Executar a aplicação (Flask + HTML)
 
-Use o Streamlit para rodar a UI:
+A nova versão usa um servidor Flask (API JSON) com front-end HTML/Chart.js.
 
-```bash
-streamlit run app.py
-```
-
-Se preferir, defina variáveis em `.env`:
+1) Configure variáveis no arquivo `.env` (raiz do projeto):
 
 ```
 GLPI_URL=https://sua-instancia-glpi/apirest.php
 GLPI_USER_TOKEN=seu_user_token_aqui
 # opcional
 MAX_TICKETS=800
+PORT=8000
 ```
 
-Observação: os grupos do usuário são lidos automaticamente via `getFullSession (session.glpigroups)`.
+2) Instale dependências e inicie o servidor Flask:
+
+```bash
+pip install -r requirements.txt
+python server.py
+```
+
+3) Acesse no navegador: http://localhost:8000
+
+Observações:
+- Os grupos do usuário são lidos automaticamente via `getFullSession (session.glpigroups)`.
+- A UI permite ajustar granularidade (Diário/Semanal), período e limite de tickets.
