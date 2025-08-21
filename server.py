@@ -212,7 +212,7 @@ def api_data():
             "period": {"start": start_s, "end": end_s, "gran": gran},
             "series": {
                 "created": _series_to_labels_data(created),
-                "resolved": _series_to_labels_data(resolved),
+                "resolved": _series_to_labels_data(resolved), 
                 "backlog": _series_to_labels_data(backlog),
                 "backlog_status": _dict_to_labels_data(bs),
                 "aging": _dict_to_labels_data(age),
