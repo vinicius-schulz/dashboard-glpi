@@ -163,7 +163,16 @@ def index():
     today = pd.Timestamp.today().normalize()
     start = (today - pd.Timedelta(days=30)).date().isoformat()
     end = today.date().isoformat()
-    return render_template("index.html", default_start=start, default_end=end, default_max=DEFAULT_MAX_TICKETS)
+    ui_base = GLPI_URL
+    if ui_base.endswith("/apirest.php"):
+        ui_base = ui_base[: -len("/apirest.php")]
+    return render_template(
+        "index.html",
+        default_start=start,
+        default_end=end,
+        default_max=DEFAULT_MAX_TICKETS,
+        ui_base=ui_base,
+    )
 
 
 @app.get("/api/data")

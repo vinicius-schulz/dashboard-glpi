@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="/static/css/styles.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
-<body>
+<body data-ui-base="{{ ui_base }}">
   <header>
     <h1>Tickets GLPI • Observador = Meus grupos</h1>
   </header>
@@ -59,11 +59,6 @@
     <div class="card"><h2>Impacto</h2><canvas id="chartImp"></canvas></div>
   </section>
 
-  <section class="grid">
-    <div class="card"><h2>Carga por Usuário</h2><canvas id="chartUser"></canvas></div>
-    <div class="card"><h2>Carga por Grupo</h2><canvas id="chartGroup"></canvas></div>
-  </section>
-
   <footer>
     <small>Filtro aplicado: Observador = Meus grupos (via Group_Ticket type=3). Status = Todos.</small>
   </footer>
@@ -98,6 +93,10 @@
       </div>
     </div>
   </div>
+
+  <!-- Global loader and toasts (must appear before scripts) -->
+  <div id="loader" class="loader hidden"><div class="spinner"></div><div class="msg">Carregando...</div></div>
+  <div id="toasts" class="toasts"></div>
 
   <script src="/static/js/app.js"></script>
 </body>

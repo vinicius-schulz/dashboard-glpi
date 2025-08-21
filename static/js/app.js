@@ -1,4 +1,24 @@
 let charts = {};
+const UI_BASE = document.body.getAttribute('data-ui-base') || '';
+const Loader = {
+  el: null,
+  init() { this.el = document.getElementById('loader'); },
+  show(msg) { if (this.el) { this.el.querySelector('.msg').textContent = msg || 'Carregando...'; this.el.classList.remove('hidden'); } },
+  hide() { if (this.el) this.el.classList.add('hidden'); }
+};
+const Toasts = {
+  el: null,
+  init() { this.el = document.getElementById('toasts'); },
+  push(kind, text, timeout=4000) {
+    if (!this.el) return;
+    const d = document.createElement('div');
+    d.className = `toast ${kind}`;
+    d.textContent = text;
+    this.el.appendChild(d);
+    setTimeout(() => { d.remove(); }, timeout);
+  }
+};
+window.addEventListener('DOMContentLoaded', () => { Loader.init(); Toasts.init(); });
 
 function lineChart(canvasId, labels, datasets) {
   const ctx = document.getElementById(canvasId);
@@ -46,50 +66,59 @@ let loading = false;
 async function loadData() {
   if (loading) return; // prevent concurrent renders
   loading = true;
-  const gran = document.getElementById('gran').value;
-  const start = document.getElementById('start').value;
-  const end = document.getElementById('end').value;
-  const max = document.getElementById('max').value;
+  Loader.show('Carregando dados...');
+  document.body.style.cursor = 'progress';
+  try {
+    const gran = document.getElementById('gran').value;
+    const start = document.getElementById('start').value;
+    const end = document.getElementById('end').value;
+    const max = document.getElementById('max').value;
 
-  const r = await fetch(`/api/data?gran=${encodeURIComponent(gran)}&start=${start}&end=${end}&max=${max}`);
-  const js = await r.json();
-  if (js.error) {
-    alert(js.error);
+    const r = await fetch(`/api/data?gran=${encodeURIComponent(gran)}&start=${start}&end=${end}&max=${max}`);
+    if (!r.ok) {
+      const txt = await r.text().catch(() => '');
+      throw new Error(`HTTP ${r.status}: ${txt.slice(0,200)}`);
+    }
+    const js = await r.json();
+    if (js.error) throw new Error(js.error);
+
+    setMeta(js.meta || {}, js.count || 0, js.period || {});
+
+    const s = js.series || {};
+    // Line charts
+    if (s.created && s.resolved) {
+      lineChart('chartCreatedResolved', s.created.labels, [
+        { label: 'Criados', data: s.created.data, borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.2)', tension: 0.2 },
+        { label: 'Resolvidos', data: s.resolved.data, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.2)', tension: 0.2 }
+      ]);
+      attachPointClick('chartCreatedResolved', s.created.labels, ['created', 'resolved']);
+    }
+    if (s.backlog) {
+      lineChart('chartBacklog', s.backlog.labels, [
+        { label: 'Backlog', data: s.backlog.data, borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.2)', tension: 0.2 }
+      ]);
+      attachPointClick('chartBacklog', s.backlog.labels, ['backlog']);
+    }
+
+    // Bar charts
+    if (s.backlog_status) { barChart('chartBacklogStatus', s.backlog_status.labels, s.backlog_status.data, 'Status'); attachBarClick('chartBacklogStatus', s.backlog_status.labels, 'backlog_status'); }
+    if (s.aging) { barChart('chartAging', s.aging.labels, s.aging.data, 'Aging'); attachBarClick('chartAging', s.aging.labels, 'aging'); }
+    if (s.category) { barChart('chartCat', s.category.labels, s.category.data, 'Categoria'); attachBarClick('chartCat', s.category.labels, 'category'); }
+    if (s.priority) { barChart('chartPr', s.priority.labels, s.priority.data, 'Prioridade'); attachBarClick('chartPr', s.priority.labels, 'priority'); }
+    if (s.impact) { barChart('chartImp', s.impact.labels, s.impact.data, 'Impacto'); attachBarClick('chartImp', s.impact.labels, 'impact'); }
+    if (s.load_by_user) { barChart('chartUser', s.load_by_user.labels, s.load_by_user.data, 'Usuário'); attachBarClick('chartUser', s.load_by_user.labels, 'load_by_user'); }
+    if (s.load_by_group) { barChart('chartGroup', s.load_by_group.labels, s.load_by_group.data, 'Grupo'); attachBarClick('chartGroup', s.load_by_group.labels, 'load_by_group'); }
+
+    // SLA block
+    const sla = js.sla || {};
+    document.getElementById('sla').textContent = JSON.stringify(sla, null, 2);
+  } catch (e) {
+    Toasts.push('error', String(e));
+  } finally {
+    Loader.hide();
+    document.body.style.cursor = 'default';
     loading = false;
-    return;
   }
-
-  setMeta(js.meta || {}, js.count || 0, js.period || {});
-
-  const s = js.series || {};
-  // Line charts
-  if (s.created && s.resolved) {
-    lineChart('chartCreatedResolved', s.created.labels, [
-      { label: 'Criados', data: s.created.data, borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.2)', tension: 0.2 },
-      { label: 'Resolvidos', data: s.resolved.data, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.2)', tension: 0.2 }
-    ]);
-  attachPointClick('chartCreatedResolved', s.created.labels, ['created', 'resolved']);
-  }
-  if (s.backlog) {
-    lineChart('chartBacklog', s.backlog.labels, [
-      { label: 'Backlog', data: s.backlog.data, borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.2)', tension: 0.2 }
-    ]);
-  attachPointClick('chartBacklog', s.backlog.labels, ['backlog']);
-  }
-
-  // Bar charts
-  if (s.backlog_status) { barChart('chartBacklogStatus', s.backlog_status.labels, s.backlog_status.data, 'Status'); attachBarClick('chartBacklogStatus', s.backlog_status.labels, 'backlog_status'); }
-  if (s.aging) { barChart('chartAging', s.aging.labels, s.aging.data, 'Aging'); attachBarClick('chartAging', s.aging.labels, 'aging'); }
-  if (s.category) { barChart('chartCat', s.category.labels, s.category.data, 'Categoria'); attachBarClick('chartCat', s.category.labels, 'category'); }
-  if (s.priority) { barChart('chartPr', s.priority.labels, s.priority.data, 'Prioridade'); attachBarClick('chartPr', s.priority.labels, 'priority'); }
-  if (s.impact) { barChart('chartImp', s.impact.labels, s.impact.data, 'Impacto'); attachBarClick('chartImp', s.impact.labels, 'impact'); }
-  if (s.load_by_user) { barChart('chartUser', s.load_by_user.labels, s.load_by_user.data, 'Usuário'); attachBarClick('chartUser', s.load_by_user.labels, 'load_by_user'); }
-  if (s.load_by_group) { barChart('chartGroup', s.load_by_group.labels, s.load_by_group.data, 'Grupo'); attachBarClick('chartGroup', s.load_by_group.labels, 'load_by_group'); }
-
-  // SLA block
-  const sla = js.sla || {};
-  document.getElementById('sla').textContent = JSON.stringify(sla, null, 2);
-  loading = false;
 }
 
 document.getElementById('apply').addEventListener('click', () => loadData());
@@ -148,18 +177,21 @@ async function openTicketsModal(source, label) {
   modal.info.textContent = 'Carregando...';
   modal.rows.innerHTML = '';
   modal.show();
+  Loader.show('Carregando chamados...');
+  document.body.style.cursor = 'progress';
   try {
     const r = await fetch(`/api/tickets?gran=${encodeURIComponent(gran)}&start=${start}&end=${end}&max=${max}&source=${encodeURIComponent(source)}&label=${encodeURIComponent(label)}`);
-    const js = await r.json();
-    if (js.error) {
-      modal.info.textContent = js.error;
-      return;
+    if (!r.ok) {
+      const txt = await r.text().catch(() => '');
+      throw new Error(`HTTP ${r.status}: ${txt.slice(0,200)}`);
     }
+    const js = await r.json();
+    if (js.error) throw new Error(js.error);
     modal.info.textContent = `Total no filtro: ${js.count} • Mostrando: ${js.returned}`;
     const rows = js.tickets || [];
     const tBody = rows.map(t => `
       <tr>
-        <td>${t.id}</td>
+        <td><a href="${buildGlpiLink(t.id)}" target="_blank" rel="noopener noreferrer">${t.id}</a></td>
         <td>${escapeHtml(t.titulo)}</td>
         <td>${escapeHtml(t.status || '')}</td>
         <td>${escapeHtml(t.categoria || '')}</td>
@@ -170,8 +202,13 @@ async function openTicketsModal(source, label) {
         <td>${escapeHtml(t.tecnico_atribuido || '')}</td>
       </tr>`).join('');
     modal.rows.innerHTML = tBody || '<tr><td colspan="9">Nenhum chamado</td></tr>';
+    Toasts.push('success', `Lista carregada (${rows.length})`);
   } catch (e) {
     modal.info.textContent = String(e);
+    Toasts.push('error', String(e));
+  } finally {
+    Loader.hide();
+    document.body.style.cursor = 'default';
   }
 }
 
@@ -183,4 +220,13 @@ function escapeHtml(s) {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;');
+}
+
+function buildGlpiLink(id) {
+  if (!UI_BASE) return `#${id}`;
+  // Typical GLPI ticket URL pattern
+  // e.g., https://glpi.example.com/front/ticket.form.php?id=123
+  let base = UI_BASE;
+  if (base.endsWith('/')) base = base.slice(0, -1);
+  return `${base}/front/ticket.form.php?id=${encodeURIComponent(id)}`;
 }
