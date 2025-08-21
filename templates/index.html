@@ -68,6 +68,37 @@
     <small>Filtro aplicado: Observador = Meus grupos (via Group_Ticket type=3). Status = Todos.</small>
   </footer>
 
+  <!-- Modal for ticket list -->
+  <div id="modal" class="modal hidden">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 id="modal-title">Chamados</h3>
+        <button id="modal-close">×</button>
+      </div>
+      <div class="modal-body">
+        <div id="modal-info" class="muted"></div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Título</th>
+                <th>Status</th>
+                <th>Categoria</th>
+                <th>Abertura</th>
+                <th>Última atualização</th>
+                <th>Requerente</th>
+                <th>Grupo atribuído</th>
+                <th>Técnico atribuído</th>
+              </tr>
+            </thead>
+            <tbody id="modal-rows"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="/static/js/app.js"></script>
 </body>
 </html>
