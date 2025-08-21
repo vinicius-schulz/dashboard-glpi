@@ -229,6 +229,12 @@ def api_data():
         return jsonify({"error": str(e)}), 500
 
 
+@app.get("/favicon.ico")
+def favicon():
+    # Avoid 404 noise; you can replace with a real icon in static if desired
+    return ("", 204)
+
+
 @app.get("/api/tickets")
 def api_tickets():
     """Return ticket list for a clicked chart point/bar.

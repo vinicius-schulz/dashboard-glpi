@@ -22,6 +22,7 @@ window.addEventListener('DOMContentLoaded', () => { Loader.init(); Toasts.init()
 
 function lineChart(canvasId, labels, datasets) {
   const ctx = document.getElementById(canvasId);
+  if (!ctx) return; // canvas not present
   // Ensure parent has a fixed height via CSS; Chart.js will fill canvas
   if (charts[canvasId]) charts[canvasId].destroy();
   charts[canvasId] = new Chart(ctx, {
@@ -39,6 +40,7 @@ function lineChart(canvasId, labels, datasets) {
 
 function barChart(canvasId, labels, data, label) {
   const ctx = document.getElementById(canvasId);
+  if (!ctx) return; // canvas not present
   if (charts[canvasId]) charts[canvasId].destroy();
   charts[canvasId] = new Chart(ctx, {
     type: 'bar',
