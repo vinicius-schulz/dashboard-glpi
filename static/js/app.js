@@ -116,22 +116,29 @@ const WidgetLayout = (() => {
     grid.addEventListener('dragend', () => { if (dragEl) dragEl.classList.remove('dragging'); dragEl = null; saveOrder(layout); });
     grid.addEventListener('dragover', e => {
       if (!dragEl) return; e.preventDefault();
-      const after = getDragAfterElement(grid, e.clientY, e.clientX);
-      if (after == null) grid.appendChild(dragEl); else grid.insertBefore(dragEl, after);
+      // Element sob o ponteiro
+      let over = e.target.closest('.card[data-widget]');
+      if ((!over || over === dragEl) && document.elementFromPoint) {
+        const el = document.elementFromPoint(e.clientX, e.clientY);
+        over = el ? el.closest('.card[data-widget]') : null;
+      }
+      if (!over || over === dragEl) return; // nada para comparar
+      const rect = over.getBoundingClientRect();
+      const midX = rect.left + rect.width / 2;
+      // Se cursor à esquerda da metade => inserir antes, caso contrário depois
+      if (e.clientX < midX) {
+        if (over.previousSibling !== dragEl) {
+          grid.insertBefore(dragEl, over);
+        }
+      } else {
+        if (over.nextSibling === dragEl) return; // já está depois
+        grid.insertBefore(dragEl, over.nextSibling);
+      }
     });
     function saveOrder(layout) {
       const ids = Array.from(grid.querySelectorAll('.card[data-widget]')).map(c=>c.getAttribute('data-widget'));
       ids.forEach((id, idx) => { const item = layout.find(w=>w.id===id); if (item) item.order = idx; });
       save(layout);
-    }
-    function getDragAfterElement(container, y, x) {
-      const els = [...container.querySelectorAll('.card[data-widget]:not(.dragging)')];
-      return els.reduce((closest, child) => {
-        const box = child.getBoundingClientRect();
-        const offset = y - box.top - box.height / 2;
-        if (offset < 0 && offset > closest.offset) { return { offset, element: child }; }
-        return closest;
-      }, { offset: Number.NEGATIVE_INFINITY }).element;
     }
   }
   function openPanel(layout) {
