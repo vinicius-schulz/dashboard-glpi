@@ -6,11 +6,30 @@ header h1 { margin: 0; font-size: 20px; }
 .controls label { font-size: 14px; }
 .controls input, .controls select, .controls button { padding: 6px 8px; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; padding: 16px 20px; width: 100%; align-items: start; }
-.card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); position: relative; display: flex; flex-direction: column; }
+/* Free layout mode overrides (absolute positioning with snap grid) */
+.grid.free-layout { position: relative; display: block; min-height: 400px; }
+.grid.free-layout .card { position: absolute; margin: 0; }
+.grid.free-layout .placeholder { position: absolute; pointer-events: none; border: 2px dashed #94a3b8; border-radius: 8px; background: rgba(148,163,184,0.15); z-index: 50; }
+/* Dev grid visualization */
+.grid.free-layout.dev-grid { 
+	background-image:
+		linear-gradient(to right, rgba(100,116,139,0.25) 1px, transparent 1px),
+		linear-gradient(to bottom, rgba(100,116,139,0.25) 1px, transparent 1px);
+	background-size: var(--cell-w,80px) var(--cell-h,80px), var(--cell-w,80px) var(--cell-h,80px);
+	background-position: 0 0;
+}
+.grid.free-layout.dev-grid::after { /* label overlay */
+	content: 'DEV GRID'; position: absolute; top: 4px; left: 8px; font-size: 10px; letter-spacing:1px; font-weight:600; color:#64748b; background:rgba(255,255,255,0.7); padding:2px 4px; border-radius:4px; pointer-events:none; }
+.card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); position: relative; display: flex; flex-direction: column; }
+/* Inner wrapper to hold padded content so outer card sizing stays stable */
+.card-inner { padding: 12px; flex: 1 1 auto; display: flex; flex-direction: column; width: 100%; height: 100%; box-sizing: border-box; }
 .card h2 { margin-top: 0; font-size: 16px; }
 /* Ensure chart canvases have a stable height to avoid resize loops */
-.card canvas { display: block; width: 100% !important; max-width: 100%; height: 280px !important; }
-.card.dragging { opacity: 0.5; }
+/* ensure legacy rule merged */
+.card { display:flex; flex-direction:column; }
+.card canvas, .card pre { flex:1 1 auto; width:100% !important; max-width:100%; height:100% !important; min-height:120px; }
+.card.dragging { opacity: 0.5; cursor: grabbing !important; }
+body.drag-mode { cursor: grabbing; }
 .card .widget-actions { position: absolute; top: 4px; right: 4px; display: flex; gap: 4px; opacity: 0; transition: opacity .15s; }
 .card:hover .widget-actions { opacity: 1; }
 .widget-actions button { background: #f1f5f9; border: 1px solid #cbd5e1; padding: 2px 6px; border-radius: 4px; cursor: pointer; font-size: 12px; }
@@ -21,9 +40,10 @@ header h1 { margin: 0; font-size: 20px; }
 .card:hover .resize-handle { opacity: .95; }
 
 /* Height multipliers */
-.card.h-1 canvas, .card.h-1 pre { height: 280px !important; }
-.card.h-2 canvas, .card.h-2 pre { height: 560px !important; }
-.card.h-3 canvas, .card.h-3 pre { height: 840px !important; }
+/* legacy fixed heights removed in free layout mode (kept only if old classes present) */
+.card.h-1 canvas, .card.h-1 pre { min-height:280px; }
+.card.h-2 canvas, .card.h-2 pre { min-height:560px; }
+.card.h-3 canvas, .card.h-3 pre { min-height:840px; }
 .card pre { background:#f8fafc; padding:8px; border:1px solid #e2e8f0; border-radius:6px; overflow:auto; }
 
 /* Floating action button */
@@ -46,6 +66,7 @@ header h1 { margin: 0; font-size: 20px; }
 .lp-actions button:hover { filter: brightness(.95); }
 
 /* Width size helpers */
+/* Legacy width helpers (kept for backward compatibility when not yet in free-layout mode) */
 .w-1 { grid-column: span 1; }
 .w-2 { grid-column: span 2; }
 .w-3 { grid-column: span 3; }

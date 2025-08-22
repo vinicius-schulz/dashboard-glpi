@@ -22,48 +22,77 @@ window.addEventListener('DOMContentLoaded', () => { Loader.init(); Toasts.init()
 
 // ---- Widget Layout Manager ----
 const WidgetLayout = (() => {
-  const STORAGE_KEY = 'glpiDashboardLayout.v1';
+  const STORAGE_KEY = 'glpiDashboardLayout.v2'; // bump version for new coordinate-based schema
   const DEFAULT = [
-    { id: 'createdResolved', width: 2, height: 1, visible: true },
-    { id: 'backlog', width: 1, height: 1, visible: true },
-    { id: 'backlogStatus', width: 1, height: 1, visible: true },
-    { id: 'sla', width: 1, height: 1, visible: true },
-    { id: 'aging', width: 1, height: 1, visible: true },
-    { id: 'category', width: 1, height: 1, visible: true },
-    { id: 'priority', width: 1, height: 1, visible: true },
-    { id: 'impact', width: 1, height: 1, visible: true }
-  ];
+    { id: 'createdResolved', cols: 3, rows: 3, visible: true },
+    { id: 'backlog', cols: 3, rows: 3, visible: true },
+    { id: 'backlogStatus', cols: 3, rows: 3, visible: true },
+    { id: 'sla', cols: 3, rows: 3, visible: true },
+    { id: 'aging', cols: 3, rows: 3, visible: true },
+    { id: 'category', cols: 3, rows: 3, visible: true },
+    { id: 'priority', cols: 3, rows: 3, visible: true },
+    { id: 'impact', cols: 3, rows: 3, visible: true }
+  ].map((w,i) => ({...w, order: i}));
+  // Grid cell size (px) for snap positioning
+  const CELL_W = 160; // base logical cell width (will derive snap unit)
+  const CELL_H = 160; // base logical cell height
+  const DEV_SHOW_GRID = true; // definir para false para ocultar marcações de desenvolvimento
+  const AUTO_RESOLVE = false; // quando true empurra outros cards; false permite sobreposição
+  const MAX_COLS = 24; // logical columns for coordinate space
   function load() {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || DEFAULT; } catch { return DEFAULT; }
+    try {
+      const raw = JSON.parse(localStorage.getItem(STORAGE_KEY));
+      if (!raw) return DEFAULT.slice();
+      // migrate v1 (no x,y) if needed
+      if (raw.length && raw[0] && raw[0].x == null && raw[0].y == null) {
+        return assignInitialCoords(raw);
+      }
+      return raw;
+    } catch { return DEFAULT.slice(); }
   }
   function save(layout) { localStorage.setItem(STORAGE_KEY, JSON.stringify(layout)); }
+  function assignInitialCoords(layout) {
+    // Sequential placement: honor predefined cols/rows if present else minimal 3x3
+    let x=0, y=0, rowH=0; const COLS=MAX_COLS;
+    layout.forEach(item => {
+      const wCols = Math.min(COLS, item.cols || 3);
+      const wRows = item.rows || 3;
+      if (x + wCols > COLS) { x = 0; y += rowH; rowH = 0; }
+      item.x = item.x != null ? item.x : x;
+      item.y = item.y != null ? item.y : y;
+      item.cols = wCols; item.rows = wRows;
+      x += wCols; rowH = Math.max(rowH, wRows);
+    });
+    return layout;
+  }
+  function ensureAllHaveCoords(layout) {
+    let changed=false;
+    layout.forEach(w => { if (w.x==null||w.y==null) { changed=true; } });
+    if (changed) assignInitialCoords(layout); // assigns 3x3 only for missing coords/sizes
+    // Clamp & sanity
+    layout.forEach(w => { w.cols = Math.max(3, w.cols||3); w.rows = Math.max(3, w.rows||3); });
+  }
   function apply(layout) {
     const grid = document.querySelector('.grid');
     const map = new Map(layout.map(w => [w.id, w]));
-    // Ensure every default exists (handle new widgets added later)
-    DEFAULT.forEach(def => { if (!map.has(def.id)) { layout.push(def); map.set(def.id, def); } });
-    const ordered = layout.filter(w => w.visible);
-    ordered.sort((a,b) => (a.order ?? 0) - (b.order ?? 0));
-    // reorder DOM
-    ordered.forEach(w => {
-      const el = grid.querySelector(`.card[data-widget="${w.id}"]`);
-      if (el) grid.appendChild(el);
-    });
-    // apply visibility + width/height
+    DEFAULT.forEach(def => { if (!map.has(def.id)) { layout.push({...def}); map.set(def.id, def); } });
+    ensureAllHaveCoords(layout);
+  grid.classList.add('free-layout');
+  if (DEV_SHOW_GRID) { grid.classList.add('dev-grid'); grid.style.setProperty('--cell-w', (CELL_W/2)+'px'); grid.style.setProperty('--cell-h', (CELL_H/2)+'px'); } else { grid.classList.remove('dev-grid'); }
+    const SNAP_W = CELL_W/2; // snap unit
+    const SNAP_H = CELL_H/2;
     document.querySelectorAll('.card[data-widget]').forEach(el => {
       const id = el.getAttribute('data-widget');
       const w = map.get(id);
-      if (!w || w.visible === false) {
-        el.classList.add('hidden-by-layout');
-        el.style.display = 'none';
-      } else {
-        el.classList.remove('hidden-by-layout');
-        el.style.display = '';
-        el.classList.remove('w-1','w-2','w-3','h-1','h-2','h-3');
-        el.classList.add(`w-${w.width || 1}`);
-        el.classList.add(`h-${w.height || 1}`);
-      }
+      if (!w || w.visible===false) { el.style.display='none'; return; } else el.style.display='';
+      el.style.position='absolute';
+      el.style.width = (w.cols * SNAP_W) + 'px';
+      el.style.height = (w.rows * SNAP_H) + 'px';
+      el.style.left = (w.x * SNAP_W) + 'px';
+      el.style.top = (w.y * SNAP_H) + 'px';
     });
+    const maxBottom = layout.filter(w=>w.visible!==false).reduce((m,w)=> Math.max(m, (w.y + w.rows) * SNAP_H), 0);
+    grid.style.height = (maxBottom + 40) + 'px';
     attachWidgetActions(layout);
   }
   function attachWidgetActions(layout) {
@@ -76,71 +105,67 @@ const WidgetLayout = (() => {
         act.addEventListener('click', (e) => {
           const btn = e.target.closest('button'); if (!btn) return;
           const id = card.getAttribute('data-widget');
-          const item = layout.find(x => x.id===id); if (!item) return;
-          if (btn.dataset.act === 'hide') { item.visible = false; save(layout); apply(layout); Toasts.push('info', `Widget ocultado: ${id}`); }
+            const item = layout.find(x => x.id===id); if (!item) return;
+            if (btn.dataset.act === 'hide') { item.visible=false; save(layout); apply(layout); Toasts.push('info', 'Widget ocultado: '+id); }
         });
       }
-      // resize handle
+      // Ensure resize handle exists
       if (!card.querySelector('.resize-handle')) {
         const rh = document.createElement('div'); rh.className='resize-handle'; card.appendChild(rh);
-        let startX, startY, startW, startH;
-        rh.addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation();
-          const id = card.getAttribute('data-widget');
-          const item = layout.find(x=>x.id===id); if (!item) return;
-          startX = e.clientX; startY = e.clientY; startW = card.offsetWidth; startH = card.offsetHeight;
+        let sx, sy, sw, sh, startCols, startRows; const snapW = CELL_W/2, snapH = CELL_H/2; const id = card.getAttribute('data-widget');
+        rh.addEventListener('mousedown', e => { e.preventDefault(); e.stopPropagation();
+          const item = layout.find(x=>x.id===id); if(!item) return; sx=e.clientX; sy=e.clientY; sw=card.offsetWidth; sh=card.offsetHeight; startCols=item.cols; startRows=item.rows;
           function move(ev){
-            const dx = ev.clientX - startX; const dy = ev.clientY - startY;
-            const newW = startW + dx; const newH = startH + dy;
-            // snap horizontal to grid width (approx width of one auto column ~ min 300px)
-            const colBase = 300; const spanW = Math.min(3, Math.max(1, Math.round(newW / colBase)));
-            const rowBase = 280; const spanH = Math.min(3, Math.max(1, Math.round(newH / rowBase)));
-            item.width = spanW; item.height = spanH;
-            save(layout); apply(layout);
+            const dx=ev.clientX-sx; const dy=ev.clientY-sy; const newW=sw+dx; const newH=sh+dy;
+            const cols = Math.max(3, Math.round(newW / snapW));
+            const rows = Math.max(3, Math.round(newH / snapH));
+            if (cols!==item.cols || rows!==item.rows){ item.cols=cols; item.rows=rows; apply(layout); }
           }
-            function up(){ document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); }
-          document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
+          function up(){ save(layout); document.removeEventListener('mousemove',move); document.removeEventListener('mouseup',up); }
+          document.addEventListener('mousemove',move); document.addEventListener('mouseup',up);
         });
       }
-      card.setAttribute('draggable','true');
+      if (!card.dataset.freeInit) { initDrag(card, layout); card.dataset.freeInit='1'; }
     });
   }
-  function enableDrag(layout) {
-    const grid = document.querySelector('.grid');
-    let dragEl = null;
-    grid.addEventListener('dragstart', e => {
-      const card = e.target.closest('.card[data-widget]');
-      if (!card) return;
-      dragEl = card; card.classList.add('dragging');
-      e.dataTransfer.effectAllowed = 'move';
-    });
-    grid.addEventListener('dragend', () => { if (dragEl) dragEl.classList.remove('dragging'); dragEl = null; saveOrder(layout); });
-    grid.addEventListener('dragover', e => {
-      if (!dragEl) return; e.preventDefault();
-      // Element sob o ponteiro
-      let over = e.target.closest('.card[data-widget]');
-      if ((!over || over === dragEl) && document.elementFromPoint) {
-        const el = document.elementFromPoint(e.clientX, e.clientY);
-        over = el ? el.closest('.card[data-widget]') : null;
+  function initDrag(card, layout) {
+    let startX, startY, origX, origY, previewX, previewY; const id = card.getAttribute('data-widget');
+    function onMouseDown(e){
+      if(e.button!==0) return;
+      const item = layout.find(w=>w.id===id); if(!item) return;
+      startX=e.clientX; startY=e.clientY; origX=item.x||0; origY=item.y||0; previewX=origX; previewY=origY;
+      card.classList.add('dragging'); document.body.classList.add('drag-mode');
+      // bring to front
+      card.style.zIndex = 999;
+      document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
+    }
+    function onMove(e){
+      const item = layout.find(w=>w.id===id); if(!item) return;
+      const dx=e.clientX-startX; const dy=e.clientY-startY;
+      const snapW = CELL_W/2; const snapH = CELL_H/2;
+      const deltaCols=Math.round(dx/snapW); const deltaRows=Math.round(dy/snapH);
+      let newX=Math.max(0, origX+deltaCols); let newY=Math.max(0, origY+deltaRows);
+      if(newX!==previewX || newY!==previewY){
+        previewX=newX; previewY=newY;
+        card.style.left = (previewX * snapW) + 'px';
+        card.style.top  = (previewY * snapH) + 'px';
       }
-      if (!over || over === dragEl) return; // nada para comparar
-      const rect = over.getBoundingClientRect();
-      const midX = rect.left + rect.width / 2;
-      // Se cursor à esquerda da metade => inserir antes, caso contrário depois
-      if (e.clientX < midX) {
-        if (over.previousSibling !== dragEl) {
-          grid.insertBefore(dragEl, over);
-        }
-      } else {
-        if (over.nextSibling === dragEl) return; // já está depois
-        grid.insertBefore(dragEl, over.nextSibling);
+    }
+    function onUp(){
+      const item = layout.find(w=>w.id===id); if(item){ item.x=previewX; item.y=previewY; if (AUTO_RESOLVE) resolveCollisions(item, layout); apply(layout); save(layout); }
+      card.classList.remove('dragging'); document.body.classList.remove('drag-mode'); card.style.zIndex='';
+      document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp);
+    }
+    card.addEventListener('mousedown', onMouseDown);
+  }
+  function boxesOverlap(a,b){ return !(a.x+a.cols<=b.x || b.x+b.cols<=a.x || a.y+a.rows<=b.y || b.y+b.rows<=a.y); }
+  function resolveCollisions(moved, layout){
+    let changed=true; let guard=0; while(changed && guard<50){ changed=false; guard++; for(const other of layout){ if(other===moved || other.visible===false) continue; if(boxesOverlap(moved, other)){ // push other down
+          other.y = moved.y + moved.rows; changed=true; }
       }
-    });
-    function saveOrder(layout) {
-      const ids = Array.from(grid.querySelectorAll('.card[data-widget]')).map(c=>c.getAttribute('data-widget'));
-      ids.forEach((id, idx) => { const item = layout.find(w=>w.id===id); if (item) item.order = idx; });
-      save(layout);
     }
   }
+  function enableDrag(layout) { /* kept for backward compatibility - no-op now */ }
   function openPanel(layout) {
     const panel = document.getElementById('layoutPanel');
     const tbody = document.getElementById('lpRows');
@@ -149,14 +174,14 @@ const WidgetLayout = (() => {
       const row = document.createElement('tr');
       row.innerHTML = `<td>${w.id}</td><td><input type="checkbox" data-f="vis" ${w.visible!==false?'checked':''}></td>
         <td>
-          L:<select data-f="w"><option value="1" ${w.width==1?'selected':''}>1</option><option value="2" ${w.width==2?'selected':''}>2</option><option value="3" ${w.width==3?'selected':''}>3</option></select>
-          H:<select data-f="h"><option value="1" ${w.height==1?'selected':''}>1</option><option value="2" ${w.height==2?'selected':''}>2</option><option value="3" ${w.height==3?'selected':''}>3</option></select>
+          L:<input data-f="cols" type="number" min="3" max="${MAX_COLS}" value="${w.cols|| (w.width||1)*3}" style="width:60px"> 
+          H:<input data-f="rows" type="number" min="3" max="60" value="${w.rows|| (w.height||1)*3}" style="width:60px">
         </td>`;
       row.querySelectorAll('input,select').forEach(inp => {
         inp.addEventListener('change', () => {
           if (inp.dataset.f==='vis') w.visible = inp.checked;
-          if (inp.dataset.f==='w') w.width = parseInt(inp.value)||1;
-          if (inp.dataset.f==='h') w.height = parseInt(inp.value)||1;
+          if (inp.dataset.f==='cols') w.cols = Math.min(MAX_COLS, Math.max(3, parseInt(inp.value)||3));
+          if (inp.dataset.f==='rows') w.rows = Math.max(3, parseInt(inp.value)||3);
           save(layout); apply(layout);
         });
       });
