@@ -30,11 +30,13 @@ def created_resolved(df: pd.DataFrame, freq: str = "D"):
 
 
 def backlog_status(df: pd.DataFrame):
-    """Distribuição do backlog aberto por status (considera closed_at nulo)."""
-    open_mask = df["closed_at"].isna()
-    return (
-        df[open_mask].groupby("status", dropna=False)["ticket_id"].count().sort_values(ascending=False)
-    )
+    """Distribuição do backlog aberto por status.
+
+    Critério de backlog: ticket ainda não resolvido (solved_at nulo). Usar
+    closed_at pode manter tickets já resolvidos (status 5) indevidamente.
+    """
+    open_mask = df["solved_at"].isna()
+    return df[open_mask].groupby("status", dropna=False)["ticket_id"].count().sort_values(ascending=False)
 
 
 def sla_solution(df: pd.DataFrame, now=None) -> Dict[str, Any]:
@@ -95,12 +97,13 @@ def load_by_assignee(df: pd.DataFrame):
 
 
 def aging_buckets(df: pd.DataFrame, now=None):
-    """Distribuição de idade (em dias) dos chamados abertos por faixas."""
+    """Distribuição de idade (em dias) dos tickets em backlog (não resolvidos).
+
+    Critério: solved_at nulo. Tickets resolvidos aguardando fechamento não entram.
+    """
     now = now or pd.Timestamp.now()
-    open_df = df[df["closed_at"].isna()].copy()
-    open_df["age_days"] = (
-        now - pd.to_datetime(open_df["created_at"], errors="coerce")
-    ).dt.total_seconds() / 86400.0
+    open_df = df[df["solved_at"].isna()].copy()
+    open_df["age_days"] = (now - pd.to_datetime(open_df["created_at"], errors="coerce")).dt.total_seconds() / 86400.0
     bins = [-1, 2, 7, 14, 30, 999999]
     labels = ["0–2d", "3–7d", "8–14d", "15–30d", ">30d"]
     cats = pd.cut(open_df["age_days"], bins=bins, labels=labels)

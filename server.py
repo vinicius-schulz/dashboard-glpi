@@ -287,14 +287,16 @@ def api_tickets():
                 st = int(float(label))
             except Exception:
                 st = None
-            open_mask = df["closed_at"].isna()
+            # Backlog = não resolvidos
+            open_mask = df["solved_at"].isna()
             sel = df[open_mask & ((df["status"] == st) if st is not None else False)]
         elif source == "aging":
             ages = (now - pd.to_datetime(df["created_at"])) .dt.total_seconds() / 86400.0
             bins = [-1, 2, 7, 14, 30, 999999]
             labels = ["0–2d", "3–7d", "8–14d", "15–30d", ">30d"]
             cats = pd.cut(ages, bins=bins, labels=labels)
-            sel = df[(df["closed_at"].isna()) & (cats.astype(str) == label)]
+            # Apenas tickets ainda não resolvidos
+            sel = df[(df["solved_at"].isna()) & (cats.astype(str) == label)]
         elif source in ("category", "priority", "impact"):
             col = {"category": "category", "priority": "priority", "impact": "impact"}[source]
             sel = df[df[col].astype(str) == str(label)]
