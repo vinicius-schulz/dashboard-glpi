@@ -20,6 +20,157 @@ const Toasts = {
 };
 window.addEventListener('DOMContentLoaded', () => { Loader.init(); Toasts.init(); });
 
+// ---- Widget Layout Manager ----
+const WidgetLayout = (() => {
+  const STORAGE_KEY = 'glpiDashboardLayout.v1';
+  const DEFAULT = [
+    { id: 'createdResolved', width: 2, height: 1, visible: true },
+    { id: 'backlog', width: 1, height: 1, visible: true },
+    { id: 'backlogStatus', width: 1, height: 1, visible: true },
+    { id: 'sla', width: 1, height: 1, visible: true },
+    { id: 'aging', width: 1, height: 1, visible: true },
+    { id: 'category', width: 1, height: 1, visible: true },
+    { id: 'priority', width: 1, height: 1, visible: true },
+    { id: 'impact', width: 1, height: 1, visible: true }
+  ];
+  function load() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || DEFAULT; } catch { return DEFAULT; }
+  }
+  function save(layout) { localStorage.setItem(STORAGE_KEY, JSON.stringify(layout)); }
+  function apply(layout) {
+    const grid = document.querySelector('.grid');
+    const map = new Map(layout.map(w => [w.id, w]));
+    // Ensure every default exists (handle new widgets added later)
+    DEFAULT.forEach(def => { if (!map.has(def.id)) { layout.push(def); map.set(def.id, def); } });
+    const ordered = layout.filter(w => w.visible);
+    ordered.sort((a,b) => (a.order ?? 0) - (b.order ?? 0));
+    // reorder DOM
+    ordered.forEach(w => {
+      const el = grid.querySelector(`.card[data-widget="${w.id}"]`);
+      if (el) grid.appendChild(el);
+    });
+    // apply visibility + width/height
+    document.querySelectorAll('.card[data-widget]').forEach(el => {
+      const id = el.getAttribute('data-widget');
+      const w = map.get(id);
+      if (!w || w.visible === false) {
+        el.classList.add('hidden-by-layout');
+        el.style.display = 'none';
+      } else {
+        el.classList.remove('hidden-by-layout');
+        el.style.display = '';
+        el.classList.remove('w-1','w-2','w-3','h-1','h-2','h-3');
+        el.classList.add(`w-${w.width || 1}`);
+        el.classList.add(`h-${w.height || 1}`);
+      }
+    });
+    attachWidgetActions(layout);
+  }
+  function attachWidgetActions(layout) {
+    document.querySelectorAll('.card[data-widget]').forEach(card => {
+      if (!card.querySelector('.widget-actions')) {
+        const act = document.createElement('div');
+        act.className = 'widget-actions';
+        act.innerHTML = '<button data-act="hide" title="Ocultar">Ocultar</button>';
+        card.appendChild(act);
+        act.addEventListener('click', (e) => {
+          const btn = e.target.closest('button'); if (!btn) return;
+          const id = card.getAttribute('data-widget');
+          const item = layout.find(x => x.id===id); if (!item) return;
+          if (btn.dataset.act === 'hide') { item.visible = false; save(layout); apply(layout); Toasts.push('info', `Widget ocultado: ${id}`); }
+        });
+      }
+      // resize handle
+      if (!card.querySelector('.resize-handle')) {
+        const rh = document.createElement('div'); rh.className='resize-handle'; card.appendChild(rh);
+        let startX, startY, startW, startH;
+        rh.addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation();
+          const id = card.getAttribute('data-widget');
+          const item = layout.find(x=>x.id===id); if (!item) return;
+          startX = e.clientX; startY = e.clientY; startW = card.offsetWidth; startH = card.offsetHeight;
+          function move(ev){
+            const dx = ev.clientX - startX; const dy = ev.clientY - startY;
+            const newW = startW + dx; const newH = startH + dy;
+            // snap horizontal to grid width (approx width of one auto column ~ min 300px)
+            const colBase = 300; const spanW = Math.min(3, Math.max(1, Math.round(newW / colBase)));
+            const rowBase = 280; const spanH = Math.min(3, Math.max(1, Math.round(newH / rowBase)));
+            item.width = spanW; item.height = spanH;
+            save(layout); apply(layout);
+          }
+            function up(){ document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); }
+          document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
+        });
+      }
+      card.setAttribute('draggable','true');
+    });
+  }
+  function enableDrag(layout) {
+    const grid = document.querySelector('.grid');
+    let dragEl = null;
+    grid.addEventListener('dragstart', e => {
+      const card = e.target.closest('.card[data-widget]');
+      if (!card) return;
+      dragEl = card; card.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    grid.addEventListener('dragend', () => { if (dragEl) dragEl.classList.remove('dragging'); dragEl = null; saveOrder(layout); });
+    grid.addEventListener('dragover', e => {
+      if (!dragEl) return; e.preventDefault();
+      const after = getDragAfterElement(grid, e.clientY, e.clientX);
+      if (after == null) grid.appendChild(dragEl); else grid.insertBefore(dragEl, after);
+    });
+    function saveOrder(layout) {
+      const ids = Array.from(grid.querySelectorAll('.card[data-widget]')).map(c=>c.getAttribute('data-widget'));
+      ids.forEach((id, idx) => { const item = layout.find(w=>w.id===id); if (item) item.order = idx; });
+      save(layout);
+    }
+    function getDragAfterElement(container, y, x) {
+      const els = [...container.querySelectorAll('.card[data-widget]:not(.dragging)')];
+      return els.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = y - box.top - box.height / 2;
+        if (offset < 0 && offset > closest.offset) { return { offset, element: child }; }
+        return closest;
+      }, { offset: Number.NEGATIVE_INFINITY }).element;
+    }
+  }
+  function openPanel(layout) {
+    const panel = document.getElementById('layoutPanel');
+    const tbody = document.getElementById('lpRows');
+    tbody.innerHTML = '';
+    layout.forEach(w => {
+      const row = document.createElement('tr');
+      row.innerHTML = `<td>${w.id}</td><td><input type="checkbox" data-f="vis" ${w.visible!==false?'checked':''}></td>
+        <td>
+          L:<select data-f="w"><option value="1" ${w.width==1?'selected':''}>1</option><option value="2" ${w.width==2?'selected':''}>2</option><option value="3" ${w.width==3?'selected':''}>3</option></select>
+          H:<select data-f="h"><option value="1" ${w.height==1?'selected':''}>1</option><option value="2" ${w.height==2?'selected':''}>2</option><option value="3" ${w.height==3?'selected':''}>3</option></select>
+        </td>`;
+      row.querySelectorAll('input,select').forEach(inp => {
+        inp.addEventListener('change', () => {
+          if (inp.dataset.f==='vis') w.visible = inp.checked;
+          if (inp.dataset.f==='w') w.width = parseInt(inp.value)||1;
+          if (inp.dataset.f==='h') w.height = parseInt(inp.value)||1;
+          save(layout); apply(layout);
+        });
+      });
+      tbody.appendChild(row);
+    });
+    panel.classList.remove('hidden');
+  }
+  function init() {
+    const layout = load();
+    apply(layout);
+    enableDrag(layout);
+    // Panel buttons
+    document.getElementById('customizeToggle').addEventListener('click', () => openPanel(layout));
+    document.getElementById('lpClose').addEventListener('click', () => document.getElementById('layoutPanel').classList.add('hidden'));
+    document.getElementById('lpDone').addEventListener('click', () => document.getElementById('layoutPanel').classList.add('hidden'));
+    document.getElementById('lpReset').addEventListener('click', () => { localStorage.removeItem(STORAGE_KEY); const fresh = load(); apply(fresh); Toasts.push('success','Layout redefinido'); });
+  }
+  return { init };
+})();
+window.addEventListener('DOMContentLoaded', () => WidgetLayout.init());
+
 function lineChart(canvasId, labels, datasets) {
   const ctx = document.getElementById(canvasId);
   if (!ctx) return; // canvas not present
@@ -108,6 +259,8 @@ async function loadData() {
     if (s.category) { barChart('chartCat', s.category.labels, s.category.data, 'Categoria'); attachBarClick('chartCat', s.category.labels, 'category'); }
     if (s.priority) { barChart('chartPr', s.priority.labels, s.priority.data, 'Prioridade'); attachBarClick('chartPr', s.priority.labels, 'priority'); }
     if (s.impact) { barChart('chartImp', s.impact.labels, s.impact.data, 'Impacto'); attachBarClick('chartImp', s.impact.labels, 'impact'); }
+  // refresh hidden state (in case layout toggled visibility before load)
+  document.querySelectorAll('.card[data-widget]').forEach(el => { if (el.style.display==='none') return; /* skip hidden */ });
     if (s.load_by_user) { barChart('chartUser', s.load_by_user.labels, s.load_by_user.data, 'Usuário'); attachBarClick('chartUser', s.load_by_user.labels, 'load_by_user'); }
     if (s.load_by_group) { barChart('chartGroup', s.load_by_group.labels, s.load_by_group.data, 'Grupo'); attachBarClick('chartGroup', s.load_by_group.labels, 'load_by_group'); }
 

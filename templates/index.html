@@ -28,30 +28,52 @@
   <section id="meta"></section>
 
   <section class="grid">
-    <div class="card">
+    <div class="card" data-widget="createdResolved">
       <h2>Criados vs Resolvidos</h2>
       <canvas id="chartCreatedResolved"></canvas>
     </div>
-    <div class="card">
+    <div class="card" data-widget="backlog">
       <h2>Backlog (tendência)</h2>
       <canvas id="chartBacklog"></canvas>
     </div>
-    <div class="card">
+    <div class="card" data-widget="backlogStatus">
       <h2>Backlog por Status</h2>
       <canvas id="chartBacklogStatus"></canvas>
     </div>
-    <div class="card">
+    <div class="card" data-widget="sla">
       <h2>SLA de Solução</h2>
       <pre id="sla"></pre>
     </div>
-    <div class="card">
+    <div class="card" data-widget="aging">
       <h2>Aging dos Abertos</h2>
       <canvas id="chartAging"></canvas>
     </div>
-    <div class="card"><h2>Composição por Categoria</h2><canvas id="chartCat"></canvas></div>
-    <div class="card"><h2>Prioridade</h2><canvas id="chartPr"></canvas></div>
-    <div class="card"><h2>Impacto</h2><canvas id="chartImp"></canvas></div>
+    <div class="card" data-widget="category"><h2>Composição por Categoria</h2><canvas id="chartCat"></canvas></div>
+    <div class="card" data-widget="priority"><h2>Prioridade</h2><canvas id="chartPr"></canvas></div>
+    <div class="card" data-widget="impact"><h2>Impacto</h2><canvas id="chartImp"></canvas></div>
   </section>
+
+  <!-- Painel de personalização de layout -->
+  <div id="layoutPanel" class="layout-panel hidden">
+    <div class="lp-header">
+      <strong>Personalizar layout</strong>
+      <button id="lpClose" type="button" title="Fechar">×</button>
+    </div>
+    <div class="lp-body">
+      <p>Arraste os cards diretamente na área principal para reordenar. Ajuste visibilidade e tamanho abaixo. As preferências ficam salvas neste navegador.</p>
+      <table class="lp-table">
+        <thead><tr><th>Widget</th><th>Visível</th><th>Largura / Altura</th></tr></thead>
+        <tbody id="lpRows"></tbody>
+      </table>
+      <div class="lp-actions">
+        <button id="lpReset" type="button">Redefinir layout</button>
+        <button id="lpDone" type="button" class="primary">Concluir</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Botão flutuante para ativar personalização -->
+  <button id="customizeToggle" class="fab" title="Personalizar layout">⚙️</button>
 
   <footer>
     <small>Filtro aplicado: Observador = Meus grupos (via Group_Ticket type=3). Status = Todos.</small>
