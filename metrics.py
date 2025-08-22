@@ -18,15 +18,48 @@ def normalize_ticket_df(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def created_resolved(df: pd.DataFrame, freq: str = "D"):
-    """Computa séries temporais de criados, resolvidos e backlog na frequência informada."""
-    s_created = (
-        df.set_index("created_at").sort_index().assign(v=1)["v"].resample(freq).sum().fillna(0)
-    )
-    s_resolved = (
-        df[df["solved_at"].notna()].set_index("solved_at").sort_index().assign(v=1)["v"].resample(freq).sum().fillna(0)
-    )
-    backlog = (s_created.cumsum() - s_resolved.cumsum()).rename("backlog")
-    return s_created.rename("Criados"), s_resolved.rename("Resolvidos"), backlog
+        """Computa séries de criados, resolvidos e backlog considerando backlog inicial.
+
+        Premissas:
+        - O dataframe já pode conter tickets criados antes do intervalo solicitado
+            (via lógica de fetch ampliada) para permitir cálculo de backlog inicial.
+        - A série de criados inclui apenas ocorrências com created_at dentro do range
+            coberto pela indexação resultante.
+        - Backlog = backlog_inicial + cumul(criados) - cumul(resolvidos).
+        """
+        if df.empty:
+                return pd.Series(dtype=float), pd.Series(dtype=float), pd.Series(dtype=float)
+
+        # Série base de datas para união: combinar datas de criação e solução
+        created_idx = pd.to_datetime(df["created_at"], errors="coerce")
+        solved_idx = pd.to_datetime(df["solved_at"], errors="coerce")
+        min_date = min(created_idx.min(), solved_idx.min(skipna=True) if solved_idx.notna().any() else created_idx.min())
+        max_date = max(created_idx.max(), solved_idx.max(skipna=True) if solved_idx.notna().any() else created_idx.max())
+
+        # Resample window — restringe à janela solicitada, se disponível em attrs
+        win_start = getattr(df, 'attrs', {}).get('window_start', None)
+        win_end = getattr(df, 'attrs', {}).get('window_end', None)
+        if win_start is not None:
+            min_date = pd.to_datetime(win_start)
+        if win_end is not None:
+            max_date = pd.to_datetime(win_end)
+        rng = pd.date_range(min_date.normalize(), max_date.normalize(), freq=freq)
+
+        s_created = (
+                pd.Series(1, index=created_idx).sort_index().resample(freq).sum().reindex(rng, fill_value=0)
+        )
+        s_resolved = (
+                pd.Series(1, index=solved_idx.dropna()).sort_index().resample(freq).sum().reindex(rng, fill_value=0)
+        )
+
+        # Backlog inicial: tickets criados antes da primeira data da janela e não resolvidos antes dessa data
+        start_boundary = rng[0]
+        created_before = created_idx < start_boundary
+        solved_before_start = solved_idx.notna() & (solved_idx < start_boundary)
+        backlog_inicial = ((created_before) & (~solved_before_start)).sum()
+
+        backlog = (backlog_inicial + s_created.cumsum() - s_resolved.cumsum()).rename("backlog")
+        return s_created.rename("Criados"), s_resolved.rename("Resolvidos"), backlog
 
 
 def backlog_status(df: pd.DataFrame):

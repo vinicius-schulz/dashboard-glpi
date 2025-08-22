@@ -152,9 +152,27 @@ def fetch_ticket_details(
         }
         rows.append(rec)
     df = pd.DataFrame(rows)
-    # filtro por data de criação (janela)
-    if not df.empty and dt_ini is not None:
-        df = df[pd.to_datetime(df["created_at"], errors="coerce") >= pd.to_datetime(dt_ini)]
-    if not df.empty and dt_fim is not None:
-        df = df[pd.to_datetime(df["created_at"], errors="coerce") < (pd.to_datetime(dt_fim) + pd.Timedelta(days=1))]
+    # Filtro ampliado de janela:
+    # - Mantém tickets criados dentro do intervalo
+    # - Inclui tickets criados antes mas resolvidos dentro do intervalo
+    # - Inclui tickets criados antes e ainda abertos no início do intervalo (para backlog inicial)
+    if not df.empty and (dt_ini is not None or dt_fim is not None):
+        c = pd.to_datetime(df["created_at"], errors="coerce")
+        s = pd.to_datetime(df["solved_at"], errors="coerce")
+        # Limites (fim exclusivo +1 dia para facilitar comparação por dia inteiro)
+        dt_start = pd.to_datetime(dt_ini) if dt_ini is not None else c.min()
+        dt_end = (pd.to_datetime(dt_fim) + pd.Timedelta(days=1)) if dt_fim is not None else (c.max() + pd.Timedelta(days=1))
+        # Condições
+        in_created_window = (c >= dt_start) & (c < dt_end)
+        resolved_in_window = s.notna() & (s >= dt_start) & (s < dt_end)
+        open_at_start = (c < dt_start) & ((s.isna()) | (s >= dt_start))
+        mask = in_created_window | resolved_in_window | open_at_start
+        df = df[mask]
+        # Guardar metadados da janela (end inclusivo) para cálculo de séries posterior
+        try:
+            df.attrs["window_start"] = dt_start.normalize()
+            # end inclusivo real = dt_end - 1 dia
+            df.attrs["window_end"] = (dt_end - pd.Timedelta(days=1)).normalize()
+        except Exception:
+            pass
     return df
