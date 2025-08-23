@@ -125,7 +125,11 @@ def fetch_ticket_details(
     dt_ini: Optional[pd.Timestamp],
     dt_fim: Optional[pd.Timestamp],
 ) -> pd.DataFrame:
-    """Carrega detalhes dos tickets e aplica filtro por data de criação.
+    """Carrega detalhes dos tickets dentro de uma janela ampliada.
+
+    Inclui tickets criados antes da janela quando:
+    - foram resolvidos dentro da janela, ou
+    - permaneciam abertos no início (para backlog inicial).
 
     Colunas retornadas: ticket_id, created_at, solved_at, closed_at, status,
     priority, urgency, impact, ttr_deadline, category, assigned_user, assigned_group.

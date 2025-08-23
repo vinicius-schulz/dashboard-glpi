@@ -24,8 +24,7 @@ window.addEventListener('DOMContentLoaded', () => { Loader.init(); Toasts.init()
 const WidgetLayout = (() => {
   const STORAGE_KEY = 'glpiDashboardLayout.v2'; // bump version for new coordinate-based schema
   const DEFAULT = [
-    { id: 'createdResolved', cols: 3, rows: 3, visible: true },
-  { id: 'cumGap', cols: 3, rows: 3, visible: true },
+    { id: 'cumGap', cols: 3, rows: 3, visible: true },
     { id: 'backlog', cols: 3, rows: 3, visible: true },
     { id: 'backlogStatus', cols: 3, rows: 3, visible: true },
     { id: 'sla', cols: 3, rows: 3, visible: true },
@@ -272,46 +271,31 @@ async function loadData() {
 
     const s = js.series || {};
     // Line charts
-  if (s.created && s.resolved) {
-      lineChart('chartCreatedResolved', s.created.labels, [
-        { label: 'Criados', data: s.created.data, borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.2)', tension: 0.2 },
-        { label: 'Resolvidos', data: s.resolved.data, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.2)', tension: 0.2 }
-      ]);
-      attachPointClick('chartCreatedResolved', s.created.labels, ['created', 'resolved']);
-      // Cumulative series and cumulative gap (created - resolved cumulatively)
+    if (s.created && s.resolved && document.getElementById('chartCumGap')) {
       const cumCreated = []; const cumResolved = []; const gap = [];
-      let accC=0, accR=0; for (let i=0;i<s.created.data.length;i++) {
+      let accC=0, accR=0;
+      for (let i=0;i<s.created.data.length;i++) {
         const vC = Number(s.created.data[i]||0);
         const vR = Number(s.resolved.data[i]||0);
-        accC += vC; accR += vR; cumCreated.push(accC); cumResolved.push(accR);
-        gap.push(accC - accR);
+        accC += vC; accR += vR; cumCreated.push(accC); cumResolved.push(accR); gap.push(accC - accR);
       }
-      if (document.getElementById('chartCumGap')) {
-        if (charts['chartCumGap']) charts['chartCumGap'].destroy();
-        charts['chartCumGap'] = new Chart(document.getElementById('chartCumGap'), {
-          type: 'line',
-          data: { labels: s.created.labels, datasets: [
-            { label: 'Criados (Acum.)', data: cumCreated, borderColor: '#1d4ed8', backgroundColor: 'rgba(29,78,216,0.15)', tension:0.15 },
-            { label: 'Resolvidos (Acum.)', data: cumResolved, borderColor: '#059669', backgroundColor: 'rgba(5,150,105,0.15)', tension:0.15 },
-            { label: 'Gap Cumulativo (Criados - Resolvidos)', data: gap, borderColor: '#dc2626', backgroundColor: 'rgba(220,38,38,0.15)', tension:0.15 }
-          ]},
-          options: {
-            responsive:true, maintainAspectRatio:false, animation:false, resizeDelay:200,
-            interaction:{ mode:'nearest', intersect:false },
-            scales:{ y:{ beginAtZero:true } },
-            plugins:{
-              tooltip:{ callbacks:{
-                label: ctx => {
-                  const dsLabel = ctx.dataset.label || '';
-                  return `${dsLabel}: ${ctx.parsed.y}`;
-                }
-              }}
-            }
-          }
-        });
-        // Click handling: treat like created/resolved (use first dataset sources)
-        attachPointClick('chartCumGap', s.created.labels, ['created','resolved']);
-      }
+      if (charts['chartCumGap']) charts['chartCumGap'].destroy();
+      charts['chartCumGap'] = new Chart(document.getElementById('chartCumGap'), {
+        type: 'line',
+        data: { labels: s.created.labels, datasets: [
+          { label: 'Criados (Acum.)', data: cumCreated, borderColor: '#1d4ed8', backgroundColor: 'rgba(29,78,216,0.15)', tension:0.15 },
+          { label: 'Resolvidos (Acum.)', data: cumResolved, borderColor: '#059669', backgroundColor: 'rgba(5,150,105,0.15)', tension:0.15 },
+          { label: 'Gap Cumulativo (Criados - Resolvidos)', data: gap, borderColor: '#dc2626', backgroundColor: 'rgba(220,38,38,0.15)', tension:0.15 }
+        ]},
+        options: {
+          responsive:true, maintainAspectRatio:false, animation:false, resizeDelay:200,
+          interaction:{ mode:'nearest', intersect:false },
+          scales:{ y:{ beginAtZero:true } },
+          plugins:{ tooltip:{ callbacks:{ label: ctx => {
+            const dsLabel = ctx.dataset.label || ''; return `${dsLabel}: ${ctx.parsed.y}`; } } } }
+        }
+      });
+      attachPointClick('chartCumGap', s.created.labels, ['created','resolved']);
     }
     if (s.backlog) {
       lineChart('chartBacklog', s.backlog.labels, [
