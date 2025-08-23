@@ -31,6 +31,7 @@ from metrics import (
     composition,
     load_by_assignee,
     aging_buckets,
+    backlog_trend_series,
 )
 
 
@@ -200,6 +201,7 @@ def api_data():
             })
 
         created, resolved, backlog = created_resolved(df, freq=freq)
+        backlog_trend = backlog_trend_series(backlog)
         bs = backlog_status(df)
         sla = sla_solution(df)
         age = aging_buckets(df)
@@ -212,7 +214,7 @@ def api_data():
             "period": {"start": start_s, "end": end_s, "gran": gran},
             "series": {
                 "created": _series_to_labels_data(created),
-                "resolved": _series_to_labels_data(resolved), 
+                "resolved": _series_to_labels_data(resolved),
                 "backlog": _series_to_labels_data(backlog),
                 "backlog_status": _dict_to_labels_data(bs),
                 "aging": _dict_to_labels_data(age),
@@ -221,6 +223,7 @@ def api_data():
                 "impact": _dict_to_labels_data(imp),
                 "load_by_user": _dict_to_labels_data(load.get("by_user")) if "by_user" in load else {"labels": [], "data": []},
                 "load_by_group": _dict_to_labels_data(load.get("by_group")) if "by_group" in load else {"labels": [], "data": []},
+                "backlog_trend": _series_to_labels_data(backlog_trend) if backlog_trend is not None else {"labels": [], "data": []},
             },
             "sla": sla,
         }

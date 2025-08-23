@@ -26,6 +26,7 @@ const WidgetLayout = (() => {
   const DEFAULT = [
     { id: 'cumGap', cols: 3, rows: 3, visible: true },
     { id: 'backlog', cols: 3, rows: 3, visible: true },
+    { id: 'backlogTrend', cols: 3, rows: 3, visible: true },
     { id: 'backlogStatus', cols: 3, rows: 3, visible: true },
     { id: 'sla', cols: 3, rows: 3, visible: true },
     { id: 'aging', cols: 3, rows: 3, visible: true },
@@ -302,6 +303,11 @@ async function loadData() {
         { label: 'Backlog', data: s.backlog.data, borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.2)', tension: 0.2 }
       ]);
       attachPointClick('chartBacklog', s.backlog.labels, ['backlog']);
+    }
+    if (s.backlog_trend && s.backlog_trend.labels && s.backlog_trend.labels.length) {
+      lineChart('chartBacklogTrend', s.backlog_trend.labels, [
+        { label: 'Backlog (Suavizado)', data: s.backlog_trend.data, borderColor: '#7c3aed', backgroundColor: 'rgba(124,58,237,0.15)', tension:0.25 }
+      ]);
     }
 
     // Bar charts

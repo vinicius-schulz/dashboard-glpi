@@ -72,6 +72,30 @@ def backlog_status(df: pd.DataFrame):
     return df[open_mask].groupby("status", dropna=False)["ticket_id"].count().sort_values(ascending=False)
 
 
+def backlog_trend_series(backlog: pd.Series) -> pd.Series:
+    """Gera série suavizada (tendência) para backlog diário/semanal.
+
+    Preferência: LOWESS (statsmodels). Fallback: média exponencial.
+    """
+    if backlog is None or backlog.empty:
+        return backlog
+    s = backlog.astype(float).copy()
+    # índice deve permanecer igual
+    x = np.arange(len(s))
+    trend = None
+    try:
+        from statsmodels.nonparametric.smoothers_lowess import lowess  # type: ignore
+        # largura da janela: mais pontos => fração menor
+        frac = 0.3 if len(s) > 30 else 0.5
+        fitted = lowess(s.values, x, frac=frac, return_sorted=False)
+        trend = pd.Series(fitted, index=s.index, name="BacklogTrend")
+    except Exception:
+        # fallback: EWM suave
+        span = min(14, max(3, len(s)//3 or 3))
+        trend = s.ewm(span=span, adjust=False).mean().rename("BacklogTrend")
+    return trend
+
+
 def sla_solution(df: pd.DataFrame, now=None) -> Dict[str, Any]:
     """Calcula indicadores de SLA de solução e estatísticas de lead time.
 
