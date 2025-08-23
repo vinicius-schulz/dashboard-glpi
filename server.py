@@ -220,6 +220,14 @@ def api_data():
         cat, pr, imp = composition(df)
         load = load_by_assignee(df)
 
+        # Snapshot counts (limitados ao conjunto carregado pela janela atual; para serem totalmente independentes precisaríamos coleta separada)
+        today = pd.Timestamp.today().normalize()
+        created_today_mask = (
+            (pd.to_datetime(df["created_at"]) >= today)
+            & (pd.to_datetime(df["created_at"]) < today + pd.Timedelta(days=1))
+        )
+        created_today_count = int(created_today_mask.sum())
+
         payload: Dict[str, Any] = {
             "meta": {**meta, "aging_note": "Gráfico Aging mostra backlog atual ignorando filtro de data e inclui faixa >60d."},
             "count": int(len(df)),
@@ -238,6 +246,8 @@ def api_data():
                 "backlog_trend": _series_to_labels_data(backlog_trend) if backlog_trend is not None else {"labels": [], "data": []},
             },
             "sla": sla,
+            "open_today": int(df[df["solved_at"].isna()].shape[0]),
+            "created_today": created_today_count,
         }
         return jsonify(payload)
     except Exception as e:

@@ -30,6 +30,8 @@ const WidgetLayout = (() => {
     { id: 'backlogStatus', cols: 3, rows: 3, visible: true },
     { id: 'sla', cols: 3, rows: 3, visible: true },
     { id: 'aging', cols: 3, rows: 3, visible: true },
+  { id: 'openToday', cols: 3, rows: 3, visible: true },
+  { id: 'createdToday', cols: 3, rows: 3, visible: true },
     { id: 'category', cols: 3, rows: 3, visible: true },
     { id: 'priority', cols: 3, rows: 3, visible: true },
     { id: 'impact', cols: 3, rows: 3, visible: true }
@@ -326,6 +328,16 @@ async function loadData() {
     if (js.error) throw new Error(js.error);
 
     setMeta(js.meta || {}, js.count || 0, js.period || {});
+
+    // Big number snapshot (ignora filtro): campo open_today
+    if (typeof js.open_today === 'number') {
+      const el = document.getElementById('openTodayValue');
+      if (el) el.textContent = js.open_today.toLocaleString('pt-BR');
+    }
+    if (typeof js.created_today === 'number') {
+      const el2 = document.getElementById('createdTodayValue');
+      if (el2) el2.textContent = js.created_today.toLocaleString('pt-BR');
+    }
 
     const s = js.series || {};
     // Line charts
