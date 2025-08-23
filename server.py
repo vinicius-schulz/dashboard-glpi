@@ -151,10 +151,15 @@ def _resolve_category_name(client: GLPIClient, cid: Any, cache: Dict[int, str]) 
 def _period_bounds_from_label(label: str, gran: str) -> Tuple[pd.Timestamp, pd.Timestamp]:
     # label is ISO date (start of day or start of week)
     start = pd.Timestamp(label)
-    if gran.lower().startswith("di"):
+    gl = gran.lower()
+    if gl.startswith("di"):
         end = start + pd.Timedelta(days=1) - pd.Timedelta(microseconds=1)
-    else:
+    elif gl.startswith("se"):
         end = start + pd.Timedelta(weeks=1) - pd.Timedelta(microseconds=1)
+    else:  # mensal
+        # start assumed first day of month (we format labels as date ISO), end = last day of that month
+        next_month = (start + pd.offsets.MonthBegin(1)).normalize()
+        end = next_month - pd.Timedelta(microseconds=1)
     return start, end
 
 
@@ -180,10 +185,17 @@ def index():
 def api_data():
     try:
         gran = request.args.get("gran", "Diário")
-        freq = "D" if gran.lower().startswith("di") else "W"
+        gl = gran.lower()
+        if gl.startswith("di"):
+            freq = "D"
+        elif gl.startswith("se"):
+            freq = "W"
+        else:
+            freq = "M"
         start_s = request.args.get("start")
         end_s = request.args.get("end")
-        max_tix = int(request.args.get("max", str(DEFAULT_MAX_TICKETS)))
+        # Sem limite de tickets agora
+        max_tix = 10**9  # valor alto apenas para interface existente
 
         if not start_s or not end_s:
             today = pd.Timestamp.today().normalize()
@@ -251,7 +263,7 @@ def api_tickets():
         gran = request.args.get("gran", "Diário")
         start_s = request.args.get("start")
         end_s = request.args.get("end")
-        max_tix = int(request.args.get("max", str(DEFAULT_MAX_TICKETS)))
+        max_tix = 10**9
         source = request.args.get("source", "")
         label = request.args.get("label", "")
         now = pd.Timestamp.now()

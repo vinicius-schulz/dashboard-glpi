@@ -17,11 +17,21 @@
       <select id="gran">
         <option value="Diário">Diário</option>
         <option value="Semanal">Semanal</option>
+  <option value="Mensal">Mensal</option>
       </select>
     </label>
-    <label>Início: <input type="date" id="start" value="{{ default_start }}" /></label>
-    <label>Fim: <input type="date" id="end" value="{{ default_end }}" /></label>
-    <label>Limite tickets: <input type="number" id="max" min="50" step="50" value="{{ default_max }}" /></label>
+    <span id="dateRangeInputs">
+      <label>Início: <input type="date" id="start" value="{{ default_start }}" /></label>
+      <label>Fim: <input type="date" id="end" value="{{ default_end }}" /></label>
+    </span>
+    <span id="monthRangeInputs" class="hidden">
+      <label>Mês inicial:
+        <input type="month" id="startMonth" />
+      </label>
+      <label>Mês final:
+        <input type="month" id="endMonth" />
+      </label>
+    </span>
     <button id="apply">Aplicar</button>
   </section>
 

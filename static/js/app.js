@@ -204,6 +204,38 @@ const WidgetLayout = (() => {
 })();
 window.addEventListener('DOMContentLoaded', () => WidgetLayout.init());
 
+// ---- Month range controls for "Mensal" granularity ----
+function initMonthSelectors() {
+  const startMonth = document.getElementById('startMonth');
+  const endMonth = document.getElementById('endMonth');
+  if (!startMonth || !endMonth) return;
+  const now = new Date();
+  const ym = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  startMonth.value = ym;
+  endMonth.value = ym;
+  function ensureOrder() {
+    if (startMonth.value > endMonth.value) endMonth.value = startMonth.value;
+  }
+  startMonth.addEventListener('change', ensureOrder);
+  endMonth.addEventListener('change', ensureOrder);
+}
+
+function toggleDateInputs() {
+  const gran = document.getElementById('gran').value;
+  const dateSpan = document.getElementById('dateRangeInputs');
+  const monthSpan = document.getElementById('monthRangeInputs');
+  if (!dateSpan || !monthSpan) return;
+  if (gran === 'Mensal') {
+    dateSpan.classList.add('hidden');
+    monthSpan.classList.remove('hidden');
+  } else {
+    monthSpan.classList.add('hidden');
+    dateSpan.classList.remove('hidden');
+  }
+}
+window.addEventListener('DOMContentLoaded', () => { initMonthSelectors(); toggleDateInputs(); });
+document.addEventListener('change', (e) => { if (e.target && e.target.id === 'gran') toggleDateInputs(); });
+
 function lineChart(canvasId, labels, datasets) {
   const ctx = document.getElementById(canvasId);
   if (!ctx) return; // canvas not present
@@ -256,11 +288,23 @@ async function loadData() {
   document.body.style.cursor = 'progress';
   try {
     const gran = document.getElementById('gran').value;
-    const start = document.getElementById('start').value;
-    const end = document.getElementById('end').value;
-    const max = document.getElementById('max').value;
+    let startNorm, endNorm;
+    if (gran === 'Mensal') {
+  const sm = document.getElementById('startMonth').value; // YYYY-MM
+  const em = document.getElementById('endMonth').value;   // YYYY-MM
+  startNorm = sm + '-01';
+  // Compute last day of end month: new Date(year, monthIndex+1, 0)
+  const [ey, emon] = em.split('-').map(Number);
+  const lastDay = new Date(ey, emon, 0); // because monthIndex is emon (1-based) -> next month day 0
+  endNorm = lastDay.toISOString().slice(0,10);
+    } else {
+      const start = document.getElementById('start').value;
+      const end = document.getElementById('end').value;
+      startNorm = start;
+      endNorm = end;
+    }
 
-    const r = await fetch(`/api/data?gran=${encodeURIComponent(gran)}&start=${start}&end=${end}&max=${max}`);
+    const r = await fetch(`/api/data?gran=${encodeURIComponent(gran)}&start=${startNorm}&end=${endNorm}`);
     if (!r.ok) {
       const txt = await r.text().catch(() => '');
       throw new Error(`HTTP ${r.status}: ${txt.slice(0,200)}`);
@@ -384,7 +428,7 @@ async function openTicketsModal(source, label) {
   const gran = document.getElementById('gran').value;
   const start = document.getElementById('start').value;
   const end = document.getElementById('end').value;
-  const max = document.getElementById('max').value;
+  // no max param anymore
   modal.title.textContent = `Chamados — ${source} · ${label}`;
   modal.info.textContent = 'Carregando...';
   modal.rows.innerHTML = '';
@@ -392,7 +436,7 @@ async function openTicketsModal(source, label) {
   Loader.show('Carregando chamados...');
   document.body.style.cursor = 'progress';
   try {
-    const r = await fetch(`/api/tickets?gran=${encodeURIComponent(gran)}&start=${start}&end=${end}&max=${max}&source=${encodeURIComponent(source)}&label=${encodeURIComponent(label)}`);
+  const r = await fetch(`/api/tickets?gran=${encodeURIComponent(gran)}&start=${start}&end=${end}&source=${encodeURIComponent(source)}&label=${encodeURIComponent(label)}`);
     if (!r.ok) {
       const txt = await r.text().catch(() => '');
       throw new Error(`HTTP ${r.status}: ${txt.slice(0,200)}`);
