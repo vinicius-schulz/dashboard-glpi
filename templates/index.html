@@ -32,7 +32,6 @@
         <input type="month" id="endMonth" />
       </label>
     </span>
-  <label>Auto atualizar (min): <input type="number" id="autoRefreshMin" min="0" step="1" style="width:70px" placeholder="0" /></label>
     <button id="apply">Aplicar</button>
   </section>
 
@@ -96,6 +95,12 @@
     </div>
     <div class="lp-body">
       <p>Arraste os cards diretamente na área principal para reordenar. Ajuste visibilidade e tamanho abaixo. As preferências ficam salvas neste navegador.</p>
+      <div class="lp-config" style="margin-bottom:12px;">
+        <label>Auto atualizar (min):
+          <input type="number" id="autoRefreshMin" min="0" step="1" style="width:80px" />
+          <span class="small-note" style="display:block;font-size:11px;margin-top:2px;">0 desativa • Padrão: 30</span>
+        </label>
+      </div>
       <table class="lp-table">
         <thead><tr><th>Widget</th><th>Visível</th><th>Largura / Altura</th></tr></thead>
         <tbody id="lpRows"></tbody>

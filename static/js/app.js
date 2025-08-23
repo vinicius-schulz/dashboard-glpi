@@ -436,7 +436,12 @@ function setupAutoRefresh() {
   // load saved
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved !== null) inp.value = saved;
+    if (saved !== null && saved !== '') {
+      inp.value = saved;
+    } else {
+      // default 30 minutes
+      inp.value = '30';
+    }
   } catch {}
   function applyInterval() {
     if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
