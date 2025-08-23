@@ -28,7 +28,6 @@ const WidgetLayout = (() => {
     { id: 'backlog', cols: 8, rows: 8, visible: true },
     { id: 'backlogTrend', cols: 8, rows: 8, visible: true },
     { id: 'backlogStatus', cols: 8, rows: 8, visible: true },
-    { id: 'sla', cols: 8, rows: 8, visible: true },
     { id: 'aging', cols: 8, rows: 8, visible: true },
   { id: 'openToday', cols: 8, rows: 8, visible: true },
   { id: 'createdToday', cols: 8, rows: 8, visible: true },
@@ -416,9 +415,6 @@ async function loadData() {
     if (s.load_by_user) { barChart('chartUser', s.load_by_user.labels, s.load_by_user.data, 'Usuário'); attachBarClick('chartUser', s.load_by_user.labels, 'load_by_user'); }
     if (s.load_by_group) { barChart('chartGroup', s.load_by_group.labels, s.load_by_group.data, 'Grupo'); attachBarClick('chartGroup', s.load_by_group.labels, 'load_by_group'); }
 
-    // SLA block
-    const sla = js.sla || {};
-    document.getElementById('sla').textContent = JSON.stringify(sla, null, 2);
   } catch (e) {
     Toasts.push('error', String(e));
   } finally {
