@@ -55,8 +55,19 @@ const WidgetLayout = (() => {
   }
   function save(layout) { localStorage.setItem(STORAGE_KEY, JSON.stringify(layout)); }
   function assignInitialCoords(layout) {
-    // Sequential placement: honor predefined cols/rows if present else minimal 3x3
-    let x=0, y=0, rowH=0; const COLS=MAX_COLS;
+    // Sequential placement with wrapping so we don't overflow viewport on first load
+    let x=0, y=0, rowH=0;
+    let COLS = MAX_COLS;
+    try {
+      // If no stored layout yet, adapt maximum columns to current viewport width
+      const hasStored = !!localStorage.getItem(STORAGE_KEY);
+      if (!hasStored) {
+        const snapW = CELL_W/2; // width of one logical column in px
+        const usable = Math.max(320, window.innerWidth - 40); // leave small margin
+        const dynCols = Math.floor(usable / snapW);
+        if (dynCols >= 3) COLS = Math.min(MAX_COLS, dynCols);
+      }
+    } catch { /* ignore */ }
     layout.forEach(item => {
       const wCols = Math.min(COLS, item.cols || 3);
       const wRows = item.rows || 3;
