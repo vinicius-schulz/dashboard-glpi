@@ -272,15 +272,20 @@ async function loadData() {
 
     const s = js.series || {};
     // Line charts
-    if (s.created && s.resolved) {
+  if (s.created && s.resolved) {
       lineChart('chartCreatedResolved', s.created.labels, [
         { label: 'Criados', data: s.created.data, borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.2)', tension: 0.2 },
         { label: 'Resolvidos', data: s.resolved.data, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.2)', tension: 0.2 }
       ]);
       attachPointClick('chartCreatedResolved', s.created.labels, ['created', 'resolved']);
-      // Cumulative gap (created vs resolved)
+      // Cumulative series and cumulative gap (created - resolved cumulatively)
       const cumCreated = []; const cumResolved = []; const gap = [];
-      let accC=0, accR=0; for (let i=0;i<s.created.data.length;i++){ accC += (s.created.data[i]||0); accR += (s.resolved.data[i]||0); cumCreated.push(accC); cumResolved.push(accR); gap.push(accC-accR); }
+      let accC=0, accR=0; for (let i=0;i<s.created.data.length;i++) {
+        const vC = Number(s.created.data[i]||0);
+        const vR = Number(s.resolved.data[i]||0);
+        accC += vC; accR += vR; cumCreated.push(accC); cumResolved.push(accR);
+        gap.push(accC - accR);
+      }
       if (document.getElementById('chartCumGap')) {
         if (charts['chartCumGap']) charts['chartCumGap'].destroy();
         charts['chartCumGap'] = new Chart(document.getElementById('chartCumGap'), {
@@ -288,14 +293,19 @@ async function loadData() {
           data: { labels: s.created.labels, datasets: [
             { label: 'Criados (Acum.)', data: cumCreated, borderColor: '#1d4ed8', backgroundColor: 'rgba(29,78,216,0.15)', tension:0.15 },
             { label: 'Resolvidos (Acum.)', data: cumResolved, borderColor: '#059669', backgroundColor: 'rgba(5,150,105,0.15)', tension:0.15 },
-            { label: 'Gap (Criados - Resolvidos)', data: gap, borderColor: '#dc2626', backgroundColor: 'rgba(220,38,38,0.15)', tension:0.15, yAxisID:'y2' }
+            { label: 'Gap Cumulativo (Criados - Resolvidos)', data: gap, borderColor: '#dc2626', backgroundColor: 'rgba(220,38,38,0.15)', tension:0.15 }
           ]},
           options: {
             responsive:true, maintainAspectRatio:false, animation:false, resizeDelay:200,
             interaction:{ mode:'nearest', intersect:false },
-            scales:{
-              y:{ beginAtZero:true },
-              y2:{ position:'right', grid:{ drawOnChartArea:false }, beginAtZero:true }
+            scales:{ y:{ beginAtZero:true } },
+            plugins:{
+              tooltip:{ callbacks:{
+                label: ctx => {
+                  const dsLabel = ctx.dataset.label || '';
+                  return `${dsLabel}: ${ctx.parsed.y}`;
+                }
+              }}
             }
           }
         });
