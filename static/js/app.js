@@ -216,6 +216,19 @@ const WidgetLayout = (() => {
   return { init };
 })();
 window.addEventListener('DOMContentLoaded', () => WidgetLayout.init());
+// Click handlers for big counters
+window.addEventListener('DOMContentLoaded', () => {
+  const o = document.getElementById('openTodayValue');
+  if (o) {
+    o.style.cursor = 'pointer';
+    o.addEventListener('click', () => openTicketsModal('open_today', 'Abertos Agora'));
+  }
+  const ctd = document.getElementById('createdTodayValue');
+  if (ctd) {
+    ctd.style.cursor = 'pointer';
+    ctd.addEventListener('click', () => openTicketsModal('created_today', 'Criados Hoje'));
+  }
+});
 
 // ---- Month range controls for "Mensal" granularity ----
 function initMonthSelectors() {

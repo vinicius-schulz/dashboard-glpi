@@ -322,6 +322,13 @@ def api_tickets():
             cats = pd.cut(ages, bins=bins, labels=labels)
             # Apenas tickets ainda não resolvidos
             sel = df[(df["solved_at"].isna()) & (cats.astype(str) == label)]
+        elif source == "open_today":
+            # Todos abertos agora (ignorando label)
+            sel = df[df["solved_at"].isna()]
+        elif source == "created_today":
+            today_norm = pd.Timestamp.today().normalize()
+            created_dt = pd.to_datetime(df["created_at"], errors="coerce")
+            sel = df[(created_dt >= today_norm) & (created_dt < today_norm + pd.Timedelta(days=1))]
         elif source in ("category", "priority", "impact"):
             col = {"category": "category", "priority": "priority", "impact": "impact"}[source]
             sel = df[df[col].astype(str) == str(label)]
