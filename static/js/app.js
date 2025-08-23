@@ -429,6 +429,33 @@ async function loadData() {
 document.getElementById('apply').addEventListener('click', () => loadData());
 window.addEventListener('DOMContentLoaded', () => loadData());
 
+// ---- Auto Refresh ----
+let autoTimer = null;
+function setupAutoRefresh() {
+  const inp = document.getElementById('autoRefreshMin');
+  if (!inp) return;
+  const STORAGE_KEY = 'glpiAutoRefreshMin';
+  // load saved
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved !== null) inp.value = saved;
+  } catch {}
+  function applyInterval() {
+    if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+    const mins = parseInt(inp.value, 10);
+    if (!isNaN(mins) && mins > 0) {
+      const ms = mins * 60 * 1000;
+      autoTimer = setInterval(() => {
+        if (!loading) loadData();
+      }, ms);
+    }
+    try { localStorage.setItem(STORAGE_KEY, inp.value || ''); } catch {}
+  }
+  inp.addEventListener('change', applyInterval);
+  applyInterval();
+}
+window.addEventListener('DOMContentLoaded', setupAutoRefresh);
+
 // --- Modal helpers ---
 const modal = {
   el: null, rows: null, title: null, info: null, closeBtn: null,
