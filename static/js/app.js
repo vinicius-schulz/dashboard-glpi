@@ -24,24 +24,24 @@ window.addEventListener('DOMContentLoaded', () => { Loader.init(); Toasts.init()
 const WidgetLayout = (() => {
   const STORAGE_KEY = 'glpiDashboardLayout.v2'; // bump version for new coordinate-based schema
   const DEFAULT = [
-    { id: 'cumGap', cols: 3, rows: 3, visible: true },
-    { id: 'backlog', cols: 3, rows: 3, visible: true },
-    { id: 'backlogTrend', cols: 3, rows: 3, visible: true },
-    { id: 'backlogStatus', cols: 3, rows: 3, visible: true },
-    { id: 'sla', cols: 3, rows: 3, visible: true },
-    { id: 'aging', cols: 3, rows: 3, visible: true },
-  { id: 'openToday', cols: 3, rows: 3, visible: true },
-  { id: 'createdToday', cols: 3, rows: 3, visible: true },
-    { id: 'category', cols: 3, rows: 3, visible: true },
-    { id: 'priority', cols: 3, rows: 3, visible: true },
-    { id: 'impact', cols: 3, rows: 3, visible: true }
+    { id: 'cumGap', cols: 8, rows: 8, visible: true },
+    { id: 'backlog', cols: 8, rows: 8, visible: true },
+    { id: 'backlogTrend', cols: 8, rows: 8, visible: true },
+    { id: 'backlogStatus', cols: 8, rows: 8, visible: true },
+    { id: 'sla', cols: 8, rows: 8, visible: true },
+    { id: 'aging', cols: 8, rows: 8, visible: true },
+  { id: 'openToday', cols: 8, rows: 8, visible: true },
+  { id: 'createdToday', cols: 8, rows: 8, visible: true },
+    { id: 'category', cols: 8, rows: 8, visible: true },
+    { id: 'priority', cols: 8, rows: 8, visible: true },
+    { id: 'impact', cols: 8, rows: 8, visible: true }
   ].map((w,i) => ({...w, order: i}));
   // Grid cell size (px) for snap positioning
-  const CELL_W = 160; // base logical cell width (will derive snap unit)
-  const CELL_H = 160; // base logical cell height
+  const CELL_W = 80; // base logical cell width (will derive snap unit)
+  const CELL_H = 80; // base logical cell height
   const DEV_SHOW_GRID = true; // definir para false para ocultar marcações de desenvolvimento
   const AUTO_RESOLVE = false; // quando true empurra outros cards; false permite sobreposição
-  const MAX_COLS = 24; // logical columns for coordinate space
+  const MAX_COLS = 72; // allow more cards per linha (24 limited 8x -> 3 per row; 72 -> até 9 de largura 8)
   function load() {
     try {
       const raw = JSON.parse(localStorage.getItem(STORAGE_KEY));
@@ -65,7 +65,9 @@ const WidgetLayout = (() => {
         const snapW = CELL_W/2; // width of one logical column in px
         const usable = Math.max(320, window.innerWidth - 40); // leave small margin
         const dynCols = Math.floor(usable / snapW);
-        if (dynCols >= 3) COLS = Math.min(MAX_COLS, dynCols);
+        if (dynCols >= 3) {
+          COLS = Math.min(MAX_COLS, dynCols);
+        }
       }
     } catch { /* ignore */ }
     layout.forEach(item => {
