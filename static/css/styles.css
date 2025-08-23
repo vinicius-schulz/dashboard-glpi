@@ -4,12 +4,12 @@ body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarel
 .hidden { display: none !important; }
 header { background: #0f172a; color: #fff; padding: 16px 20px; }
 header h1 { margin: 0; font-size: 20px; }
-.controls { display: flex; gap: 12px; align-items: center; padding: 12px 20px; background: #fff; border-bottom: 1px solid #e5e7eb; position: sticky; top: 0; }
+.controls { display: flex; gap: 12px; align-items: center; padding: 12px 20px; background: #fff; border-bottom: 1px solid #e5e7eb; position: sticky; top: 0; z-index: 1000; }
 .controls label { font-size: 14px; }
 .controls input, .controls select, .controls button { padding: 6px 8px; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; padding: 16px 20px; width: 100%; align-items: start; }
 /* Free layout mode overrides (absolute positioning with snap grid) */
-.grid.free-layout { position: relative; display: block; min-height: 400px; }
+.grid.free-layout { position: relative; display: block; min-height: 400px; padding-top: 8px; margin-top: 8px; }
 .grid.free-layout .card { position: absolute; margin: 0; }
 .grid.free-layout .placeholder { position: absolute; pointer-events: none; border: 2px dashed #94a3b8; border-radius: 8px; background: rgba(148,163,184,0.15); z-index: 50; }
 /* Dev grid visualization */
