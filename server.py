@@ -192,10 +192,10 @@ def api_data():
             freq = "W"
         else:
             freq = "M"
+
         start_s = request.args.get("start")
         end_s = request.args.get("end")
-        # Sem limite de tickets agora
-        max_tix = 10**9  # valor alto apenas para interface existente
+        max_tix = 10**9  # sem limite efetivo
 
         if not start_s or not end_s:
             today = pd.Timestamp.today().normalize()
@@ -206,7 +206,7 @@ def api_data():
 
         if df is None or df.empty:
             return jsonify({
-                "meta": meta,
+                "meta": {**meta, "aging_note": "Gráfico Aging mostra backlog atual ignorando filtro de data e inclui faixa >60d."},
                 "count": 0,
                 "note": meta.get("note", "Nenhum ticket encontrado"),
                 "series": {},
@@ -221,7 +221,7 @@ def api_data():
         load = load_by_assignee(df)
 
         payload: Dict[str, Any] = {
-            "meta": meta,
+            "meta": {**meta, "aging_note": "Gráfico Aging mostra backlog atual ignorando filtro de data e inclui faixa >60d."},
             "count": int(len(df)),
             "period": {"start": start_s, "end": end_s, "gran": gran},
             "series": {
@@ -307,8 +307,8 @@ def api_tickets():
             sel = df[open_mask & ((df["status"] == st) if st is not None else False)]
         elif source == "aging":
             ages = (now - pd.to_datetime(df["created_at"])) .dt.total_seconds() / 86400.0
-            bins = [-1, 2, 7, 14, 30, 999999]
-            labels = ["0–2d", "3–7d", "8–14d", "15–30d", ">30d"]
+            bins = [-1, 2, 7, 14, 30, 60, 999999]
+            labels = ["0–2d", "3–7d", "8–14d", "15–30d", "31–60d", ">60d"]
             cats = pd.cut(ages, bins=bins, labels=labels)
             # Apenas tickets ainda não resolvidos
             sel = df[(df["solved_at"].isna()) & (cats.astype(str) == label)]

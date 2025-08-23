@@ -278,6 +278,19 @@ function setMeta(meta, count, period) {
   if (meta?.sid_ticket) info += `• SIDs Group_Ticket → Ticket.id=${meta.sid_ticket}, Group.id=${meta.sid_group} `;
   if (typeof meta?.tids_total === 'number') info += `• Vínculos totais=${meta.tids_total} • Observador=${meta.tids_obs}`;
   el.textContent = `Meus grupos: [${gids.join(', ')}] • ${info}`;
+  // Aging disclaimer badge
+  if (meta?.aging_note) {
+    let badge = document.getElementById('aging-note');
+    if (!badge) {
+      badge = document.createElement('div');
+      badge.id = 'aging-note';
+      badge.style.fontSize = '11px';
+      badge.style.color = '#7f1d1d';
+      badge.style.marginTop = '4px';
+      el.appendChild(badge);
+    }
+    badge.textContent = meta.aging_note;
+  }
 }
 
 let loading = false;

@@ -161,7 +161,8 @@ def aging_buckets(df: pd.DataFrame, now=None):
     now = now or pd.Timestamp.now()
     open_df = df[df["solved_at"].isna()].copy()
     open_df["age_days"] = (now - pd.to_datetime(open_df["created_at"], errors="coerce")).dt.total_seconds() / 86400.0
-    bins = [-1, 2, 7, 14, 30, 999999]
-    labels = ["0–2d", "3–7d", "8–14d", "15–30d", ">30d"]
+    # Faixas não sobrepostas incluindo separação 31–60d e >60d
+    bins = [-1, 2, 7, 14, 30, 60, 999999]
+    labels = ["0–2d", "3–7d", "8–14d", "15–30d", "31–60d", ">60d"]
     cats = pd.cut(open_df["age_days"], bins=bins, labels=labels)
     return cats.value_counts().reindex(labels, fill_value=0)
