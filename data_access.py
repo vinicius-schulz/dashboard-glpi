@@ -234,14 +234,21 @@ def bulk_search_observer_tickets(
         observer_field_id = 65  # fallback original
 
     # Mapeia id -> nome completo do grupo (com cache simples em memória)
+    # Usa try_get_group_name para evitar ruído de 403 esperado no log de performance.
     group_name_cache: Dict[int, Optional[str]] = {}
     for gid in observer_group_ids:
+        name = None
         try:
-            g = client.get_item("Group", gid)  # reaproveita get_item genérico
-            # GLPI normalmente expõe 'completename'; fallback para 'name'
-            group_name_cache[gid] = g.get("completename") or g.get("name")
+            # Método tolerante a 403/404.
+            if hasattr(client, "try_get_group_name"):
+                name = client.try_get_group_name(gid)  # type: ignore[attr-defined]
+            else:
+                # fallback antigo
+                g = client.get_item("Group", gid)
+                name = g.get("completename") or g.get("name")
         except Exception:
-            group_name_cache[gid] = None
+            name = None
+        group_name_cache[gid] = name
 
     rows: List[Dict[str, Any]] = []
     seen_ticket_ids: Set[int] = set()
