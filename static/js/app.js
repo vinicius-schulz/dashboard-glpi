@@ -396,41 +396,13 @@ async function loadData() {
       const rawData = (s.backlog && s.backlog.data) ? s.backlog.data : [];
       const smoothData = (s.backlog_trend && s.backlog_trend.data) ? s.backlog_trend.data : [];
 
-      // Initial render shows Tendência (raw) by default
       const datasets = [
-        { label: 'Backlog (Tendência)', data: rawData, borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.2)', tension: 0.2, hidden: false },
-        { label: 'Backlog (Suavizado)', data: smoothData, borderColor: '#7c3aed', backgroundColor: 'rgba(124,58,237,0.15)', tension:0.25, hidden: true }
+        { label: 'Backlog (Tendência)', data: rawData, borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.2)', tension: 0.2 },
+        { label: 'Backlog (Suavizado)', data: smoothData, borderColor: '#7c3aed', backgroundColor: 'rgba(124,58,237,0.15)', tension:0.25 }
       ];
 
       lineChart('chartBacklogCombined', labels, datasets);
       attachPointClick('chartBacklogCombined', labels, ['backlog']);
-
-      // Toggle button behaviour
-      const toggleBtn = document.getElementById('backlogToggle');
-      if (toggleBtn) {
-        // State: 0 = Tendência (raw), 1 = Suavizado
-        toggleBtn.dataset.state = toggleBtn.dataset.state || '0';
-        function applyState() {
-          const state = toggleBtn.dataset.state || '0';
-          const chart = charts['chartBacklogCombined'];
-          if (!chart) return;
-          if (state === '0') {
-            // show raw, hide smooth
-            chart.data.datasets[0].hidden = false;
-            if (chart.data.datasets[1]) chart.data.datasets[1].hidden = true;
-            toggleBtn.textContent = 'Tendência';
-          } else {
-            // show smooth only
-            if (chart.data.datasets[0]) chart.data.datasets[0].hidden = true;
-            chart.data.datasets[1].hidden = false;
-            toggleBtn.textContent = 'Suavizado';
-          }
-          chart.update();
-        }
-        toggleBtn.onclick = () => { toggleBtn.dataset.state = toggleBtn.dataset.state === '0' ? '1' : '0'; applyState(); };
-        // ensure initial state applied
-        applyState();
-      }
     }
 
     // Bar charts
