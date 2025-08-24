@@ -11,10 +11,11 @@ from dotenv import load_dotenv
 # módulos internos
 from glpi_client import GLPIClient
 from data_access import (
-    discover_group_ticket_sids,
-    find_ticket_ids_by_group_links,
-    filter_observer_tickets,
-    fetch_ticket_details,
+    discover_group_ticket_sids,  # legado
+    find_ticket_ids_by_group_links,  # legado
+    filter_observer_tickets,  # legado
+    fetch_ticket_details,  # legado
+    bulk_search_observer_tickets,  # novo fluxo otimizado
 )
 from metrics import (
     normalize_ticket_df,
@@ -54,48 +55,55 @@ client = GLPIClient(GLPI_URL, GLPI_USER_TOKEN)
 
 @st.cache_data(show_spinner=True, ttl=600)
 @timed
-def fetch_data(dini: pd.Timestamp, dfim: pd.Timestamp, max_tix: int):
+def fetch_data(dini: pd.Timestamp, dfim: pd.Timestamp, max_tix: int, modo_legacy: bool):
     """Fluxo principal de coleta de dados.
 
-    - Abre sessão no GLPI e descobre grupos do usuário.
-    - Descobre SIDs de Group_Ticket.
-    - Busca todos os tickets vinculados aos grupos e filtra apenas os com type=3 (observador).
-    - Carrega detalhes dos tickets e aplica janela por data de criação.
-    Retorna: (DataFrame normalizado, metadados do processo).
+    Dois modos:
+      - legacy=True  : pipeline antigo (Group_Ticket + get_subitems + get_item)
+      - legacy=False : novo fluxo otimizado usando search/Ticket campo "Grupo observador" (id 65)
     """
-    # Cria um request_id para correlação de logs de performance desta execução
     rid = new_request_id()
     client.init_session(get_full=True)
     try:
         if not client.my_group_ids:
             return pd.DataFrame(), {"groups": [], "note": "Nenhum grupo retornado em getFullSession (session.glpigroups)."}
 
-        # Descobrir SIDs de Group_Ticket
-        sid_ticket, sid_group = discover_group_ticket_sids(client)
-
-        # Tickets ligados a qualquer um dos meus grupos (qualquer type)
-        tset = find_ticket_ids_by_group_links(client, client.my_group_ids, sid_ticket, sid_group)
-        if not tset:
-            return pd.DataFrame(), {"groups": client.my_group_ids, "note": "Nenhum ticket ligado aos grupos (Group_Ticket)."}
-        # Filtrar apenas os que têm type==3 (observador) para meus grupos
-        tids_obs = filter_observer_tickets(client, sorted(tset), client.my_group_ids, max_tix)
-        if not tids_obs:
-            return pd.DataFrame(), {"groups": client.my_group_ids, "note": "Nenhum ticket com type=3 (Observador) para seus grupos."}
-
-        # Detalhes + janela por data de criação
-        df = fetch_ticket_details(client, tids_obs, pd.to_datetime(dini), pd.to_datetime(dfim))
-        if df is None or df.empty:
-            return pd.DataFrame(), {"groups": client.my_group_ids, "note": "Nenhum ticket no intervalo informado."}
-
-        df = normalize_ticket_df(df)
-        meta = {"groups": client.my_group_ids, "sid_ticket": sid_ticket, "sid_group": sid_group, "tids_total": len(tset), "tids_obs": len(tids_obs), "request_id": rid}
-        return df, meta
+        if modo_legacy:
+            sid_ticket, sid_group = discover_group_ticket_sids(client)
+            tset = find_ticket_ids_by_group_links(client, client.my_group_ids, sid_ticket, sid_group)
+            if not tset:
+                return pd.DataFrame(), {"groups": client.my_group_ids, "note": "Nenhum ticket ligado aos grupos (Group_Ticket)."}
+            tids_obs = filter_observer_tickets(client, sorted(tset), client.my_group_ids, max_tix)
+            if not tids_obs:
+                return pd.DataFrame(), {"groups": client.my_group_ids, "note": "Nenhum ticket com type=3 (Observador) para seus grupos."}
+            df = fetch_ticket_details(client, tids_obs, pd.to_datetime(dini), pd.to_datetime(dfim))
+            if df is None or df.empty:
+                return pd.DataFrame(), {"groups": client.my_group_ids, "note": "Nenhum ticket no intervalo informado."}
+            df = normalize_ticket_df(df)
+            meta = {"modo": "legacy", "groups": client.my_group_ids, "sid_ticket": sid_ticket, "sid_group": sid_group, "tids_total": len(tset), "tids_obs": len(tids_obs), "request_id": rid}
+            return df, meta
+        else:
+            # Novo fluxo: busca direta em search/Ticket por cada grupo como observador
+            df = bulk_search_observer_tickets(
+                client,
+                observer_group_ids=client.my_group_ids,
+                dt_ini=pd.to_datetime(dini),
+                dt_fim=pd.to_datetime(dfim),
+                max_tickets=max_tix,
+            )
+            if df is None or df.empty:
+                return pd.DataFrame(), {"groups": client.my_group_ids, "note": "Nenhum ticket retornado via 'Grupo observador'."}
+            # Normaliza para manter compatibilidade com métricas (espera colunas e tipos)
+            df = normalize_ticket_df(df)
+            meta = {"modo": "bulk", "groups": client.my_group_ids, "tids": len(df), "request_id": rid}
+            return df, meta
     finally:
         client.kill_session()
 
 # Execução
 try:
-    df, meta = fetch_data(pd.Timestamp(dt_ini), pd.Timestamp(dt_fim), max_tickets)
+    modo_legacy = st.sidebar.checkbox("Usar modo legacy (subitens)", value=False, help="Ative apenas para comparar performance ou fallback.")
+    df, meta = fetch_data(pd.Timestamp(dt_ini), pd.Timestamp(dt_fim), max_tickets, modo_legacy)
 except Exception as e:
     st.error(f"Erro ao buscar dados: {e}")
     st.stop()
@@ -103,9 +111,12 @@ except Exception as e:
 st.caption(f"Período: {pd.Timestamp(dt_ini).date()} a {pd.Timestamp(dt_fim).date()} • Tickets: {0 if df.empty else len(df)}")
 if meta:
     gids = meta.get("groups", [])
-    info = f"Meus grupos (getFullSession): {gids} • SIDs Group_Ticket → Ticket.id={meta.get('sid_ticket','?')}, Group.id={meta.get('sid_group','?')}"
-    if "tids_total" in meta and "tids_obs" in meta:
-        info += f" • Vínculos totais={meta['tids_total']} • Observador={meta['tids_obs']}"
+    if meta.get("modo") == "legacy":
+        info = f"[LEGACY] Grupos: {gids} • SIDs → Ticket.id={meta.get('sid_ticket','?')} / Group.id={meta.get('sid_group','?')}"
+        if "tids_total" in meta and "tids_obs" in meta:
+            info += f" • Vínculos totais={meta['tids_total']} • Observador={meta['tids_obs']}"
+    else:
+        info = f"[BULK] Grupos: {gids} • Tickets retornados={meta.get('tids','?')}"
     if meta.get("request_id"):
         info += f" • req_id={meta['request_id']}"
     st.caption(info)
@@ -154,5 +165,8 @@ if "by_user" in load: st.write("Por usuário atribuído"); st.bar_chart(load["by
 if "by_group" in load: st.write("Por grupo atribuído"); st.bar_chart(load["by_group"])
 
 st.markdown("---")
-st.caption("Filtro aplicado: **Observador = Meus grupos** (via Group_Ticket + Ticket/<id>/Group_Ticket com type=3). Status = **Todos**.")
+if meta.get("modo") == "legacy":
+    st.caption("Filtro aplicado (LEGACY): Observador = Meus grupos via Group_Ticket + subitens (type=3).")
+else:
+    st.caption("Filtro aplicado (BULK): Observador = Meus grupos via search/Ticket campo 'Grupo observador' (id 65).")
 

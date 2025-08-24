@@ -22,6 +22,7 @@ from data_access import (
     find_ticket_ids_by_group_links,
     filter_observer_tickets,
     fetch_ticket_details,
+    bulk_search_observer_tickets,  # novo fluxo otimizado
 )
 from metrics import (
     normalize_ticket_df,
@@ -61,7 +62,7 @@ def _dict_to_labels_data(d: pd.Series | pd.DataFrame) -> Dict[str, Any]:
     return {"labels": [], "data": []}
 
 
-def _fetch_data(dini: pd.Timestamp, dfim: pd.Timestamp, max_tix: int) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+def _fetch_data(dini: pd.Timestamp, dfim: pd.Timestamp, max_tix: int, mode: str = "bulk") -> Tuple[pd.DataFrame, Dict[str, Any]]:
     if not GLPI_URL or not GLPI_USER_TOKEN:
         raise RuntimeError("GLPI_URL e GLPI_USER_TOKEN precisam estar definidos no .env")
 
@@ -71,28 +72,45 @@ def _fetch_data(dini: pd.Timestamp, dfim: pd.Timestamp, max_tix: int) -> Tuple[p
         if not client.my_group_ids:
             return pd.DataFrame(), {"groups": [], "note": "Nenhum grupo retornado em getFullSession (session.glpigroups)."}
 
-        sid_ticket, sid_group = discover_group_ticket_sids(client)
-        tset = find_ticket_ids_by_group_links(client, client.my_group_ids, sid_ticket, sid_group)
-        if not tset:
-            return pd.DataFrame(), {"groups": client.my_group_ids, "note": "Nenhum ticket ligado aos grupos (Group_Ticket)."}
+        if mode == "legacy":
+            # Caminho antigo (mantido para comparação / fallback)
+            sid_ticket, sid_group = discover_group_ticket_sids(client)
+            tset = find_ticket_ids_by_group_links(client, client.my_group_ids, sid_ticket, sid_group)
+            if not tset:
+                return pd.DataFrame(), {"modo": "legacy", "groups": client.my_group_ids, "note": "Nenhum ticket ligado aos grupos (Group_Ticket)."}
 
-        tids_obs = filter_observer_tickets(client, sorted(tset), client.my_group_ids, max_tix)
-        if not tids_obs:
-            return pd.DataFrame(), {"groups": client.my_group_ids, "note": "Nenhum ticket com type=3 (Observador) para seus grupos."}
+            tids_obs = filter_observer_tickets(client, sorted(tset), client.my_group_ids, max_tix)
+            if not tids_obs:
+                return pd.DataFrame(), {"modo": "legacy", "groups": client.my_group_ids, "note": "Nenhum ticket com type=3 (Observador) para seus grupos."}
 
-        df = fetch_ticket_details(client, tids_obs, pd.to_datetime(dini), pd.to_datetime(dfim))
-        if df is None or df.empty:
-            return pd.DataFrame(), {"groups": client.my_group_ids, "note": "Nenhum ticket no intervalo informado."}
+            df = fetch_ticket_details(client, tids_obs, pd.to_datetime(dini), pd.to_datetime(dfim))
+            if df is None or df.empty:
+                return pd.DataFrame(), {"modo": "legacy", "groups": client.my_group_ids, "note": "Nenhum ticket no intervalo informado."}
 
-        df = normalize_ticket_df(df)
-        meta = {
-            "groups": client.my_group_ids,
-            "sid_ticket": sid_ticket,
-            "sid_group": sid_group,
-            "tids_total": len(tset),
-            "tids_obs": len(tids_obs),
-        }
-        return df, meta
+            df = normalize_ticket_df(df)
+            meta = {
+                "modo": "legacy",
+                "groups": client.my_group_ids,
+                "sid_ticket": sid_ticket,
+                "sid_group": sid_group,
+                "tids_total": len(tset),
+                "tids_obs": len(tids_obs),
+            }
+            return df, meta
+        else:
+            # Novo caminho otimizado (busca direta por campo 65 = Grupo observador)
+            df = bulk_search_observer_tickets(
+                client,
+                observer_group_ids=client.my_group_ids,
+                dt_ini=pd.to_datetime(dini),
+                dt_fim=pd.to_datetime(dfim),
+                max_tickets=max_tix if max_tix < 10**9 else None,
+            )
+            if df is None or df.empty:
+                return pd.DataFrame(), {"modo": "bulk", "groups": client.my_group_ids, "note": "Nenhum ticket retornado via campo 'Grupo observador'."}
+            df = normalize_ticket_df(df)
+            meta = {"modo": "bulk", "groups": client.my_group_ids, "tids": len(df)}
+            return df, meta
     finally:
         client.kill_session()
 
@@ -185,6 +203,7 @@ def index():
 def api_data():
     try:
         gran = request.args.get("gran", "Diário")
+        mode = request.args.get("mode", "bulk").lower()
         gl = gran.lower()
         if gl.startswith("di"):
             freq = "D"
@@ -202,7 +221,7 @@ def api_data():
             start_s = (today - pd.Timedelta(days=30)).date().isoformat()
             end_s = today.date().isoformat()
 
-        df, meta = _fetch_data(pd.Timestamp(start_s), pd.Timestamp(end_s), max_tix)
+        df, meta = _fetch_data(pd.Timestamp(start_s), pd.Timestamp(end_s), max_tix, mode=mode)
 
         if df is None or df.empty:
             return jsonify({
@@ -271,6 +290,7 @@ def api_tickets():
     """
     try:
         gran = request.args.get("gran", "Diário")
+        mode = request.args.get("mode", "bulk").lower()
         start_s = request.args.get("start")
         end_s = request.args.get("end")
         max_tix = 10**9
@@ -282,8 +302,7 @@ def api_tickets():
             today = pd.Timestamp.today().normalize()
             start_s = (today - pd.Timedelta(days=30)).date().isoformat()
             end_s = today.date().isoformat()
-
-        df, meta = _fetch_data(pd.Timestamp(start_s), pd.Timestamp(end_s), max_tix)
+        df, meta = _fetch_data(pd.Timestamp(start_s), pd.Timestamp(end_s), max_tix, mode=mode)
         if df is None or df.empty:
             return jsonify({"meta": meta, "count": 0, "tickets": []})
 
