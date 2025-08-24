@@ -479,27 +479,41 @@ modal.init();
 function attachPointClick(canvasId, labels, sources) {
   const c = charts[canvasId];
   const canvas = document.getElementById(canvasId);
+  if (!canvas || !c) return; // defensive: canvas may be missing on some pages
   canvas.onclick = async (evt) => {
-    const points = c.getElementsAtEventForMode(evt, 'nearest', { intersect: true }, true);
-    if (!points.length) return;
-    const idx = points[0].index;
-    const label = labels[idx];
-    // prefer source based on dataset index if provided
-    const dsIndex = points[0].datasetIndex || 0;
-    const source = sources[Math.min(dsIndex, sources.length - 1)];
-    await openTicketsModal(source, label);
+    try {
+      const points = (typeof c.getElementsAtEventForMode === 'function')
+        ? c.getElementsAtEventForMode(evt, 'nearest', { intersect: true }, true)
+        : [];
+      if (!points.length) return;
+      const idx = points[0].index;
+      const label = labels[idx];
+      // prefer source based on dataset index if provided
+      const dsIndex = points[0].datasetIndex || 0;
+      const source = sources[Math.min(dsIndex, sources.length - 1)];
+      await openTicketsModal(source, label);
+    } catch (err) {
+      console.error('attachPointClick error', err);
+    }
   };
 }
 
 function attachBarClick(canvasId, labels, source) {
   const c = charts[canvasId];
   const canvas = document.getElementById(canvasId);
+  if (!canvas || !c) return; // defensive: guard when canvas/chart missing
   canvas.onclick = async (evt) => {
-    const bars = c.getElementsAtEventForMode(evt, 'nearest', { intersect: true }, true);
-    if (!bars.length) return;
-    const idx = bars[0].index;
-    const label = labels[idx];
-    await openTicketsModal(source, label);
+    try {
+      const bars = (typeof c.getElementsAtEventForMode === 'function')
+        ? c.getElementsAtEventForMode(evt, 'nearest', { intersect: true }, true)
+        : [];
+      if (!bars.length) return;
+      const idx = bars[0].index;
+      const label = labels[idx];
+      await openTicketsModal(source, label);
+    } catch (err) {
+      console.error('attachBarClick error', err);
+    }
   };
 }
 
