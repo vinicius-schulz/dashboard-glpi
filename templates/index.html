@@ -46,14 +46,14 @@
     </div>
     <div class="card" data-widget="backlog">
       <div class="card-inner">
-        <h2>Backlog (tendência)</h2>
-        <canvas id="chartBacklog"></canvas>
-      </div>
-    </div>
-    <div class="card" data-widget="backlogTrend">
-      <div class="card-inner">
-        <h2>Backlog (Curva Suavizada)</h2>
-        <canvas id="chartBacklogTrend"></canvas>
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <h2 style="margin:0">Backlog</h2>
+          <div style="display:flex;gap:8px;align-items:center">
+            <label style="font-size:13px;color:#444;margin:0">Visão:</label>
+            <button id="backlogToggle" type="button" class="small">Tendência</button>
+          </div>
+        </div>
+        <canvas id="chartBacklogCombined"></canvas>
       </div>
     </div>
     <div class="card" data-widget="backlogStatus">

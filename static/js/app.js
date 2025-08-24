@@ -24,9 +24,8 @@ window.addEventListener('DOMContentLoaded', () => { Loader.init(); Toasts.init()
 const WidgetLayout = (() => {
   const STORAGE_KEY = 'glpiDashboardLayout.v2'; // bump version for new coordinate-based schema
   const DEFAULT = [
-    { id: 'cumGap', cols: 8, rows: 8, visible: true },
-    { id: 'backlog', cols: 8, rows: 8, visible: true },
-    { id: 'backlogTrend', cols: 8, rows: 8, visible: true },
+  { id: 'cumGap', cols: 8, rows: 8, visible: true },
+  { id: 'backlog', cols: 8, rows: 8, visible: true },
     { id: 'backlogStatus', cols: 8, rows: 8, visible: true },
     { id: 'aging', cols: 8, rows: 8, visible: true },
   { id: 'openToday', cols: 8, rows: 8, visible: true },
@@ -391,16 +390,47 @@ async function loadData() {
       });
       attachPointClick('chartCumGap', s.created.labels, ['created','resolved']);
     }
-    if (s.backlog) {
-      lineChart('chartBacklog', s.backlog.labels, [
-        { label: 'Backlog', data: s.backlog.data, borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.2)', tension: 0.2 }
-      ]);
-      attachPointClick('chartBacklog', s.backlog.labels, ['backlog']);
-    }
-    if (s.backlog_trend && s.backlog_trend.labels && s.backlog_trend.labels.length) {
-      lineChart('chartBacklogTrend', s.backlog_trend.labels, [
-        { label: 'Backlog (Suavizado)', data: s.backlog_trend.data, borderColor: '#7c3aed', backgroundColor: 'rgba(124,58,237,0.15)', tension:0.25 }
-      ]);
+    // Unified Backlog widget: combined canvas with toggle between raw backlog and smoothed trend
+    if (s.backlog || (s.backlog_trend && s.backlog_trend.labels && s.backlog_trend.labels.length)) {
+      const labels = (s.backlog && s.backlog.labels && s.backlog.labels.length) ? s.backlog.labels : (s.backlog_trend.labels || []);
+      const rawData = (s.backlog && s.backlog.data) ? s.backlog.data : [];
+      const smoothData = (s.backlog_trend && s.backlog_trend.data) ? s.backlog_trend.data : [];
+
+      // Initial render shows Tendência (raw) by default
+      const datasets = [
+        { label: 'Backlog (Tendência)', data: rawData, borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.2)', tension: 0.2, hidden: false },
+        { label: 'Backlog (Suavizado)', data: smoothData, borderColor: '#7c3aed', backgroundColor: 'rgba(124,58,237,0.15)', tension:0.25, hidden: true }
+      ];
+
+      lineChart('chartBacklogCombined', labels, datasets);
+      attachPointClick('chartBacklogCombined', labels, ['backlog']);
+
+      // Toggle button behaviour
+      const toggleBtn = document.getElementById('backlogToggle');
+      if (toggleBtn) {
+        // State: 0 = Tendência (raw), 1 = Suavizado
+        toggleBtn.dataset.state = toggleBtn.dataset.state || '0';
+        function applyState() {
+          const state = toggleBtn.dataset.state || '0';
+          const chart = charts['chartBacklogCombined'];
+          if (!chart) return;
+          if (state === '0') {
+            // show raw, hide smooth
+            chart.data.datasets[0].hidden = false;
+            if (chart.data.datasets[1]) chart.data.datasets[1].hidden = true;
+            toggleBtn.textContent = 'Tendência';
+          } else {
+            // show smooth only
+            if (chart.data.datasets[0]) chart.data.datasets[0].hidden = true;
+            chart.data.datasets[1].hidden = false;
+            toggleBtn.textContent = 'Suavizado';
+          }
+          chart.update();
+        }
+        toggleBtn.onclick = () => { toggleBtn.dataset.state = toggleBtn.dataset.state === '0' ? '1' : '0'; applyState(); };
+        // ensure initial state applied
+        applyState();
+      }
     }
 
     // Bar charts
