@@ -211,6 +211,30 @@ def api_data():
         sla = sla_solution(df)
         age = aging_buckets(df)
         cat, pr, imp = composition(df)
+
+        # Map numeric identifiers to human-friendly labels where possible
+        def map_series_labels(s: pd.Series, mapper: dict):
+            if s is None or s.empty:
+                return s
+            # map each index value using mapper (attempt int conversion), fall back to str
+            mapped = []
+            for k in s.index:
+                name = None
+                try:
+                    name = mapper.get(int(k))
+                except Exception:
+                    name = mapper.get(str(k)) if isinstance(k, str) else None
+                if name is None:
+                    name = str(k)
+                mapped.append(name)
+            out = pd.Series(s.values, index=mapped)
+            # aggregate by label in case multiple ids map to same name
+            out = out.groupby(level=0).sum()
+            return out
+
+        bs_named = map_series_labels(bs, STATUS_MAP)
+        pr_named = map_series_labels(pr, LEVEL_MAP)
+        imp_named = map_series_labels(imp, LEVEL_MAP)
         load = load_by_assignee(df)
 
         # Snapshot counts (limitados ao conjunto carregado pela janela atual; para serem totalmente independentes precisaríamos coleta separada)
@@ -229,11 +253,11 @@ def api_data():
                 "created": _series_to_labels_data(created),
                 "resolved": _series_to_labels_data(resolved),
                 "backlog": _series_to_labels_data(backlog),
-                "backlog_status": _dict_to_labels_data(bs),
+                "backlog_status": _dict_to_labels_data(bs_named),
                 "aging": _dict_to_labels_data(age),
                 "category": _dict_to_labels_data(cat),
-                "priority": _dict_to_labels_data(pr),
-                "impact": _dict_to_labels_data(imp),
+                "priority": _dict_to_labels_data(pr_named),
+                "impact": _dict_to_labels_data(imp_named),
                 "load_by_user": _dict_to_labels_data(load.get("by_user")) if "by_user" in load else {"labels": [], "data": []},
                 "load_by_group": _dict_to_labels_data(load.get("by_group")) if "by_group" in load else {"labels": [], "data": []},
                 "backlog_trend": _series_to_labels_data(backlog_trend) if backlog_trend is not None else {"labels": [], "data": []},
@@ -301,13 +325,16 @@ def api_tickets():
                     )
                 ]
         elif source == "backlog_status":
-            try:
-                st = int(float(label))
-            except Exception:
+                # Backlog = não resolvidos. Accept either numeric id or status name.
                 st = None
-            # Backlog = não resolvidos
-            open_mask = df["solved_at"].isna()
-            sel = df[open_mask & ((df["status"] == st) if st is not None else False)]
+                try:
+                    st = int(float(label))
+                except Exception:
+                    # try reverse mapping from name to id
+                    inv = {v.lower(): k for k, v in STATUS_MAP.items()}
+                    st = inv.get(str(label).lower())
+                open_mask = df["solved_at"].isna()
+                sel = df[open_mask & ((df["status"] == st) if st is not None else False)]
         elif source == "aging":
             ages = (now - pd.to_datetime(df["created_at"])) .dt.total_seconds() / 86400.0
             bins = [-1, 2, 7, 14, 30, 60, 999999]
@@ -324,7 +351,21 @@ def api_tickets():
             sel = df[(created_dt >= today_norm) & (created_dt < today_norm + pd.Timedelta(days=1))]
         elif source in ("category", "priority", "impact"):
             col = {"category": "category", "priority": "priority", "impact": "impact"}[source]
-            sel = df[df[col].astype(str) == str(label)]
+            # For priority/impact the series sent to UI use names; accept either name or id
+            if source in ("priority", "impact"):
+                # try numeric
+                try:
+                    v = int(float(label))
+                    sel = df[df[col] == v]
+                except Exception:
+                    inv = {v.lower(): k for k, v in LEVEL_MAP.items()}
+                    mapped = inv.get(str(label).lower())
+                    if mapped is None:
+                        sel = df[df[col].astype(str) == str(label)]
+                    else:
+                        sel = df[df[col] == mapped]
+            else:
+                sel = df[df[col].astype(str) == str(label)]
         elif source in ("load_by_user", "load_by_group"):
             col = "assigned_user" if source == "load_by_user" else "assigned_group"
             try:
