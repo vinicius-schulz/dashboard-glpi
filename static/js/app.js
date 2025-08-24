@@ -33,6 +33,7 @@ const WidgetLayout = (() => {
     { id: 'category', cols: 8, rows: 8, visible: true },
     { id: 'priority', cols: 8, rows: 8, visible: true },
     { id: 'impact', cols: 8, rows: 8, visible: true }
+  ,{ id: 'resolutionHours', cols: 8, rows: 8, visible: true }
   ].map((w,i) => ({...w, order: i}));
   // Grid cell size (px) for snap positioning
   const CELL_W = 80; // base logical cell width (will derive snap unit)
@@ -411,6 +412,16 @@ async function loadData() {
     if (s.category) { barChart('chartCat', s.category.labels, s.category.data, 'Categoria'); attachBarClick('chartCat', s.category.labels, 'category'); }
     if (s.priority) { barChart('chartPr', s.priority.labels, s.priority.data, 'Prioridade'); attachBarClick('chartPr', s.priority.labels, 'priority'); }
     if (s.impact) { barChart('chartImp', s.impact.labels, s.impact.data, 'Impacto'); attachBarClick('chartImp', s.impact.labels, 'impact'); }
+    if (s.resolution_hours && s.resolution_hours.labels && s.resolution_hours.labels.length) {
+      const labels = s.resolution_hours.labels;
+      const meanData = s.resolution_hours.data;
+      const smoothData = (s.resolution_hours_trend && s.resolution_hours_trend.data) ? s.resolution_hours_trend.data : [];
+      const datasets = [
+        { label: 'Horas úteis (média)', data: meanData, borderColor: '#0ea5e9', backgroundColor: 'rgba(14,165,233,0.08)', tension:0.15 },
+        { label: 'Horas úteis (suavizado)', data: smoothData, borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.08)', tension:0.25 }
+      ];
+      lineChart('chartResolutionHours', labels, datasets);
+    }
   // refresh hidden state (in case layout toggled visibility before load)
   document.querySelectorAll('.card[data-widget]').forEach(el => { if (el.style.display==='none') return; /* skip hidden */ });
     if (s.load_by_user) { barChart('chartUser', s.load_by_user.labels, s.load_by_user.data, 'Usuário'); attachBarClick('chartUser', s.load_by_user.labels, 'load_by_user'); }

@@ -29,6 +29,7 @@ from metrics import (
     load_by_assignee,
     aging_buckets,
     backlog_trend_series,
+    resolution_time_series,
 )
 
 
@@ -260,7 +261,10 @@ def api_data():
                 "impact": _dict_to_labels_data(imp_named),
                 "load_by_user": _dict_to_labels_data(load.get("by_user")) if "by_user" in load else {"labels": [], "data": []},
                 "load_by_group": _dict_to_labels_data(load.get("by_group")) if "by_group" in load else {"labels": [], "data": []},
-                "backlog_trend": _series_to_labels_data(backlog_trend) if backlog_trend is not None else {"labels": [], "data": []},
+                    "backlog_trend": _series_to_labels_data(backlog_trend) if backlog_trend is not None else {"labels": [], "data": []},
+                        # resolution hours (mean per created date) and its smoothed trend
+                        "resolution_hours": _series_to_labels_data(resolution_time_series(df, freq=freq)) ,
+                        "resolution_hours_trend": _series_to_labels_data(backlog_trend_series(resolution_time_series(df, freq=freq))) ,
             },
             "sla": sla,
             "open_today": int(df[df["solved_at"].isna()].shape[0]),

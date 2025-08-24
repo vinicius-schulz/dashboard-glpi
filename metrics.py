@@ -5,6 +5,7 @@ from typing import Tuple, Dict, Any
 import numpy as np
 from instrumentation import timed
 import pandas as pd
+import datetime
 
 
 @timed
@@ -175,3 +176,78 @@ def aging_buckets(df: pd.DataFrame, now=None):
     labels = ["0–2d", "3–7d", "8–14d", "15–30d", "31–60d", ">60d"]
     cats = pd.cut(open_df["age_days"], bins=bins, labels=labels)
     return cats.value_counts().reindex(labels, fill_value=0)
+
+
+@timed
+def business_hours_between(start: pd.Timestamp, end: pd.Timestamp, start_hour: int = 9, end_hour: int = 18) -> float:
+    """Retorna número de horas úteis (flutuante) entre start e end.
+
+    Considera dias úteis como segunda a sexta e o intervalo diário [start_hour, end_hour).
+    Ambos start e end devem ser pd.Timestamp (naive ou timezone-aware); função trabalha com seus valores como UTC-naive.
+    """
+    if start is None or end is None or pd.isna(start) or pd.isna(end):
+        return 0.0
+    # Ensure timestamps
+    s = pd.to_datetime(start)
+    e = pd.to_datetime(end)
+    if e <= s:
+        return 0.0
+
+    total_seconds = 0.0
+    cur_date = s.normalize()
+    last_date = e.normalize()
+    one_day = pd.Timedelta(days=1)
+
+    while cur_date <= last_date:
+        # weekday: Mon=0 .. Sun=6
+        if cur_date.weekday() < 5:
+            day_start = pd.Timestamp(datetime.datetime.combine(cur_date.date(), datetime.time(hour=start_hour)))
+            day_end = pd.Timestamp(datetime.datetime.combine(cur_date.date(), datetime.time(hour=end_hour)))
+            # overlap between [s,e] and [day_start, day_end)
+            interval_start = max(s, day_start)
+            interval_end = min(e, day_end)
+            if interval_end > interval_start:
+                total_seconds += (interval_end - interval_start).total_seconds()
+        cur_date += one_day
+
+    return total_seconds / 3600.0
+
+
+@timed
+def resolution_time_series(df: pd.DataFrame, freq: str = "D", work_start: int = 9, work_end: int = 18) -> pd.Series:
+    """Calcula série (média horas úteis) por data de criação.
+
+    - x-axis: data de criação (resample por `freq`)
+    - y-axis: média do tempo entre created_at e solved_at/closed_at em horas úteis
+    - usa business_hours_between para contabilizar apenas dias/horas úteis
+    """
+    if df is None or df.empty:
+        return pd.Series(dtype=float)
+
+    created = pd.to_datetime(df.get("created_at"), errors="coerce")
+    solved = pd.to_datetime(df.get("solved_at"), errors="coerce")
+    closed = pd.to_datetime(df.get("closed_at"), errors="coerce")
+
+    # prefer solved then closed
+    resolved = solved.fillna(closed)
+
+    # keep only rows with resolved time
+    mask = resolved.notna() & created.notna()
+    if not mask.any():
+        return pd.Series(dtype=float)
+
+    sub = pd.DataFrame({"created_at": created[mask], "resolved_at": resolved[mask]})
+
+    # compute lead hours per row
+    def compute_row(r):
+        return business_hours_between(r["created_at"], r["resolved_at"], start_hour=work_start, end_hour=work_end)
+
+    sub["lead_hours"] = sub.apply(compute_row, axis=1)
+
+    # group by created_at resampled index
+    sub.index = pd.to_datetime(sub["created_at"])
+    # aggregate: mean of lead_hours per bin
+    grouped = sub["lead_hours"].groupby(pd.Grouper(freq=freq)).mean()
+    # drop bins without any resolved tickets (NaN)
+    grouped = grouped.dropna()
+    return grouped.rename("resolution_hours")
