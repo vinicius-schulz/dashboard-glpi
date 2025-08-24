@@ -301,9 +301,8 @@ function barChart(canvasId, labels, data, label) {
 function setMeta(meta, count, period) {
   const el = document.getElementById('meta');
   const gids = meta?.groups || [];
-  let info = `Período: ${period.start} a ${period.end} • Tickets: ${count} `;
-  if (meta?.sid_ticket) info += `• SIDs Group_Ticket → Ticket.id=${meta.sid_ticket}, Group.id=${meta.sid_group} `;
-  if (typeof meta?.tids_total === 'number') info += `• Vínculos totais=${meta.tids_total} • Observador=${meta.tids_obs}`;
+    let info = `Período: ${period.start} a ${period.end} • Tickets: ${count} `;
+    if (typeof meta?.tids === 'number') info += `• Tickets retornados=${meta.tids}`;
   el.textContent = `Meus grupos: [${gids.join(', ')}] • ${info}`;
   // Aging disclaimer badge
   if (meta?.aging_note) {

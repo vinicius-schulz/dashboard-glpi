@@ -70,3 +70,5 @@ python server.py
 Observações:
 - Os grupos do usuário são lidos automaticamente via `getFullSession (session.glpigroups)`.
 - A UI permite ajustar granularidade (Diário/Semanal), período e limite de tickets.
+ - Nota: o fluxo legado baseado em Group_Ticket foi removido; a coleta usa busca direta em
+	 search/Ticket pelo campo "Grupo observador" para melhor performance.
