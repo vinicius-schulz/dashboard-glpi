@@ -25,6 +25,7 @@ from metrics import (
     load_by_assignee,
     aging_buckets,
 )
+from instrumentation import new_request_id, get_request_id, timed
 
 # -------------------- Config --------------------
 load_dotenv()
@@ -52,6 +53,7 @@ if not GLPI_URL or not GLPI_USER_TOKEN:
 client = GLPIClient(GLPI_URL, GLPI_USER_TOKEN)
 
 @st.cache_data(show_spinner=True, ttl=600)
+@timed
 def fetch_data(dini: pd.Timestamp, dfim: pd.Timestamp, max_tix: int):
     """Fluxo principal de coleta de dados.
 
@@ -61,6 +63,8 @@ def fetch_data(dini: pd.Timestamp, dfim: pd.Timestamp, max_tix: int):
     - Carrega detalhes dos tickets e aplica janela por data de criação.
     Retorna: (DataFrame normalizado, metadados do processo).
     """
+    # Cria um request_id para correlação de logs de performance desta execução
+    rid = new_request_id()
     client.init_session(get_full=True)
     try:
         if not client.my_group_ids:
@@ -84,7 +88,7 @@ def fetch_data(dini: pd.Timestamp, dfim: pd.Timestamp, max_tix: int):
             return pd.DataFrame(), {"groups": client.my_group_ids, "note": "Nenhum ticket no intervalo informado."}
 
         df = normalize_ticket_df(df)
-        meta = {"groups": client.my_group_ids, "sid_ticket": sid_ticket, "sid_group": sid_group, "tids_total": len(tset), "tids_obs": len(tids_obs)}
+        meta = {"groups": client.my_group_ids, "sid_ticket": sid_ticket, "sid_group": sid_group, "tids_total": len(tset), "tids_obs": len(tids_obs), "request_id": rid}
         return df, meta
     finally:
         client.kill_session()
@@ -102,6 +106,8 @@ if meta:
     info = f"Meus grupos (getFullSession): {gids} • SIDs Group_Ticket → Ticket.id={meta.get('sid_ticket','?')}, Group.id={meta.get('sid_group','?')}"
     if "tids_total" in meta and "tids_obs" in meta:
         info += f" • Vínculos totais={meta['tids_total']} • Observador={meta['tids_obs']}"
+    if meta.get("request_id"):
+        info += f" • req_id={meta['request_id']}"
     st.caption(info)
 
 if meta and meta.get("note"):

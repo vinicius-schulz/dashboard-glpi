@@ -5,10 +5,12 @@ from typing import Dict, List, Any, Optional, Tuple, Set
 import pandas as pd
 
 from glpi_client import GLPIClient
+from instrumentation import timed
 
 
 # -------------------- Descoberta de SIDs (Group_Ticket) --------------------
 
+@timed
 def discover_group_ticket_sids(client: GLPIClient) -> Tuple[int, int]:
     """Descobre os SIDs de campos em Group_Ticket.
 
@@ -38,6 +40,7 @@ def discover_group_ticket_sids(client: GLPIClient) -> Tuple[int, int]:
 
 # -------------------- Coleta de tickets observados --------------------
 
+@timed
 def find_ticket_ids_by_group_links(
     client: GLPIClient,
     group_ids: List[int],
@@ -86,6 +89,7 @@ def find_ticket_ids_by_group_links(
     return ticket_ids
 
 
+@timed
 def filter_observer_tickets(
     client: GLPIClient,
     ticket_ids: List[int],
@@ -119,6 +123,7 @@ def filter_observer_tickets(
     return out
 
 
+@timed
 def fetch_ticket_details(
     client: GLPIClient,
     ticket_ids: List[int],

@@ -3,9 +3,11 @@ Metrics and aggregations for GLPI tickets.
 """
 from typing import Tuple, Dict, Any
 import numpy as np
+from instrumentation import timed
 import pandas as pd
 
 
+@timed
 def normalize_ticket_df(df: pd.DataFrame) -> pd.DataFrame:
     """Converte campos de data para datetime ingênuo (sem timezone).
 
@@ -17,6 +19,7 @@ def normalize_ticket_df(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+@timed
 def created_resolved(df: pd.DataFrame, freq: str = "D"):
         """Computa séries de criados, resolvidos e backlog considerando backlog inicial.
 
@@ -62,6 +65,7 @@ def created_resolved(df: pd.DataFrame, freq: str = "D"):
         return s_created.rename("Criados"), s_resolved.rename("Resolvidos"), backlog
 
 
+@timed
 def backlog_status(df: pd.DataFrame):
     """Distribuição do backlog aberto por status.
 
@@ -72,6 +76,7 @@ def backlog_status(df: pd.DataFrame):
     return df[open_mask].groupby("status", dropna=False)["ticket_id"].count().sort_values(ascending=False)
 
 
+@timed
 def backlog_trend_series(backlog: pd.Series) -> pd.Series:
     """Gera série suavizada (tendência) para backlog diário/semanal.
 
@@ -96,6 +101,7 @@ def backlog_trend_series(backlog: pd.Series) -> pd.Series:
     return trend
 
 
+@timed
 def sla_solution(df: pd.DataFrame, now=None) -> Dict[str, Any]:
     """Calcula indicadores de SLA de solução e estatísticas de lead time.
 
@@ -129,6 +135,7 @@ def sla_solution(df: pd.DataFrame, now=None) -> Dict[str, Any]:
     }
 
 
+@timed
 def composition(df: pd.DataFrame):
     """Composição por categoria, prioridade e impacto."""
     cat = (
@@ -139,6 +146,7 @@ def composition(df: pd.DataFrame):
     return cat, pr, imp
 
 
+@timed
 def load_by_assignee(df: pd.DataFrame):
     """Carga de tickets por usuário e grupo atribuídos (top 20)."""
     out = {}
@@ -153,6 +161,7 @@ def load_by_assignee(df: pd.DataFrame):
     return out
 
 
+@timed
 def aging_buckets(df: pd.DataFrame, now=None):
     """Distribuição de idade (em dias) dos tickets em backlog (não resolvidos).
 

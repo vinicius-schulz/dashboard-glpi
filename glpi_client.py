@@ -4,6 +4,7 @@ GLPI client wrapper: handles session, auth, and low-level REST calls.
 from typing import Optional, Dict, Any, List
 import requests
 from tenacity import retry, stop_after_attempt, wait_exponential
+from instrumentation import timed
 
 
 class GLPIClient:
@@ -59,6 +60,7 @@ class GLPIClient:
             p["session_token"] = self.session_token
         return p
 
+    @timed
     def _get(self, path: str, params: Optional[dict] = None, timeout=60):
         """Executa GET simples na rota informada.
 
@@ -84,6 +86,7 @@ class GLPIClient:
                 f"HTTPError {getattr(e.response,'status_code', '???')} em {url} | Resposta: {body}"
             ) from e
 
+    @timed
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=6))
     def init_session(self, get_full: bool = True):
         """Abre uma sessão no GLPI.
@@ -148,6 +151,7 @@ class GLPIClient:
             except Exception:
                 pass
 
+    @timed
     def kill_session(self):
         """Encerra a sessão atual no GLPI (se existir)."""
         if not self.session_token:
@@ -158,18 +162,22 @@ class GLPIClient:
             self.session_token = None
 
     # APIs
+    @timed
     def list_search_options(self, itemtype: str) -> Dict[str, Any]:
         """Lista metadados de campos pesquisáveis para um itemtype (ex.: Group_Ticket)."""
         return self._get(f"listSearchOptions/{itemtype}", params={}, timeout=60).json()
 
+    @timed
     def raw_search(self, itemtype: str, params: dict):
         """Faz uma chamada crua à rota search/<itemtype> (retorna Response)."""
         return self._get(f"search/{itemtype}", params=params, timeout=120)
 
+    @timed
     def get_item(self, itemtype: str, item_id: int):
         """Obtém um item por ID (ex.: Ticket/123)."""
         return self._get(f"{itemtype}/{item_id}", params={}, timeout=60).json()
 
+    @timed
     def get_subitems(self, itemtype: str, item_id: int, subitemtype: str, params: Optional[dict] = None):
         """Obtém subitens de um item (ex.: Ticket/123/Group_Ticket)."""
         return self._get(f"{itemtype}/{item_id}/{subitemtype}", params=params or {}, timeout=120).json()
