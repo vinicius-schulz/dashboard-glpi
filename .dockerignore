@@ -1,0 +1,30 @@
+# Python/Docker ignores
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+.env
+.env.*
+*.log
+perf.log
+ret.txt
+list.txt
+
+# VCS
+.git
+.gitignore
+
+# Local editor/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Virtual envs
+venv/
+.env
+
+# Build artifacts
+build/
+dist/
