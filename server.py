@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 
 from glpi_client import GLPIClient
 from data_access import (
-    bulk_search_observer_tickets,  # fluxo otimizado
+    bulk_search_observer_tickets,  # fluxo otimizado (agora também inclui Grupo técnico)
 )
 from metrics import (
     normalize_ticket_df,
@@ -79,6 +79,7 @@ def _fetch_data(dini: pd.Timestamp, dfim: pd.Timestamp, mode: str = "bulk") -> T
             dt_ini=pd.to_datetime(dini),
             dt_fim=pd.to_datetime(dfim),
             max_tickets=None,
+            include_assigned_groups=True,
         )
         if df is None or df.empty:
             return pd.DataFrame(), {"modo": "bulk", "groups": client.my_group_ids, "note": "Nenhum ticket retornado via campo 'Grupo observador'."}
@@ -270,15 +271,19 @@ def api_data():
             cat_filtered = pd.Series(dtype=float)
             pr_filtered = pd.Series(dtype=float)
             imp_filtered = pd.Series(dtype=float)
-            resolution_hours_series = pd.Series(dtype=float)
-            resolution_hours_trend = pd.Series(dtype=float)
         else:
             created, resolved, _discard = created_resolved(df_strict, freq=freq)
             _c_ext, _r_ext, backlog_ext = created_resolved(df_extended, freq=freq)
             backlog_trend = backlog_trend_series(backlog_ext)
             cat_filtered, pr_filtered, imp_filtered = composition(df_strict)
-            resolution_hours_series = resolution_time_series(df_strict, freq=freq)
-            resolution_hours_trend = backlog_trend_series(resolution_hours_series)
+
+        # --- Resolution hours deve considerar tickets RESOLVIDOS no período, mesmo que criados antes ---
+        # Usamos df_extended (que já inclui tickets anteriores que cruzam a janela) e filtramos por solved_at na janela.
+        solved_dt_ext = pd.to_datetime(df_extended["solved_at"], errors="coerce")
+        res_mask = solved_dt_ext.notna() & (solved_dt_ext >= user_start) & (solved_dt_ext < end_boundary)
+        df_resolved_window = df_extended[res_mask].copy()
+        resolution_hours_series = resolution_time_series(df_resolved_window, freq=freq)
+        resolution_hours_trend = backlog_trend_series(resolution_hours_series)
 
         # Widgets baseline / ignoram filtro
         bs_full = backlog_status(df_full)

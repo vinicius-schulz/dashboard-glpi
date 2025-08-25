@@ -298,6 +298,17 @@ function barChart(canvasId, labels, data, label) {
   });
 }
 
+function destroyChart(id) {
+  if (charts[id]) {
+    try { charts[id].destroy(); } catch(e) {}
+    delete charts[id];
+  }
+  const cv = document.getElementById(id);
+  if (cv && cv.getContext) {
+    try { const g = cv.getContext('2d'); g && g.clearRect(0,0,cv.width,cv.height); } catch(e) {}
+  }
+}
+
 function setMeta(meta, count, period) {
   const el = document.getElementById('meta');
   const gids = meta?.groups || [];
@@ -405,7 +416,7 @@ async function loadData() {
         }
       });
       attachPointClick('chartCumGap', s.created.labels, ['created','resolved']);
-    }
+  } else { destroyChart('chartCumGap'); }
     // Unified Backlog widget: combined canvas with toggle between raw backlog and smoothed trend
   if (s.backlog && s.backlog.data && s.backlog.data.length) {
       const labels = (s.backlog && s.backlog.labels && s.backlog.labels.length) ? s.backlog.labels : (s.backlog_trend.labels || []);
@@ -419,7 +430,7 @@ async function loadData() {
 
       lineChart('chartBacklogCombined', labels, datasets);
       attachPointClick('chartBacklogCombined', labels, ['backlog']);
-    }
+  } else { destroyChart('chartBacklogCombined'); }
 
     // Bar charts
   if (s.backlog_status && s.backlog_status.data && s.backlog_status.data.length) { barChart('chartBacklogStatus', s.backlog_status.labels, s.backlog_status.data, 'Status'); attachBarClick('chartBacklogStatus', s.backlog_status.labels, 'backlog_status'); } else if (charts['chartBacklogStatus']) { charts['chartBacklogStatus'].destroy(); }
@@ -436,7 +447,7 @@ async function loadData() {
         { label: 'Horas úteis (suavizado)', data: smoothData, borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.08)', tension:0.25 }
       ];
       lineChart('chartResolutionHours', labels, datasets);
-    }
+  } else { destroyChart('chartResolutionHours'); }
   // refresh hidden state (in case layout toggled visibility before load)
   document.querySelectorAll('.card[data-widget]').forEach(el => { if (el.style.display==='none') return; /* skip hidden */ });
     if (s.load_by_user) { barChart('chartUser', s.load_by_user.labels, s.load_by_user.data, 'Usuário'); attachBarClick('chartUser', s.load_by_user.labels, 'load_by_user'); }
