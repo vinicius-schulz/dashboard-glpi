@@ -214,51 +214,113 @@ def api_data():
         user_start = pd.Timestamp(start_s).normalize()
         user_end = pd.Timestamp(end_s).normalize()
 
-        # Janela baseline (últimos 6 meses até hoje)
+        # Janela baseline fixa (últimos 6 meses sempre)
         today_norm = pd.Timestamp.today().normalize()
         baseline_start = (today_norm - pd.DateOffset(months=6)).normalize()
         baseline_end = today_norm
-        user_inside_baseline = (user_start >= baseline_start) and (user_end <= baseline_end)
 
-        fetch_start = baseline_start if user_inside_baseline else user_start
-        fetch_end = baseline_end if user_inside_baseline else user_end
+        # Sempre busca baseline E janela do usuário separadamente
+        baseline_df, baseline_meta = _fetch_data(baseline_start, baseline_end, mode=mode)
+        user_df, user_meta = _fetch_data(user_start, user_end, mode=mode)
+        meta = {**baseline_meta, "tids_baseline": baseline_meta.get("tids"), "tids_user": user_meta.get("tids")}
 
-        df_full, meta = _fetch_data(fetch_start, fetch_end, mode=mode)
-        if df_full is None or df_full.empty:
+        if user_df is None or user_df.empty:
+            # Mesmo sem dados no range filtrado, ainda entregamos widgets de baseline (6 meses) se existirem
             empty = {"labels": [], "data": []}
+            if baseline_df is None or baseline_df.empty:
+                # Nada em baseline também -> tudo vazio
+                return jsonify({
+                    "meta": {
+                        **meta,
+                        "baseline_window": {"start": str(baseline_start.date()), "end": str(baseline_end.date()), "used": True},
+                        "user_window": {"start": str(user_start.date()), "end": str(user_end.date())},
+                        "ignore_period_widgets": ["aging", "backlog_status", "open_today", "created_today"],
+                        "aging_note": "Gráfico Aging mostra backlog atual ignorando filtro de data e inclui faixa >60d.",
+                    },
+                    "count": 0,
+                    "note": meta.get("note", "Nenhum ticket encontrado"),
+                    "series": {k: empty for k in [
+                        "created","resolved","backlog","backlog_trend","category","resolution_hours","resolution_hours_trend","backlog_status","aging","priority","impact","load_by_user","load_by_group"
+                    ]},
+                    "sla": {},
+                    "open_today": 0,
+                    "created_today": 0,
+                })
+
+            # Calcular baseline widgets
+            today_norm = pd.Timestamp.today().normalize()
+            bs_full = backlog_status(baseline_df)
+            age_full = aging_buckets(baseline_df)
+            sla = sla_solution(baseline_df)
+            open_today_full = int(baseline_df[baseline_df["solved_at"].isna()].shape[0])
+            created_today_mask = (
+                (pd.to_datetime(baseline_df["created_at"]) >= today_norm) &
+                (pd.to_datetime(baseline_df["created_at"]) < today_norm + pd.Timedelta(days=1))
+            )
+            created_today_count = int(created_today_mask.sum())
+
+            def map_series_labels(s: pd.Series, mapper: dict):
+                if s is None or s.empty:
+                    return s
+                mapped = []
+                for k in s.index:
+                    try:
+                        name = mapper.get(int(k))
+                    except Exception:
+                        name = mapper.get(str(k)) if isinstance(k, str) else None
+                    if name is None:
+                        name = str(k)
+                    mapped.append(name)
+                out = pd.Series(s.values, index=mapped)
+                return out.groupby(level=0).sum()
+
+            bs_named = map_series_labels(bs_full, STATUS_MAP)
+            # priority/impact precisam de df filtrado (não há) -> vazios
+            pr_named = pd.Series(dtype=float)
+            imp_named = pd.Series(dtype=float)
+
             return jsonify({
                 "meta": {
                     **meta,
-                    "baseline_window": {"start": str(fetch_start.date()), "end": str(fetch_end.date()), "used": True},
+                    "baseline_window": {"start": str(baseline_start.date()), "end": str(baseline_end.date()), "used": True},
                     "user_window": {"start": str(user_start.date()), "end": str(user_end.date())},
                     "ignore_period_widgets": ["aging", "backlog_status", "open_today", "created_today"],
                     "aging_note": "Gráfico Aging mostra backlog atual ignorando filtro de data e inclui faixa >60d.",
                 },
-                "count": 0,
-                "note": meta.get("note", "Nenhum ticket encontrado"),
-                "series": {k: empty for k in [
-                    "created","resolved","backlog","backlog_trend","category","resolution_hours","resolution_hours_trend","backlog_status","aging","priority","impact","load_by_user","load_by_group"
-                ]},
-                "sla": {},
-                "open_today": 0,
-                "created_today": 0,
+                "count": 0,  # nenhum ticket no filtro
+                "note": "Sem tickets no intervalo filtrado; exibindo métricas de baseline para widgets que ignoram período.",
+                "series": {
+                    "created": empty,
+                    "resolved": empty,
+                    "backlog": empty,
+                    "backlog_trend": empty,
+                    "category": empty,
+                    "resolution_hours": empty,
+                    "resolution_hours_trend": empty,
+                    "backlog_status": _dict_to_labels_data(bs_named),
+                    "aging": _dict_to_labels_data(age_full),
+                    "priority": _dict_to_labels_data(pr_named),
+                    "impact": _dict_to_labels_data(imp_named),
+                    "load_by_user": empty,
+                    "load_by_group": empty,
+                },
+                "sla": sla,
+                "open_today": open_today_full,
+                "created_today": created_today_count,
             })
 
-        # Subconjuntos e janelas
-        created_all = pd.to_datetime(df_full["created_at"], errors="coerce")
-        solved_all = pd.to_datetime(df_full["solved_at"], errors="coerce")
+        # Subconjuntos e janelas (sempre calcular spans para backlog/resolution considerando tickets anteriores)
+        created_all = pd.to_datetime(user_df["created_at"], errors="coerce")
+        solved_all = pd.to_datetime(user_df["solved_at"], errors="coerce")
         end_boundary = user_end + pd.Timedelta(days=1)
         mask_strict = (created_all >= user_start) & (created_all < end_boundary)
-        if user_inside_baseline:
-            spans_window = (
-                (created_all < user_start) & ((solved_all.isna()) | (solved_all >= user_start))
-            ) | (
-                (solved_all.notna()) & (solved_all >= user_start) & (solved_all < end_boundary)
-            )
-            df_extended = df_full[mask_strict | spans_window].copy()
-        else:
-            df_extended = df_full.copy()
-        df_strict = df_full[mask_strict].copy()
+        spans_window = (
+            (created_all < user_start) & ((solved_all.isna()) | (solved_all >= user_start))
+        ) | (
+            (solved_all.notna()) & (solved_all >= user_start) & (solved_all < end_boundary)
+        )
+        df_extended = user_df[mask_strict | spans_window].copy()
+        df_strict = user_df[mask_strict].copy()
         df_extended.attrs.update(window_start=user_start, window_end=user_end)
         df_strict.attrs.update(window_start=user_start, window_end=user_end)
 
@@ -285,10 +347,16 @@ def api_data():
         resolution_hours_series = resolution_time_series(df_resolved_window, freq=freq)
         resolution_hours_trend = backlog_trend_series(resolution_hours_series)
 
-        # Widgets baseline / ignoram filtro
-        bs_full = backlog_status(df_full)
-        age_full = aging_buckets(df_full)
-        sla = sla_solution(df_full)
+        # Widgets IGNORAM filtro -> utilizam baseline_df exclusivamente
+        bs_full = backlog_status(baseline_df)
+        age_full = aging_buckets(baseline_df)
+        sla = sla_solution(baseline_df)
+        open_today_full = int(baseline_df[baseline_df["solved_at"].isna()].shape[0])
+        created_today_mask = (
+            (pd.to_datetime(baseline_df["created_at"]) >= today_norm)
+            & (pd.to_datetime(baseline_df["created_at"]) < today_norm + pd.Timedelta(days=1))
+        )
+        created_today_count = int(created_today_mask.sum())
         load = load_by_assignee(df_strict)
 
         def map_series_labels(s: pd.Series, mapper: dict):
@@ -310,19 +378,12 @@ def api_data():
         pr_named = map_series_labels(pr_filtered, LEVEL_MAP)
         imp_named = map_series_labels(imp_filtered, LEVEL_MAP)
 
-        today = pd.Timestamp.today().normalize()
-        created_today_mask = (
-            (pd.to_datetime(df_full["created_at"]) >= today)
-            & (pd.to_datetime(df_full["created_at"]) < today + pd.Timedelta(days=1))
-        )
-        created_today_count = int(created_today_mask.sum())
-
         ignore_widgets = ["aging", "backlog_status", "open_today", "created_today"]
 
         payload: Dict[str, Any] = {
             "meta": {
                 **meta,
-                "baseline_window": {"start": str(fetch_start.date()), "end": str(fetch_end.date()), "used": user_inside_baseline},
+                "baseline_window": {"start": str(baseline_start.date()), "end": str(baseline_end.date()), "used": True},
                 "user_window": {"start": str(user_start.date()), "end": str(user_end.date())},
                 "ignore_period_widgets": ignore_widgets,
                 "aging_note": "Gráfico Aging mostra backlog atual ignorando filtro de data e inclui faixa >60d.",
@@ -345,7 +406,7 @@ def api_data():
                 "load_by_group": _dict_to_labels_data(load.get("by_group")) if "by_group" in load else {"labels": [], "data": []},
             },
             "sla": sla,
-            "open_today": int(df_full[df_full["solved_at"].isna()].shape[0]),
+            "open_today": open_today_full,
             "created_today": created_today_count,
         }
         return jsonify(payload)
