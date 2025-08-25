@@ -317,6 +317,19 @@ function setMeta(meta, count, period) {
     }
     badge.textContent = meta.aging_note;
   }
+  // Marca widgets que ignoram período (fallback se HTML não tiver badge)
+  const ignore = meta?.ignore_period_widgets || [];
+  ignore.forEach(id => {
+    const card = document.querySelector(`.card[data-widget="${id}"] h2`);
+    if (card && !card.querySelector('.badge-period')) {
+      const span = document.createElement('span');
+      span.className = 'badge-period';
+      span.textContent = '(Ignora filtro de período)';
+      span.title = 'Ignora filtro de período';
+      card.appendChild(document.createTextNode(' '));
+      card.appendChild(span);
+    }
+  });
 }
 
 let loading = false;

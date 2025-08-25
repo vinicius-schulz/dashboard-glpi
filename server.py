@@ -176,6 +176,24 @@ def index():
 
 @app.get("/api/data")
 def api_data():
+    """Endpoint principal de dados.
+
+    Requisitos novos:
+    - Sempre coletar (por padrão) os ÚLTIMOS 6 MESES de tickets (janela baseline),
+      independentemente do filtro informado na tela, para alimentar widgets que
+      precisam de histórico amplo.
+    - EXCETO: se o range solicitado pelo usuário estiver FORA da janela padrão
+      (isto é, não contido totalmente dentro dos últimos 6 meses). Nesse caso, a
+      coleta usa o range do usuário (não forçamos truncar para 6 meses).
+    - Widgets que DEVEM respeitar o filtro informado na tela (usar df_filtrado):
+        cumGap (created/resolved), backlog (e trend), category, resolutionHours.
+        - Widgets que DEVEM ignorar o filtro e usar SEMPRE a janela baseline de 6 meses
+            (ou o range estendido quando o usuário sai dessa janela): aging, backlogStatus,
+            openToday, createdToday.
+    - Sinalizar nos widgets que ignoram o período com a mensagem
+      "Ignora filtro de período" (markup em index.html cuida da exibição; aqui
+      expomos metadados para possível uso futuro).
+    """
     try:
         gran = request.args.get("gran", "Diário")
         mode = request.args.get("mode", "bulk").lower()
@@ -187,40 +205,92 @@ def api_data():
         else:
             freq = "M"
 
+        # Range informado pelo usuário (default últimos 30 dias se ausente)
         start_s = request.args.get("start")
         end_s = request.args.get("end")
-        max_tix = 10**9  # sem limite efetivo
-
         if not start_s or not end_s:
-            today = pd.Timestamp.today().normalize()
-            start_s = (today - pd.Timedelta(days=30)).date().isoformat()
-            end_s = today.date().isoformat()
+            today_norm = pd.Timestamp.today().normalize()
+            start_s = (today_norm - pd.Timedelta(days=30)).date().isoformat()
+            end_s = today_norm.date().isoformat()
+        user_start = pd.Timestamp(start_s).normalize()
+        user_end = pd.Timestamp(end_s).normalize()
 
-        df, meta = _fetch_data(pd.Timestamp(start_s), pd.Timestamp(end_s), max_tix, mode=mode)
+        # Janela baseline (últimos 6 meses até hoje)
+        today_norm = pd.Timestamp.today().normalize()
+        baseline_start = (today_norm - pd.DateOffset(months=6)).normalize()
+        baseline_end = today_norm  # inclusive
 
-        if df is None or df.empty:
+        # Determina se range usuário está totalmente contido na baseline
+        user_inside_baseline = (user_start >= baseline_start) and (user_end <= baseline_end)
+
+        # Janela efetiva de coleta (fetch)
+        fetch_start = baseline_start if user_inside_baseline else user_start
+        fetch_end = baseline_end if user_inside_baseline else user_end
+
+        max_tix = 10**9  # sem limite efetivo (controlado por MAX_TICKETS env internamente)
+        df_full, meta = _fetch_data(fetch_start, fetch_end, max_tix, mode=mode)
+
+        if df_full is None or df_full.empty:
             return jsonify({
-                "meta": {**meta, "aging_note": "Gráfico Aging mostra backlog atual ignorando filtro de data e inclui faixa >60d."},
+                "meta": {
+                    **meta,
+                    "baseline_window": {"start": str(fetch_start.date()), "end": str(fetch_end.date()), "used": True},
+                    "ignore_period_widgets": [
+                        "aging", "backlog_status", "open_today", "created_today"
+                    ],
+                    "aging_note": "Gráfico Aging mostra backlog atual ignorando filtro de data e inclui faixa >60d.",
+                },
                 "count": 0,
                 "note": meta.get("note", "Nenhum ticket encontrado"),
                 "series": {},
             })
 
-        created, resolved, backlog = created_resolved(df, freq=freq)
-        backlog_trend = backlog_trend_series(backlog)
-        bs = backlog_status(df)
-        sla = sla_solution(df)
-        age = aging_buckets(df)
-        cat, pr, imp = composition(df)
+        # Construímos dois subconjuntos:
+        # 1) df_strict: tickets com created_at dentro do range do usuário (RESPEITAR filtro rigidamente)
+        # 2) df_extended: inclui df_strict + tickets criados antes mas ainda abertos ou resolvidos dentro da janela (para backlog correto)
+        created_all = pd.to_datetime(df_full["created_at"], errors="coerce")
+        solved_all = pd.to_datetime(df_full["solved_at"], errors="coerce")
+        end_boundary = user_end + pd.Timedelta(days=1)  # meia‑aberta
+        mask_strict = (created_all >= user_start) & (created_all < end_boundary)
+        if user_inside_baseline:
+            spans_window = (
+                (created_all < user_start) & ((solved_all.isna()) | (solved_all >= user_start))
+            ) | (
+                (solved_all.notna()) & (solved_all >= user_start) & (solved_all < end_boundary)
+            )
+            df_extended = df_full[mask_strict | spans_window].copy()
+        else:
+            # Fora da baseline: não precisamos de distinção, ambos iguais
+            df_extended = df_full.copy()
+        df_strict = df_full[mask_strict].copy()
 
-        # Map numeric identifiers to human-friendly labels where possible
+        # Para backlog e cálculo de backlog inicial usamos df_extended; para cumGap, category, resolutionHours, priority, impact usamos df_strict
+        df_extended.attrs["window_start"] = user_start
+        df_extended.attrs["window_end"] = user_end
+        df_strict.attrs["window_start"] = user_start
+        df_strict.attrs["window_end"] = user_end
+
+        # Séries que RESPEITAM o filtro (usar df_strict)
+        created, resolved, _discard = created_resolved(df_strict, freq=freq)
+        # Backlog correto (com tickets anteriores) usando df_extended
+        _c_ext, _r_ext, backlog_ext = created_resolved(df_extended, freq=freq)
+        backlog_trend = backlog_trend_series(backlog_ext)
+        cat_filtered, pr_filtered, imp_filtered = composition(df_strict)
+        resolution_hours_series = resolution_time_series(df_strict, freq=freq)
+        resolution_hours_trend = backlog_trend_series(resolution_hours_series)
+
+        # Séries que IGNORAM o filtro (usam df_full - baseline ou estendido)
+        bs_full = backlog_status(df_full)
+        age_full = aging_buckets(df_full)
+
+        sla = sla_solution(df_full)
+        load = load_by_assignee(df_strict)
+
         def map_series_labels(s: pd.Series, mapper: dict):
             if s is None or s.empty:
                 return s
-            # map each index value using mapper (attempt int conversion), fall back to str
             mapped = []
             for k in s.index:
-                name = None
                 try:
                     name = mapper.get(int(k))
                 except Exception:
@@ -229,45 +299,48 @@ def api_data():
                     name = str(k)
                 mapped.append(name)
             out = pd.Series(s.values, index=mapped)
-            # aggregate by label in case multiple ids map to same name
-            out = out.groupby(level=0).sum()
-            return out
+            return out.groupby(level=0).sum()
 
-        bs_named = map_series_labels(bs, STATUS_MAP)
-        pr_named = map_series_labels(pr, LEVEL_MAP)
-        imp_named = map_series_labels(imp, LEVEL_MAP)
-        load = load_by_assignee(df)
+        bs_named = map_series_labels(bs_full, STATUS_MAP)
+        pr_named = map_series_labels(pr_filtered, LEVEL_MAP)
+        imp_named = map_series_labels(imp_filtered, LEVEL_MAP)
 
-        # Snapshot counts (limitados ao conjunto carregado pela janela atual; para serem totalmente independentes precisaríamos coleta separada)
         today = pd.Timestamp.today().normalize()
         created_today_mask = (
-            (pd.to_datetime(df["created_at"]) >= today)
-            & (pd.to_datetime(df["created_at"]) < today + pd.Timedelta(days=1))
+            (pd.to_datetime(df_full["created_at"]) >= today)
+            & (pd.to_datetime(df_full["created_at"]) < today + pd.Timedelta(days=1))
         )
         created_today_count = int(created_today_mask.sum())
 
+        ignore_widgets = ["aging", "backlog_status", "open_today", "created_today"]
+
         payload: Dict[str, Any] = {
-            "meta": {**meta, "aging_note": "Gráfico Aging mostra backlog atual ignorando filtro de data e inclui faixa >60d."},
-            "count": int(len(df)),
+            "meta": {
+                **meta,
+                "baseline_window": {"start": str(fetch_start.date()), "end": str(fetch_end.date()), "used": user_inside_baseline},
+                "user_window": {"start": str(user_start.date()), "end": str(user_end.date())},
+                "ignore_period_widgets": ignore_widgets,
+                "aging_note": "Gráfico Aging mostra backlog atual ignorando filtro de data e inclui faixa >60d.",
+            },
+            "count": int(len(df_strict)),
             "period": {"start": start_s, "end": end_s, "gran": gran},
             "series": {
                 "created": _series_to_labels_data(created),
                 "resolved": _series_to_labels_data(resolved),
-                "backlog": _series_to_labels_data(backlog),
+                "backlog": _series_to_labels_data(backlog_ext),
+                "backlog_trend": _series_to_labels_data(backlog_trend) if backlog_trend is not None else {"labels": [], "data": []},
+                "category": _dict_to_labels_data(cat_filtered),
+                "resolution_hours": _series_to_labels_data(resolution_hours_series),
+                "resolution_hours_trend": _series_to_labels_data(resolution_hours_trend) if resolution_hours_trend is not None else {"labels": [], "data": []},
                 "backlog_status": _dict_to_labels_data(bs_named),
-                "aging": _dict_to_labels_data(age),
-                "category": _dict_to_labels_data(cat),
+                "aging": _dict_to_labels_data(age_full),
                 "priority": _dict_to_labels_data(pr_named),
                 "impact": _dict_to_labels_data(imp_named),
                 "load_by_user": _dict_to_labels_data(load.get("by_user")) if "by_user" in load else {"labels": [], "data": []},
                 "load_by_group": _dict_to_labels_data(load.get("by_group")) if "by_group" in load else {"labels": [], "data": []},
-                    "backlog_trend": _series_to_labels_data(backlog_trend) if backlog_trend is not None else {"labels": [], "data": []},
-                        # resolution hours (mean per created date) and its smoothed trend
-                        "resolution_hours": _series_to_labels_data(resolution_time_series(df, freq=freq)) ,
-                        "resolution_hours_trend": _series_to_labels_data(backlog_trend_series(resolution_time_series(df, freq=freq))) ,
             },
             "sla": sla,
-            "open_today": int(df[df["solved_at"].isna()].shape[0]),
+            "open_today": int(df_full[df_full["solved_at"].isna()].shape[0]),
             "created_today": created_today_count,
         }
         return jsonify(payload)

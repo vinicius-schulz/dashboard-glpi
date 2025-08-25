@@ -4,3 +4,4 @@ venv/
 __pycache__/
 ret.txt
 list.txt
+perf.log

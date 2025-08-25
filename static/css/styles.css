@@ -112,3 +112,6 @@ tbody tr:hover { background: #f8fafc; }
 .big-number { font-size: clamp(48px, 12vw, 110px); font-weight: 700; line-height: 1.05; text-align: center; flex: 1 1 auto; display:flex; align-items:center; justify-content:center; color:#0f172a; letter-spacing:-1px; }
 .big-number:hover { filter: brightness(0.85); }
 .small-note { font-size:11px; text-align:center; color:#64748b; margin-top:4px; }
+
+/* Badge para widgets que ignoram o filtro de período */
+.badge-period { font-size:11px; color:#b45309; background:#fef3c7; border:1px solid #fcd34d; padding:2px 4px; border-radius:4px; }
