@@ -118,7 +118,7 @@ def _resolve_group_name(client: GLPIClient, gid: Any, cache: Dict[int, str]) -> 
         return cache[i]
     try:
         g = client.get_item("Group", i)
-        name = g.get("name") or str(i)
+        name = g.get("completename") or g.get("name") or str(i)
         cache[i] = name
         return name
     except Exception:
@@ -134,7 +134,7 @@ def _resolve_category_name(client: GLPIClient, cid: Any, cache: Dict[int, str]) 
         return cache[i]
     try:
         c = client.get_item("ITILCategory", i)
-        name = c.get("name") or str(i)
+        name = c.get("completename") or c.get("name") or str(i)
         cache[i] = name
         return name
     except Exception:
@@ -573,12 +573,49 @@ def api_tickets():
                         pass
                 assigned_uid = t.get("users_id_assign") or r.get("assigned_user")
                 assigned_gid = t.get("groups_id_assign") or r.get("assigned_group")
-                cat_id = t.get("itilcategories_id") or r.get("category")
+                # Categoria: tentar primeiro aproveitar valor textual vindo do bulk (já expand_dropdowns)
+                raw_cat_val = r.get("category")
+                cat_name = ""
+                if raw_cat_val is not None:
+                    try:
+                        if isinstance(raw_cat_val, dict):
+                            cat_name_candidate = raw_cat_val.get("completename") or raw_cat_val.get("name") or ""
+                        else:
+                            cat_name_candidate = str(raw_cat_val)
+                        # Se contém letra (evita puro número) consideramos já descritivo
+                        if any(ch.isalpha() for ch in cat_name_candidate):
+                            cat_name = cat_name_candidate
+                    except Exception:
+                        pass
+                # Se ainda não temos nome, usar ID do ticket e resolver via API de categoria
+                cat_id = t.get("itilcategories_id") or (raw_cat_val if (isinstance(raw_cat_val, int) or (isinstance(raw_cat_val, str) and raw_cat_val.isdigit())) else None)
+                if not cat_name and cat_id:
+                    cat_name = _resolve_category_name(client, cat_id, cat_cache)
+                # Como último recurso, se veio algo mas segue só número, mantém vazio para não confundir
+                if cat_name.isdigit():
+                    # tenta novamente resolver (pode ter falhado antes) mas sem quebrar
+                    try:
+                        cat_name_res = _resolve_category_name(client, cat_name, cat_cache)
+                        if cat_name_res and not cat_name_res.isdigit():
+                            cat_name = cat_name_res
+                        else:
+                            cat_name = ""
+                    except Exception:
+                        cat_name = ""
 
                 requester_name = _resolve_user_name(client, req_id, user_cache) if req_id else ""
                 assigned_user_name = _resolve_user_name(client, assigned_uid, user_cache) if assigned_uid else ""
                 assigned_group_name = _resolve_group_name(client, assigned_gid, group_cache) if assigned_gid else ""
-                cat_name = _resolve_category_name(client, cat_id, cat_cache) if cat_id else ""
+                # Fallback enrichment: if requester empty but ticket has requesters in Ticket_User
+                if not requester_name:
+                    try:
+                        tus = client.get_subitems("Ticket", tid, "Ticket_User", params={"range": "0-49"})
+                        for tu in tus or []:
+                            if int(str(tu.get("type") or 0)) == 1:
+                                requester_name = _resolve_user_name(client, tu.get("users_id"), user_cache)
+                                break
+                    except Exception:
+                        pass
 
                 rows.append({
                     "id": tid,

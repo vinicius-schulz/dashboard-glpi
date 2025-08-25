@@ -92,6 +92,12 @@ footer { padding: 16px 20px; color: #475569; font-size: 12px; }
 table { border-collapse: collapse; width: 100%; font-size: 13px; }
 th, td { border-bottom: 1px solid #e5e7eb; padding: 6px 8px; text-align: left; vertical-align: top; }
 tbody tr:hover { background: #f8fafc; }
+/* Sortable / resizable table headers */
+th.sortable { position: relative; cursor: pointer; user-select: none; padding-right:14px; }
+th.sortable.sort-asc::after { content: '\25B2'; position:absolute; right:4px; font-size:10px; }
+th.sortable.sort-desc::after { content: '\25BC'; position:absolute; right:4px; font-size:10px; }
+th.sortable .col-resizer { position:absolute; top:0; right:0; width:6px; height:100%; cursor:col-resize; user-select:none; }
+th.sortable .col-resizer:hover { background: rgba(0,0,0,0.12); }
 
 /* Loader */
 .loader.hidden { display: none; }

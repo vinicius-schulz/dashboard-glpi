@@ -515,6 +515,111 @@ const modal = {
 };
 modal.init();
 
+// --- Dynamic modal table (sortable & resizable) ---
+const TicketTable = (() => {
+  const columns = [
+    { key: 'id', label: 'ID', numeric: true },
+    { key: 'titulo', label: 'Título' },
+    { key: 'status', label: 'Status' },
+    { key: 'categoria', label: 'Categoria' },
+    { key: 'abertura', label: 'Abertura', type: 'date' },
+    { key: 'ultima_atualizacao', label: 'Última atualização', type: 'date' },
+    { key: 'requerente', label: 'Requerente' },
+    { key: 'grupo_atribuido', label: 'Grupo atribuído' },
+    { key: 'tecnico_atribuido', label: 'Técnico atribuído' }
+  ];
+  let currentRows = [];
+  let sortState = { key: 'id', dir: 'asc' };
+  function buildHeader() {
+    const tr = document.getElementById('modal-head-row');
+    if (!tr) return;
+    tr.innerHTML = '';
+    columns.forEach(col => {
+      const th = document.createElement('th');
+      th.textContent = col.label;
+      th.dataset.key = col.key;
+      th.className = 'sortable';
+      // Sort click
+      th.addEventListener('click', () => {
+        if (sortState.key === col.key) {
+          sortState.dir = sortState.dir === 'asc' ? 'desc' : 'asc';
+        } else {
+          sortState.key = col.key; sortState.dir = 'asc';
+        }
+        renderBody();
+      });
+      // Resizer
+      const resizer = document.createElement('div');
+      resizer.className = 'col-resizer';
+      let startX, startW;
+      resizer.addEventListener('mousedown', e => {
+        e.preventDefault(); e.stopPropagation();
+        startX = e.clientX; startW = th.offsetWidth;
+        function move(ev){
+          const dx = ev.clientX - startX;
+          const newW = Math.max(50, startW + dx);
+          th.style.width = newW + 'px';
+        }
+        function up(){
+          document.removeEventListener('mousemove', move);
+          document.removeEventListener('mouseup', up);
+        }
+        document.addEventListener('mousemove', move);
+        document.addEventListener('mouseup', up);
+      });
+      th.appendChild(resizer);
+      tr.appendChild(th);
+    });
+  }
+  function compare(a, b) {
+    const { key, dir } = sortState;
+    let va = a[key], vb = b[key];
+    if (va == null) va = ''; if (vb == null) vb = '';
+    // Date parse
+    const col = columns.find(c => c.key === key);
+    if (col && col.type === 'date') {
+      const da = Date.parse(va) || 0; const db = Date.parse(vb) || 0;
+      return dir === 'asc' ? da - db : db - da;
+    }
+    if (col && col.numeric) {
+      const na = Number(va); const nb = Number(vb);
+      return dir === 'asc' ? na - nb : nb - na;
+    }
+    const sa = String(va).toLowerCase();
+    const sb = String(vb).toLowerCase();
+    if (sa < sb) return dir === 'asc' ? -1 : 1;
+    if (sa > sb) return dir === 'asc' ? 1 : -1;
+    return 0;
+  }
+  function renderBody() {
+    const tbody = document.getElementById('modal-rows');
+    if (!tbody) return;
+    const rows = currentRows.slice().sort(compare).map(r => {
+      return `<tr>
+        <td><a href="${buildGlpiLink(r.id)}" target="_blank" rel="noopener noreferrer">${escapeHtml(r.id)}</a></td>
+        <td>${escapeHtml(r.titulo)}</td>
+        <td>${escapeHtml(r.status)}</td>
+        <td>${escapeHtml(r.categoria)}</td>
+        <td>${escapeHtml(r.abertura)}</td>
+        <td>${escapeHtml(r.ultima_atualizacao || '')}</td>
+        <td>${escapeHtml(r.requerente)}</td>
+        <td>${escapeHtml(r.grupo_atribuido)}</td>
+        <td>${escapeHtml(r.tecnico_atribuido)}</td>
+      </tr>`;
+    }).join('');
+    tbody.innerHTML = rows || '<tr><td colspan="9">Nenhum chamado</td></tr>';
+    // Update sort indicators
+    document.querySelectorAll('#modal-head-row th').forEach(th => {
+      th.classList.remove('sort-asc','sort-desc');
+      if (th.dataset.key === sortState.key) th.classList.add(sortState.dir === 'asc' ? 'sort-asc' : 'sort-desc');
+    });
+  }
+  function setRows(data){ currentRows = data || []; renderBody(); }
+  function init(){ buildHeader(); }
+  return { init, setRows };
+})();
+window.addEventListener('DOMContentLoaded', () => TicketTable.init());
+
 function attachPointClick(canvasId, labels, sources) {
   const c = charts[canvasId];
   const canvas = document.getElementById(canvasId);
@@ -623,7 +728,7 @@ async function openTicketsModal(source, label) {
         <td>${escapeHtml(t.grupo_atribuido || '')}</td>
         <td>${escapeHtml(t.tecnico_atribuido || '')}</td>
       </tr>`).join('');
-    modal.rows.innerHTML = tBody || '<tr><td colspan="9">Nenhum chamado</td></tr>';
+  TicketTable.setRows(rows);
     Toasts.push('success', `Lista carregada (${rows.length})`);
   } catch (e) {
     modal.info.textContent = String(e);
