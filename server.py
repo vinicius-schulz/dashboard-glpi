@@ -5,7 +5,7 @@ Endpoints:
 - GET /            -> HTML page
 - GET /api/data    -> Returns computed metrics as JSON
 
-Env vars: GLPI_URL, GLPI_USER_TOKEN, MAX_TICKETS (optional)
+Env vars: GLPI_URL, GLPI_USER_TOKEN
 """
 from __future__ import annotations
 
@@ -36,7 +36,6 @@ from metrics import (
 load_dotenv()
 GLPI_URL = os.getenv("GLPI_URL", "").rstrip("/")
 GLPI_USER_TOKEN = os.getenv("GLPI_USER_TOKEN", "")
-DEFAULT_MAX_TICKETS = int(os.getenv("MAX_TICKETS", "800"))
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 
@@ -59,11 +58,11 @@ def _dict_to_labels_data(d: pd.Series | pd.DataFrame) -> Dict[str, Any]:
     return {"labels": [], "data": []}
 
 
-def _fetch_data(dini: pd.Timestamp, dfim: pd.Timestamp, max_tix: int, mode: str = "bulk") -> Tuple[pd.DataFrame, Dict[str, Any]]:
-    """Busca dados usando apenas o fluxo otimizado (bulk search por "Grupo observador").
+def _fetch_data(dini: pd.Timestamp, dfim: pd.Timestamp, mode: str = "bulk") -> Tuple[pd.DataFrame, Dict[str, Any]]:
+    """Busca dados usando o fluxo otimizado (bulk search por "Grupo observador").
 
-    Nota: o parâmetro `mode` é aceito por compatibilidade (ignoramos seu valor atualmente
-    e sempre usamos o fluxo otimizado "bulk").
+    Parâmetro `mode` mantido apenas para compatibilidade futura.
+    Não há mais limitação artificial de quantidade de tickets; o intervalo de datas define o volume.
     """
     if not GLPI_URL or not GLPI_USER_TOKEN:
         raise RuntimeError("GLPI_URL e GLPI_USER_TOKEN precisam estar definidos no .env")
@@ -79,7 +78,7 @@ def _fetch_data(dini: pd.Timestamp, dfim: pd.Timestamp, max_tix: int, mode: str 
             observer_group_ids=client.my_group_ids,
             dt_ini=pd.to_datetime(dini),
             dt_fim=pd.to_datetime(dfim),
-            max_tickets=max_tix if max_tix < 10**9 else None,
+            max_tickets=None,
         )
         if df is None or df.empty:
             return pd.DataFrame(), {"modo": "bulk", "groups": client.my_group_ids, "note": "Nenhum ticket retornado via campo 'Grupo observador'."}
@@ -169,7 +168,6 @@ def index():
         "index.html",
         default_start=start,
         default_end=end,
-        default_max=DEFAULT_MAX_TICKETS,
         ui_base=ui_base,
     )
 
@@ -224,7 +222,7 @@ def api_data():
         fetch_start = baseline_start if user_inside_baseline else user_start
         fetch_end = baseline_end if user_inside_baseline else user_end
 
-        df_full, meta = _fetch_data(fetch_start, fetch_end, 10**9, mode=mode)
+        df_full, meta = _fetch_data(fetch_start, fetch_end, mode=mode)
         if df_full is None or df_full.empty:
             empty = {"labels": [], "data": []}
             return jsonify({
@@ -245,7 +243,7 @@ def api_data():
                 "created_today": 0,
             })
 
-        # Subconjuntos
+        # Subconjuntos e janelas
         created_all = pd.to_datetime(df_full["created_at"], errors="coerce")
         solved_all = pd.to_datetime(df_full["solved_at"], errors="coerce")
         end_boundary = user_end + pd.Timedelta(days=1)
@@ -263,7 +261,7 @@ def api_data():
         df_extended.attrs.update(window_start=user_start, window_end=user_end)
         df_strict.attrs.update(window_start=user_start, window_end=user_end)
 
-        # Séries respeitam filtro
+        # Séries que respeitam filtro
         if df_strict.empty:
             created = pd.Series(dtype=float)
             resolved = pd.Series(dtype=float)
@@ -282,7 +280,7 @@ def api_data():
             resolution_hours_series = resolution_time_series(df_strict, freq=freq)
             resolution_hours_trend = backlog_trend_series(resolution_hours_series)
 
-        # Widgets baseline
+        # Widgets baseline / ignoram filtro
         bs_full = backlog_status(df_full)
         age_full = aging_buckets(df_full)
         sla = sla_solution(df_full)
@@ -377,13 +375,12 @@ def api_tickets():
         source = request.args.get("source", "")
         label = request.args.get("label", "")
         baseline_flag = request.args.get("baseline", "0") == "1"
-        max_tix = 10**9
 
         if not start_s or not end_s:
             today = pd.Timestamp.today().normalize()
             start_s = (today - pd.Timedelta(days=30)).date().isoformat()
             end_s = today.date().isoformat()
-        df, meta = _fetch_data(pd.Timestamp(start_s), pd.Timestamp(end_s), max_tix, mode=mode)
+        df, meta = _fetch_data(pd.Timestamp(start_s), pd.Timestamp(end_s), mode=mode)
         if df is None or df.empty:
             return jsonify({"meta": meta, "count": 0, "tickets": []})
 
