@@ -418,12 +418,31 @@ def api_tickets():
         source = request.args.get("source", "")
         label = request.args.get("label", "")
         baseline_flag = request.args.get("baseline", "0") == "1"
+        cat_filter = request.args.get("cat", "todos").lower()
 
         if not start_s or not end_s:
             today = pd.Timestamp.today().normalize()
             start_s = (today - pd.Timedelta(days=30)).date().isoformat()
             end_s = today.date().isoformat()
         df, meta = _fetch_data(pd.Timestamp(start_s), pd.Timestamp(end_s), mode=mode)
+        # Aplicar filtro de categoria igual ao /api/data
+        if df is not None and not df.empty and cat_filter not in ("todos", ""):
+            name_cols = [c for c in ["category_fullname", "category_name", "category_label"] if c in df.columns]
+            if name_cols:
+                col = name_cols[0]
+                s = df[col].astype(str).fillna("")
+            else:
+                if df["category"].dtype == object:
+                    s = df["category"].astype(str).fillna("")
+                else:
+                    s = None
+            if s is not None:
+                mask_h = s.str.startswith("Holding", na=False)
+                if cat_filter == "holding":
+                    df = df[mask_h].copy()
+                elif cat_filter == "unimed":
+                    df = df[~mask_h].copy()
+                meta["cat_filter"] = cat_filter
         if df is None or df.empty:
             return jsonify({"meta": meta, "count": 0, "tickets": []})
 
