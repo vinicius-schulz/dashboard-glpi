@@ -572,7 +572,9 @@ def api_tickets():
                     except Exception:
                         pass
                 assigned_uid = t.get("users_id_assign") or r.get("assigned_user")
-                assigned_gid = t.get("groups_id_assign") or r.get("assigned_group")
+                # Grupo técnico pode vir expandido como dict (completename/name) ou texto; tratar antes de resolver
+                raw_assigned_group = r.get("assigned_group")
+                assigned_gid = t.get("groups_id_assign") or (raw_assigned_group.get("id") if isinstance(raw_assigned_group, dict) else raw_assigned_group)
                 # Categoria: tentar primeiro aproveitar valor textual vindo do bulk (já expand_dropdowns)
                 raw_cat_val = r.get("category")
                 cat_name = ""
@@ -603,19 +605,25 @@ def api_tickets():
                     except Exception:
                         cat_name = ""
 
-                requester_name = _resolve_user_name(client, req_id, user_cache) if req_id else ""
-                assigned_user_name = _resolve_user_name(client, assigned_uid, user_cache) if assigned_uid else ""
-                assigned_group_name = _resolve_group_name(client, assigned_gid, group_cache) if assigned_gid else ""
+                # Removido: resolução de nomes de requerente e técnico (permissões retornam apenas ID)
+                requester_name = ""
+                assigned_user_name = ""
+                # Extrair nome textual direto se presente
+                assigned_group_name = ""
+                if raw_assigned_group is not None:
+                    if isinstance(raw_assigned_group, dict):
+                        assigned_group_name = raw_assigned_group.get("completename") or raw_assigned_group.get("name") or ""
+                    else:
+                        try:
+                            sgrp = str(raw_assigned_group)
+                            if any(ch.isalpha() for ch in sgrp):
+                                assigned_group_name = sgrp
+                        except Exception:
+                            pass
+                if not assigned_group_name and assigned_gid:
+                    assigned_group_name = _resolve_group_name(client, assigned_gid, group_cache)
                 # Fallback enrichment: if requester empty but ticket has requesters in Ticket_User
-                if not requester_name:
-                    try:
-                        tus = client.get_subitems("Ticket", tid, "Ticket_User", params={"range": "0-49"})
-                        for tu in tus or []:
-                            if int(str(tu.get("type") or 0)) == 1:
-                                requester_name = _resolve_user_name(client, tu.get("users_id"), user_cache)
-                                break
-                    except Exception:
-                        pass
+                # (Desativado porque não exibiremos estas colunas)
 
                 rows.append({
                     "id": tid,
@@ -624,9 +632,7 @@ def api_tickets():
                     "categoria": cat_name,
                     "abertura": created,
                     "ultima_atualizacao": updated,
-                    "requerente": requester_name,
                     "grupo_atribuido": assigned_group_name,
-                    "tecnico_atribuido": assigned_user_name,
                 })
         finally:
             client.kill_session()

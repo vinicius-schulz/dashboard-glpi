@@ -524,9 +524,7 @@ const TicketTable = (() => {
     { key: 'categoria', label: 'Categoria' },
     { key: 'abertura', label: 'Abertura', type: 'date' },
     { key: 'ultima_atualizacao', label: 'Última atualização', type: 'date' },
-    { key: 'requerente', label: 'Requerente' },
-    { key: 'grupo_atribuido', label: 'Grupo atribuído' },
-    { key: 'tecnico_atribuido', label: 'Técnico atribuído' }
+    { key: 'grupo_atribuido', label: 'Grupo atribuído' }
   ];
   let currentRows = [];
   let sortState = { key: 'id', dir: 'asc' };
@@ -602,12 +600,10 @@ const TicketTable = (() => {
         <td>${escapeHtml(r.categoria)}</td>
         <td>${escapeHtml(r.abertura)}</td>
         <td>${escapeHtml(r.ultima_atualizacao || '')}</td>
-        <td>${escapeHtml(r.requerente)}</td>
-        <td>${escapeHtml(r.grupo_atribuido)}</td>
-        <td>${escapeHtml(r.tecnico_atribuido)}</td>
+    <td>${escapeHtml(r.grupo_atribuido)}</td>
       </tr>`;
     }).join('');
-    tbody.innerHTML = rows || '<tr><td colspan="9">Nenhum chamado</td></tr>';
+  tbody.innerHTML = rows || '<tr><td colspan="7">Nenhum chamado</td></tr>';
     // Update sort indicators
     document.querySelectorAll('#modal-head-row th').forEach(th => {
       th.classList.remove('sort-asc','sort-desc');
@@ -715,19 +711,7 @@ async function openTicketsModal(source, label) {
     const js = await r.json();
     if (js.error) throw new Error(js.error);
     modal.info.textContent = `Total no filtro: ${js.count} • Mostrando: ${js.returned}`;
-    const rows = js.tickets || [];
-    const tBody = rows.map(t => `
-      <tr>
-        <td><a href="${buildGlpiLink(t.id)}" target="_blank" rel="noopener noreferrer">${t.id}</a></td>
-        <td>${escapeHtml(t.titulo)}</td>
-        <td>${escapeHtml(t.status || '')}</td>
-        <td>${escapeHtml(t.categoria || '')}</td>
-        <td>${escapeHtml(t.abertura || '')}</td>
-        <td>${escapeHtml(t.ultima_atualizacao || '')}</td>
-        <td>${escapeHtml(t.requerente || '')}</td>
-        <td>${escapeHtml(t.grupo_atribuido || '')}</td>
-        <td>${escapeHtml(t.tecnico_atribuido || '')}</td>
-      </tr>`).join('');
+  const rows = js.tickets || [];
   TicketTable.setRows(rows);
     Toasts.push('success', `Lista carregada (${rows.length})`);
   } catch (e) {
