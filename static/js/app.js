@@ -380,7 +380,7 @@ async function loadData() {
 
     const s = js.series || {};
     // Line charts
-    if (s.created && s.resolved && document.getElementById('chartCumGap')) {
+  if (s.created && s.resolved && s.created.data && s.resolved.data && s.created.data.length && s.resolved.data.length && document.getElementById('chartCumGap')) {
       const cumCreated = []; const cumResolved = []; const gap = [];
       let accC=0, accR=0;
       for (let i=0;i<s.created.data.length;i++) {
@@ -407,7 +407,7 @@ async function loadData() {
       attachPointClick('chartCumGap', s.created.labels, ['created','resolved']);
     }
     // Unified Backlog widget: combined canvas with toggle between raw backlog and smoothed trend
-    if (s.backlog || (s.backlog_trend && s.backlog_trend.labels && s.backlog_trend.labels.length)) {
+  if (s.backlog && s.backlog.data && s.backlog.data.length) {
       const labels = (s.backlog && s.backlog.labels && s.backlog.labels.length) ? s.backlog.labels : (s.backlog_trend.labels || []);
       const rawData = (s.backlog && s.backlog.data) ? s.backlog.data : [];
       const smoothData = (s.backlog_trend && s.backlog_trend.data) ? s.backlog_trend.data : [];
@@ -422,12 +422,12 @@ async function loadData() {
     }
 
     // Bar charts
-    if (s.backlog_status) { barChart('chartBacklogStatus', s.backlog_status.labels, s.backlog_status.data, 'Status'); attachBarClick('chartBacklogStatus', s.backlog_status.labels, 'backlog_status'); }
-    if (s.aging) { barChart('chartAging', s.aging.labels, s.aging.data, 'Aging'); attachBarClick('chartAging', s.aging.labels, 'aging'); }
-    if (s.category) { barChart('chartCat', s.category.labels, s.category.data, 'Categoria'); attachBarClick('chartCat', s.category.labels, 'category'); }
-    if (s.priority) { barChart('chartPr', s.priority.labels, s.priority.data, 'Prioridade'); attachBarClick('chartPr', s.priority.labels, 'priority'); }
-    if (s.impact) { barChart('chartImp', s.impact.labels, s.impact.data, 'Impacto'); attachBarClick('chartImp', s.impact.labels, 'impact'); }
-    if (s.resolution_hours && s.resolution_hours.labels && s.resolution_hours.labels.length) {
+  if (s.backlog_status && s.backlog_status.data && s.backlog_status.data.length) { barChart('chartBacklogStatus', s.backlog_status.labels, s.backlog_status.data, 'Status'); attachBarClick('chartBacklogStatus', s.backlog_status.labels, 'backlog_status'); } else if (charts['chartBacklogStatus']) { charts['chartBacklogStatus'].destroy(); }
+  if (s.aging && s.aging.data && s.aging.data.length) { barChart('chartAging', s.aging.labels, s.aging.data, 'Aging'); attachBarClick('chartAging', s.aging.labels, 'aging'); } else if (charts['chartAging']) { charts['chartAging'].destroy(); }
+  if (s.category && s.category.data && s.category.data.length) { barChart('chartCat', s.category.labels, s.category.data, 'Categoria'); attachBarClick('chartCat', s.category.labels, 'category'); } else if (charts['chartCat']) { charts['chartCat'].destroy(); }
+  if (s.priority && s.priority.data && s.priority.data.length) { barChart('chartPr', s.priority.labels, s.priority.data, 'Prioridade'); attachBarClick('chartPr', s.priority.labels, 'priority'); } else if (charts['chartPr']) { charts['chartPr'].destroy(); }
+  if (s.impact && s.impact.data && s.impact.data.length) { barChart('chartImp', s.impact.labels, s.impact.data, 'Impacto'); attachBarClick('chartImp', s.impact.labels, 'impact'); } else if (charts['chartImp']) { charts['chartImp'].destroy(); }
+  if (s.resolution_hours && s.resolution_hours.data && s.resolution_hours.data.length) {
       const labels = s.resolution_hours.labels;
       const meanData = s.resolution_hours.data;
       const smoothData = (s.resolution_hours_trend && s.resolution_hours_trend.data) ? s.resolution_hours_trend.data : [];

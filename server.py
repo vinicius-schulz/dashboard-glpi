@@ -218,39 +218,37 @@ def api_data():
         # Janela baseline (últimos 6 meses até hoje)
         today_norm = pd.Timestamp.today().normalize()
         baseline_start = (today_norm - pd.DateOffset(months=6)).normalize()
-        baseline_end = today_norm  # inclusive
-
-        # Determina se range usuário está totalmente contido na baseline
+        baseline_end = today_norm
         user_inside_baseline = (user_start >= baseline_start) and (user_end <= baseline_end)
 
-        # Janela efetiva de coleta (fetch)
         fetch_start = baseline_start if user_inside_baseline else user_start
         fetch_end = baseline_end if user_inside_baseline else user_end
 
-        max_tix = 10**9  # sem limite efetivo (controlado por MAX_TICKETS env internamente)
-        df_full, meta = _fetch_data(fetch_start, fetch_end, max_tix, mode=mode)
-
+        df_full, meta = _fetch_data(fetch_start, fetch_end, 10**9, mode=mode)
         if df_full is None or df_full.empty:
+            empty = {"labels": [], "data": []}
             return jsonify({
                 "meta": {
                     **meta,
                     "baseline_window": {"start": str(fetch_start.date()), "end": str(fetch_end.date()), "used": True},
-                    "ignore_period_widgets": [
-                        "aging", "backlog_status", "open_today", "created_today"
-                    ],
+                    "user_window": {"start": str(user_start.date()), "end": str(user_end.date())},
+                    "ignore_period_widgets": ["aging", "backlog_status", "open_today", "created_today"],
                     "aging_note": "Gráfico Aging mostra backlog atual ignorando filtro de data e inclui faixa >60d.",
                 },
                 "count": 0,
                 "note": meta.get("note", "Nenhum ticket encontrado"),
-                "series": {},
+                "series": {k: empty for k in [
+                    "created","resolved","backlog","backlog_trend","category","resolution_hours","resolution_hours_trend","backlog_status","aging","priority","impact","load_by_user","load_by_group"
+                ]},
+                "sla": {},
+                "open_today": 0,
+                "created_today": 0,
             })
 
-        # Construímos dois subconjuntos:
-        # 1) df_strict: tickets com created_at dentro do range do usuário (RESPEITAR filtro rigidamente)
-        # 2) df_extended: inclui df_strict + tickets criados antes mas ainda abertos ou resolvidos dentro da janela (para backlog correto)
+        # Subconjuntos
         created_all = pd.to_datetime(df_full["created_at"], errors="coerce")
         solved_all = pd.to_datetime(df_full["solved_at"], errors="coerce")
-        end_boundary = user_end + pd.Timedelta(days=1)  # meia‑aberta
+        end_boundary = user_end + pd.Timedelta(days=1)
         mask_strict = (created_all >= user_start) & (created_all < end_boundary)
         if user_inside_baseline:
             spans_window = (
@@ -260,29 +258,33 @@ def api_data():
             )
             df_extended = df_full[mask_strict | spans_window].copy()
         else:
-            # Fora da baseline: não precisamos de distinção, ambos iguais
             df_extended = df_full.copy()
         df_strict = df_full[mask_strict].copy()
+        df_extended.attrs.update(window_start=user_start, window_end=user_end)
+        df_strict.attrs.update(window_start=user_start, window_end=user_end)
 
-        # Para backlog e cálculo de backlog inicial usamos df_extended; para cumGap, category, resolutionHours, priority, impact usamos df_strict
-        df_extended.attrs["window_start"] = user_start
-        df_extended.attrs["window_end"] = user_end
-        df_strict.attrs["window_start"] = user_start
-        df_strict.attrs["window_end"] = user_end
+        # Séries respeitam filtro
+        if df_strict.empty:
+            created = pd.Series(dtype=float)
+            resolved = pd.Series(dtype=float)
+            _c_ext, _r_ext, backlog_ext = created_resolved(df_extended, freq=freq)
+            backlog_trend = backlog_trend_series(backlog_ext)
+            cat_filtered = pd.Series(dtype=float)
+            pr_filtered = pd.Series(dtype=float)
+            imp_filtered = pd.Series(dtype=float)
+            resolution_hours_series = pd.Series(dtype=float)
+            resolution_hours_trend = pd.Series(dtype=float)
+        else:
+            created, resolved, _discard = created_resolved(df_strict, freq=freq)
+            _c_ext, _r_ext, backlog_ext = created_resolved(df_extended, freq=freq)
+            backlog_trend = backlog_trend_series(backlog_ext)
+            cat_filtered, pr_filtered, imp_filtered = composition(df_strict)
+            resolution_hours_series = resolution_time_series(df_strict, freq=freq)
+            resolution_hours_trend = backlog_trend_series(resolution_hours_series)
 
-        # Séries que RESPEITAM o filtro (usar df_strict)
-        created, resolved, _discard = created_resolved(df_strict, freq=freq)
-        # Backlog correto (com tickets anteriores) usando df_extended
-        _c_ext, _r_ext, backlog_ext = created_resolved(df_extended, freq=freq)
-        backlog_trend = backlog_trend_series(backlog_ext)
-        cat_filtered, pr_filtered, imp_filtered = composition(df_strict)
-        resolution_hours_series = resolution_time_series(df_strict, freq=freq)
-        resolution_hours_trend = backlog_trend_series(resolution_hours_series)
-
-        # Séries que IGNORAM o filtro (usam df_full - baseline ou estendido)
+        # Widgets baseline
         bs_full = backlog_status(df_full)
         age_full = aging_buckets(df_full)
-
         sla = sla_solution(df_full)
         load = load_by_assignee(df_strict)
 
