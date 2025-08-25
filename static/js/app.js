@@ -368,7 +368,8 @@ async function loadData() {
       endNorm = end;
     }
 
-    const r = await fetch(`/api/data?gran=${encodeURIComponent(gran)}&start=${startNorm}&end=${endNorm}`);
+  const catSel = document.getElementById('catFilter').value;
+  const r = await fetch(`/api/data?gran=${encodeURIComponent(gran)}&start=${startNorm}&end=${endNorm}&cat=${encodeURIComponent(catSel)}`);
     if (!r.ok) {
       const txt = await r.text().catch(() => '');
       throw new Error(`HTTP ${r.status}: ${txt.slice(0,200)}`);
@@ -581,6 +582,7 @@ async function openTicketsModal(source, label) {
   const bend = needBaseline ? baselineWin.end : userEnd;
 
   // Enviar também userStart/userEnd para o backend poder restringir as séries que respeitam filtro
+  const catSel = document.getElementById('catFilter').value;
   const params = new URLSearchParams({
     gran,
     start: bstart,
@@ -589,7 +591,8 @@ async function openTicketsModal(source, label) {
     label,
     ustart: userStart,
     uend: userEnd,
-    baseline: needBaseline ? '1' : '0'
+    baseline: needBaseline ? '1' : '0',
+    cat: catSel
   });
 
   modal.title.textContent = `Chamados — ${source} · ${label}`;
