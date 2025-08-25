@@ -1,5 +1,100 @@
-# icalendar-vevent
 # GLPI Dashboards com Python
+Este projeto conecta-se ao GLPI via API REST para consultar chamados atribuídos ao(s) grupo(s) de um usuário e gerar dashboards/indicadores.
+
+## Pré-requisitos
+
+- Python 3.10+ (para execução local) ou Docker (para execução em contêiner)
+- Acesso ao GLPI com um **User Token** válido
+- Permissões de leitura de chamados no GLPI
+
+## Variáveis de ambiente (.env)
+
+Crie um arquivo `.env` na raiz do projeto com ao menos estas variáveis:
+
+```text
+GLPI_URL=https://sua-instancia-glpi/apirest.php
+GLPI_USER_TOKEN=seu_user_token_aqui
+# opcional
+PORT=8000
+MAX_TICKETS=800
+```
+
+Observações:
+- `GLPI_URL` normalmente termina com `/apirest.php`.
+- O arquivo `.env` está no `.dockerignore` por segurança e **não** é copiado para a imagem.
+
+## Executar localmente (Python)
+
+1. Criar e ativar um ambiente virtual (opcional):
+
+```bash
+python -m venv venv
+# Linux / macOS
+source venv/bin/activate
+# Windows PowerShell
+venv\Scripts\Activate.ps1
+```
+
+2. Instalar dependências e iniciar o servidor:
+
+```bash
+pip install -r requirements.txt
+python server.py
+```
+
+3. Acesse: http://localhost:8000 (usa `PORT` do `.env` ou 8000 por padrão)
+
+## Executar com Docker (pull + run)
+
+Se a imagem já estiver publicada no Docker Hub, puxe e execute usando `--env-file` para injetar variáveis no tempo de execução:
+
+### PowerShell
+
+```powershell
+# Puxar imagem
+docker pull SEU_USUARIO/dashboard-glpi:latest
+
+# Rodar com .env mapeado (porta 8000 por padrão)
+docker run --rm -p 8000:8000 --env-file .env SEU_USUARIO/dashboard-glpi:latest
+```
+
+### Bash / WSL / Linux
+
+```bash
+# Pull
+docker pull SEU_USUARIO/dashboard-glpi:latest
+# Run
+docker run --rm -p 8000:8000 --env-file .env SEU_USUARIO/dashboard-glpi:latest
+```
+
+Dicas:
+- Use `-e VAR=value` para sobrescrever variáveis individualmente.
+- Use tags imutáveis (ex: `SEU_USUARIO/dashboard-glpi:2025.08.25-abc`) em vez de `:latest` para rastreabilidade.
+
+## Build e push (opcional)
+
+O repositório inclui `build_push.sh` para automatizar build/push no Docker Hub.
+
+Exemplos:
+
+```bash
+./build_push.sh -u SEU_USUARIO -v 1.0.0           # build + push
+./build_push.sh -u SEU_USUARIO -p linux/amd64,linux/arm64 -v 2025.08.25  # multi-arch
+./build_push.sh -u SEU_USUARIO --no-push         # apenas build local
+```
+
+Comandos manuais:
+
+```bash
+docker build -t SEU_USUARIO/dashboard-glpi:1.0.0 .
+docker push SEU_USUARIO/dashboard-glpi:1.0.0
+```
+
+## Notas
+
+- O `.env` não é copiado para a imagem (veja `.dockerignore`). Passe credenciais em runtime com `--env-file` ou `-e`.
+- Para desenvolvimento, rode localmente com Python; use Docker para implantação/produção.
+- Posso adicionar um `docker-compose.yml` se quiser orquestrar o serviço com variáveis e volumes.
 
 Este projeto conecta-se ao GLPI via API REST para consultar chamados atribuídos ao(s) grupo(s) de um usuário e gerar dashboards/indicadores.
 
