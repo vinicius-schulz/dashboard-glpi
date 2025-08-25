@@ -333,6 +333,7 @@ function setMeta(meta, count, period) {
 }
 
 let loading = false;
+let lastMeta = null; // guarda metadados da última chamada /api/data
 async function loadData() {
   if (loading) return; // prevent concurrent renders
   loading = true;
@@ -364,7 +365,8 @@ async function loadData() {
     const js = await r.json();
     if (js.error) throw new Error(js.error);
 
-    setMeta(js.meta || {}, js.count || 0, js.period || {});
+  setMeta(js.meta || {}, js.count || 0, js.period || {});
+  lastMeta = js.meta || null;
 
     // Big number snapshot (ignora filtro): campo open_today
     if (typeof js.open_today === 'number') {
@@ -514,8 +516,10 @@ function attachPointClick(canvasId, labels, sources) {
       const idx = points[0].index;
       const label = labels[idx];
       // prefer source based on dataset index if provided
-      const dsIndex = points[0].datasetIndex || 0;
-      const source = sources[Math.min(dsIndex, sources.length - 1)];
+  const dsIndex = points[0].datasetIndex || 0;
+  // Se clicar em dataset além dos mapeados (ex: linha Gap cumulativo), ignora
+  if (dsIndex >= sources.length) return;
+  const source = sources[dsIndex];
       await openTicketsModal(source, label);
     } catch (err) {
       console.error('attachPointClick error', err);
@@ -544,9 +548,39 @@ function attachBarClick(canvasId, labels, source) {
 
 async function openTicketsModal(source, label) {
   const gran = document.getElementById('gran').value;
-  const start = document.getElementById('start').value;
-  const end = document.getElementById('end').value;
-  // no max param anymore
+  let userStart, userEnd;
+  if (gran === 'Mensal') {
+    // Recalcula como em loadData
+    const sm = document.getElementById('startMonth').value; // YYYY-MM
+    const em = document.getElementById('endMonth').value;   // YYYY-MM
+    userStart = sm + '-01';
+    const [ey, emon] = em.split('-').map(Number);
+    const lastDay = new Date(ey, emon, 0); // ultimo dia mês final
+    userEnd = lastDay.toISOString().slice(0,10);
+  } else {
+    userStart = document.getElementById('start').value;
+    userEnd = document.getElementById('end').value;
+  }
+
+  // Decidir se precisamos da janela baseline ampliada na consulta de tickets
+  const ignoreList = (lastMeta && lastMeta.ignore_period_widgets) || [];
+  const baselineWin = lastMeta && lastMeta.baseline_window && lastMeta.baseline_window.used ? lastMeta.baseline_window : null;
+  const needBaseline = !!(baselineWin && (ignoreList.includes(source) || source === 'backlog'));
+  const bstart = needBaseline ? baselineWin.start : userStart;
+  const bend = needBaseline ? baselineWin.end : userEnd;
+
+  // Enviar também userStart/userEnd para o backend poder restringir as séries que respeitam filtro
+  const params = new URLSearchParams({
+    gran,
+    start: bstart,
+    end: bend,
+    source,
+    label,
+    ustart: userStart,
+    uend: userEnd,
+    baseline: needBaseline ? '1' : '0'
+  });
+
   modal.title.textContent = `Chamados — ${source} · ${label}`;
   modal.info.textContent = 'Carregando...';
   modal.rows.innerHTML = '';
@@ -554,7 +588,7 @@ async function openTicketsModal(source, label) {
   Loader.show('Carregando chamados...');
   document.body.style.cursor = 'progress';
   try {
-  const r = await fetch(`/api/tickets?gran=${encodeURIComponent(gran)}&start=${start}&end=${end}&source=${encodeURIComponent(source)}&label=${encodeURIComponent(label)}`);
+  const r = await fetch(`/api/tickets?${params.toString()}`);
     if (!r.ok) {
       const txt = await r.text().catch(() => '');
       throw new Error(`HTTP ${r.status}: ${txt.slice(0,200)}`);

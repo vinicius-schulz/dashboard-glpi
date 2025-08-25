@@ -359,19 +359,23 @@ def api_tickets():
     """Return ticket list for a clicked chart point/bar.
 
     Query params:
-    - start, end, gran, max: same window as main view
-    - source: created|resolved|backlog|backlog_status|aging|category|priority|impact|load_by_user|load_by_group
-    - label: label or id clicked (string)
+    - start, end: janela efetiva usada para coleta (baseline ou user)
+    - ustart, uend: janela original solicitada pelo usuário (para filtrar séries que respeitam filtro)
+    - source: created|resolved|backlog|backlog_status|aging|category|priority|impact|load_by_user|load_by_group|open_today|created_today
+    - label: label ou id clicado
+    - baseline=1 indica que start/end representam a janela baseline de 6 meses
     """
     try:
         gran = request.args.get("gran", "Diário")
         mode = request.args.get("mode", "bulk").lower()
         start_s = request.args.get("start")
         end_s = request.args.get("end")
-        max_tix = 10**9
+        user_start_s = request.args.get("ustart") or start_s
+        user_end_s = request.args.get("uend") or end_s
         source = request.args.get("source", "")
         label = request.args.get("label", "")
-        now = pd.Timestamp.now()
+        baseline_flag = request.args.get("baseline", "0") == "1"
+        max_tix = 10**9
 
         if not start_s or not end_s:
             today = pd.Timestamp.today().normalize()
@@ -381,80 +385,100 @@ def api_tickets():
         if df is None or df.empty:
             return jsonify({"meta": meta, "count": 0, "tickets": []})
 
-        # Apply selection filter
+        # Converter campos de data
+        df_created = pd.to_datetime(df["created_at"], errors="coerce")
+        df_solved = pd.to_datetime(df["solved_at"], errors="coerce")
+        user_start = pd.Timestamp(user_start_s).normalize()
+        user_end = pd.Timestamp(user_end_s).normalize()
+        end_boundary = user_end + pd.Timedelta(days=1)
+
+        # Determinar subset que respeita filtro (created dentro da janela do usuário)
+        mask_strict = (df_created >= user_start) & (df_created < end_boundary)
+        df_strict = df[mask_strict].copy()
+
+        # Para backlog precisamos incluir tickets criados antes mas abertos ou resolvidos dentro
+        spans_window = (
+            (df_created < user_start) & ((df_solved.isna()) | (df_solved >= user_start))
+        ) | (
+            (df_solved.notna()) & (df_solved >= user_start) & (df_solved < end_boundary)
+        )
+        df_extended = df[mask_strict | spans_window].copy()
+
+        now = pd.Timestamp.now()
+
+        # Seleção baseada na fonte
         sel = pd.DataFrame()
-        if source in ("created", "resolved", "backlog"):
+        if source in ("created", "resolved"):
+            # label => período
             ps, pe = _period_bounds_from_label(label, gran)
             if source == "created":
-                sel = df[
-                    (pd.to_datetime(df["created_at"]) >= ps) & (pd.to_datetime(df["created_at"]) <= pe)
-                ]
-            elif source == "resolved":
-                sel = df[
-                    (df["solved_at"].notna()) & (pd.to_datetime(df["solved_at"]) >= ps) & (pd.to_datetime(df["solved_at"]) <= pe)
-                ]
-            else:  # backlog at period end
-                sel = df[
-                    (pd.to_datetime(df["created_at"]) <= pe)
-                    & (
-                        (df["solved_at"].isna())
-                        | (pd.to_datetime(df["solved_at"]) > pe)
-                    )
-                ]
+                base = df_strict  # created respeita filtro
+                created_dt = pd.to_datetime(base["created_at"], errors="coerce")
+                sel = base[(created_dt >= ps) & (created_dt <= pe)]
+            else:  # resolved
+                base = df_strict
+                solved_dt = pd.to_datetime(base["solved_at"], errors="coerce")
+                sel = base[(solved_dt.notna()) & (solved_dt >= ps) & (solved_dt <= pe)]
+        elif source == "backlog":
+            ps, pe = _period_bounds_from_label(label, gran)
+            base = df_extended  # backlog precisa considerar anteriores
+            created_dt = pd.to_datetime(base["created_at"], errors="coerce")
+            solved_dt = pd.to_datetime(base["solved_at"], errors="coerce")
+            sel = base[(created_dt <= pe) & ((solved_dt.isna()) | (solved_dt > pe))]
         elif source == "backlog_status":
-                # Backlog = não resolvidos. Accept either numeric id or status name.
-                st = None
-                try:
-                    st = int(float(label))
-                except Exception:
-                    # try reverse mapping from name to id
-                    inv = {v.lower(): k for k, v in STATUS_MAP.items()}
-                    st = inv.get(str(label).lower())
-                open_mask = df["solved_at"].isna()
-                sel = df[open_mask & ((df["status"] == st) if st is not None else False)]
+            st = None
+            try:
+                st = int(float(label))
+            except Exception:
+                inv = {v.lower(): k for k, v in STATUS_MAP.items()}
+                st = inv.get(str(label).lower())
+            base = df if baseline_flag else df_strict
+            open_mask = base["solved_at"].isna()
+            sel = base[open_mask & ((base["status"] == st) if st is not None else False)]
         elif source == "aging":
-            ages = (now - pd.to_datetime(df["created_at"])) .dt.total_seconds() / 86400.0
+            base = df if baseline_flag else df_strict
+            ages = (now - pd.to_datetime(base["created_at"], errors="coerce")) .dt.total_seconds() / 86400.0
             bins = [-1, 2, 7, 14, 30, 60, 999999]
             labels = ["0–2d", "3–7d", "8–14d", "15–30d", "31–60d", ">60d"]
             cats = pd.cut(ages, bins=bins, labels=labels)
-            # Apenas tickets ainda não resolvidos
-            sel = df[(df["solved_at"].isna()) & (cats.astype(str) == label)]
+            sel = base[(base["solved_at"].isna()) & (cats.astype(str) == label)]
         elif source == "open_today":
-            # Todos abertos agora (ignorando label)
-            sel = df[df["solved_at"].isna()]
+            base = df
+            sel = base[base["solved_at"].isna()]
         elif source == "created_today":
+            base = df
             today_norm = pd.Timestamp.today().normalize()
-            created_dt = pd.to_datetime(df["created_at"], errors="coerce")
-            sel = df[(created_dt >= today_norm) & (created_dt < today_norm + pd.Timedelta(days=1))]
+            created_dt = pd.to_datetime(base["created_at"], errors="coerce")
+            sel = base[(created_dt >= today_norm) & (created_dt < today_norm + pd.Timedelta(days=1))]
         elif source in ("category", "priority", "impact"):
+            base = df_strict  # respeitam filtro agora
             col = {"category": "category", "priority": "priority", "impact": "impact"}[source]
-            # For priority/impact the series sent to UI use names; accept either name or id
             if source in ("priority", "impact"):
-                # try numeric
                 try:
                     v = int(float(label))
-                    sel = df[df[col] == v]
+                    sel = base[base[col] == v]
                 except Exception:
                     inv = {v.lower(): k for k, v in LEVEL_MAP.items()}
                     mapped = inv.get(str(label).lower())
                     if mapped is None:
-                        sel = df[df[col].astype(str) == str(label)]
+                        sel = base[base[col].astype(str) == str(label)]
                     else:
-                        sel = df[df[col] == mapped]
+                        sel = base[base[col] == mapped]
             else:
-                sel = df[df[col].astype(str) == str(label)]
+                sel = base[base[col].astype(str) == str(label)]
         elif source in ("load_by_user", "load_by_group"):
+            base = df_strict
             col = "assigned_user" if source == "load_by_user" else "assigned_group"
             try:
                 v = int(float(label))
             except Exception:
                 v = None
             if v is None:
-                sel = df[df[col].isna()]
+                sel = base[base[col].isna()]
             else:
-                sel = df[df[col] == v]
+                sel = base[base[col] == v]
         else:
-            sel = df
+            sel = df_strict
 
         # Build detailed rows with names
         client = GLPIClient(GLPI_URL, GLPI_USER_TOKEN)
@@ -514,6 +538,11 @@ def api_tickets():
             "count": len(sel),
             "returned": len(rows),
             "tickets": rows,
+            "source": source,
+            "label": label,
+            "baseline": baseline_flag,
+            "user_window": {"start": user_start_s, "end": user_end_s},
+            "fetch_window": {"start": start_s, "end": end_s},
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
