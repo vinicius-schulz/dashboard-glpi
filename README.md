@@ -52,24 +52,24 @@ Se a imagem já estiver publicada no Docker Hub, puxe e execute usando `--env-fi
 
 ```powershell
 # Puxar imagem
-docker pull SEU_USUARIO/dashboard-glpi:latest
+docker pull viniciusschulz/dashboard-glpi:latest
 
 # Rodar com .env mapeado (porta 8000 por padrão)
-docker run --rm -p 8000:8000 --env-file .env SEU_USUARIO/dashboard-glpi:latest
+docker run --rm -p 8000:8000 --env-file .env viniciusschulz/dashboard-glpi:latest
 ```
 
 ### Bash / WSL / Linux
 
 ```bash
 # Pull
-docker pull SEU_USUARIO/dashboard-glpi:latest
+docker pull viniciusschulz/dashboard-glpi:latest
 # Run
-docker run --rm -p 8000:8000 --env-file .env SEU_USUARIO/dashboard-glpi:latest
+docker run --rm -p 8000:8000 --env-file .env viniciusschulz/dashboard-glpi:latest
 ```
 
 Dicas:
 - Use `-e VAR=value` para sobrescrever variáveis individualmente.
-- Use tags imutáveis (ex: `SEU_USUARIO/dashboard-glpi:2025.08.25-abc`) em vez de `:latest` para rastreabilidade.
+- Use tags imutáveis (ex: `viniciusschulz/dashboard-glpi:2025.08.25-abc`) em vez de `:latest` para rastreabilidade.
 
 ## Build e push (opcional)
 
