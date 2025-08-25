@@ -215,11 +215,15 @@ def business_hours_between(start: pd.Timestamp, end: pd.Timestamp, start_hour: i
 
 @timed
 def resolution_time_series(df: pd.DataFrame, freq: str = "D", work_start: int = 9, work_end: int = 18) -> pd.Series:
-    """Calcula série (média horas úteis) por data de criação.
+    """Calcula série (média horas úteis) por data de RESOLUÇÃO.
 
-    - x-axis: data de criação (resample por `freq`)
-    - y-axis: média do tempo entre created_at e solved_at/closed_at em horas úteis
-    - usa business_hours_between para contabilizar apenas dias/horas úteis
+    Alteração: antes a média era agrupada pela data de criação; agora agrupa pela
+    data em que o ticket foi efetivamente resolvido (solved_at ou closed_at como
+    fallback) para refletir a evolução do tempo médio de resolução ao longo do tempo.
+
+    - Eixo X: data de resolução (resample por `freq`).
+    - Eixo Y: média das horas úteis entre created_at e resolved_at.
+    - Usa business_hours_between para contar apenas horas úteis.
     """
     if df is None or df.empty:
         return pd.Series(dtype=float)
@@ -227,27 +231,23 @@ def resolution_time_series(df: pd.DataFrame, freq: str = "D", work_start: int = 
     created = pd.to_datetime(df.get("created_at"), errors="coerce")
     solved = pd.to_datetime(df.get("solved_at"), errors="coerce")
     closed = pd.to_datetime(df.get("closed_at"), errors="coerce")
-
-    # prefer solved then closed
     resolved = solved.fillna(closed)
 
-    # keep only rows with resolved time
     mask = resolved.notna() & created.notna()
     if not mask.any():
         return pd.Series(dtype=float)
 
-    sub = pd.DataFrame({"created_at": created[mask], "resolved_at": resolved[mask]})
+    sub = pd.DataFrame({
+        "created_at": created[mask],
+        "resolved_at": resolved[mask],
+    })
 
-    # compute lead hours per row
     def compute_row(r):
         return business_hours_between(r["created_at"], r["resolved_at"], start_hour=work_start, end_hour=work_end)
 
     sub["lead_hours"] = sub.apply(compute_row, axis=1)
 
-    # group by created_at resampled index
-    sub.index = pd.to_datetime(sub["created_at"])
-    # aggregate: mean of lead_hours per bin
-    grouped = sub["lead_hours"].groupby(pd.Grouper(freq=freq)).mean()
-    # drop bins without any resolved tickets (NaN)
-    grouped = grouped.dropna()
+    # Agrupar pela data de resolução
+    sub.index = pd.to_datetime(sub["resolved_at"]).dt.normalize()
+    grouped = sub["lead_hours"].groupby(pd.Grouper(freq=freq)).mean().dropna()
     return grouped.rename("resolution_hours")
