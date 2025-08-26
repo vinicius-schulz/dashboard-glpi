@@ -362,6 +362,7 @@ function setMeta(meta, count, period) {
 
 let loading = false;
 let lastMeta = null; // guarda metadados da última chamada /api/data
+let lastSeries = null; // guarda as últimas séries retornadas (/api/data)
 async function loadData() {
   if (loading) return; // prevent concurrent renders
   loading = true;
@@ -407,7 +408,8 @@ async function loadData() {
       if (el2) el2.textContent = js.created_today.toLocaleString('pt-BR');
     }
 
-    const s = js.series || {};
+  const s = js.series || {};
+  lastSeries = s;
     // Line charts
   if (s.created && s.resolved && s.created.data && s.resolved.data && s.created.data.length && s.resolved.data.length && document.getElementById('chartCumGap')) {
       const cumCreated = []; const cumResolved = []; const gap = [];
@@ -482,6 +484,113 @@ async function loadData() {
 
 document.getElementById('apply').addEventListener('click', () => loadData());
 window.addEventListener('DOMContentLoaded', () => loadData());
+
+// --- Export / Print dashboard ---
+async function exportDashboard() {
+  // Gather metadata and visible widgets
+  const meta = document.getElementById('meta')?.textContent || '';
+  const title = document.querySelector('header h1')?.textContent || 'Dashboard';
+  const cards = Array.from(document.querySelectorAll('.card[data-widget]')).filter(c => c.style.display !== 'none');
+
+  const parts = [];
+  parts.push(`<h1 style="font-family:Inter,system-ui,Arial,sans-serif;color:#0f172a;font-size:22px;margin:8px 0">${escapeHtml(title)}</h1>`);
+  parts.push(`<div style="color:#475569;margin-bottom:8px;font-size:13px">${escapeHtml(meta)}</div>`);
+
+  for (const card of cards) {
+    const widgetId = card.getAttribute('data-widget') || '';
+    const heading = (card.querySelector('h2')?.innerText || widgetId).trim();
+    // find canvas inside
+    const cv = card.querySelector('canvas');
+    let imgHtml = '';
+    if (cv && charts[cv.id]) {
+      try {
+        const dataUrl = charts[cv.id].toBase64Image();
+        imgHtml = `<img src="${dataUrl}" style="max-width:100%;height:auto;border:1px solid #e5e7eb;border-radius:6px;" />`;
+      } catch (e) {
+        // fallback: try canvas.toDataURL
+        try { imgHtml = `<img src="${cv.toDataURL()}" style="max-width:100%;height:auto;border:1px solid #e5e7eb;border-radius:6px;" />`; } catch(e2) { imgHtml = '<div style="color:#a00">(Imagem indisponível)</div>'; }
+      }
+  } else {
+      // maybe big-number or non-canvas widget
+      const big = card.querySelector('.big-number');
+      if (big) imgHtml = `<div style="font-size:28px;font-weight:700;color:#0f172a;margin:8px 0">${escapeHtml(big.textContent)}</div>`;
+      else imgHtml = '<div style="color:#64748b">(Sem visualização)</div>';
+    }
+  // help text from the DOM button title or dataset
+  const helpBtn = card.querySelector('button.help');
+  const helpText = helpBtn ? helpBtn.getAttribute('title') : (charts[cv?.id]?.data?.datasets?.[0]?.help || '');
+  // generate an automated insight where possible
+  const insight = generateInsight(widgetId, lastSeries, lastMeta);
+
+  parts.push(`<section style="margin-bottom:22px;page-break-inside:avoid"><h2 style="font-size:18px;color:#0f172a;margin:0 0 8px">${escapeHtml(heading)}</h2><div style="color:#475569;margin-bottom:8px;font-size:13px">${escapeHtml(helpText || '')}</div>${imgHtml}<div style="margin-top:8px;padding:10px;border-left:3px solid #e2e8f0;background:#fbfdff;border-radius:6px"><strong>Interpretação:</strong><p style="margin:6px 0;color:#0f172a">${escapeHtml(insight || 'Nenhuma observação automática disponível.')}</p></div></section>`);
+  }
+
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>body{font-family:Inter,system-ui,Arial,sans-serif;padding:18px;color:#0f172a} h1{margin:0 0 6px} h2{margin:8px 0}</style></head><body>${parts.join('\n')}<script>window.onload=function(){ setTimeout(()=>{window.print();},200); };</script></body></html>`;
+
+  const w = window.open('', '_blank');
+  if (!w) { Toasts.push('error', 'Não foi possível abrir nova janela — verifique bloqueador de pop-ups.'); return; }
+  w.document.open(); w.document.write(html); w.document.close();
+}
+
+document.getElementById('exportBtn').addEventListener('click', exportDashboard);
+
+function generateInsight(widgetId, series, meta) {
+  try {
+    if (!series) return '';
+    switch (widgetId) {
+      case 'cumGap': {
+        const created = series.created?.data || [];
+        const resolved = series.resolved?.data || [];
+        const lastCreated = Number(created[created.length-1]||0);
+        const lastResolved = Number(resolved[resolved.length-1]||0);
+        const trend = (created.length>=2 && (created[created.length-1] - created[0]) > (resolved[resolved.length-1] - (resolved[0]||0))) ? 'O volume de criação cresceu mais que o de resoluções, indicando pressão de backlog.' : 'Criações e resoluções acompanham-se de forma semelhante.';
+        return `${trend} No período apurado (${meta?.period?.start||''} a ${meta?.period?.end||''}), foram criados ${created.reduce((a,b)=>a+Number(b||0),0)} chamados e resolvidos ${resolved.reduce((a,b)=>a+Number(b||0),0)}.`;
+      }
+      case 'backlog': {
+        const backlog = series.backlog?.data || [];
+        const last = Number(backlog[backlog.length-1]||0);
+        return `Backlog atual estimado em ${last.toLocaleString('pt-BR')} chamados. Verifique tendência nas últimas semanas para priorizar ações.`;
+      }
+      case 'backlogStatus': {
+        const labels = series.backlog_status?.labels || [];
+        const data = series.backlog_status?.data || [];
+        const maxIdx = data.reduce((ix, v, i, arr) => v>arr[ix]?i:ix, 0);
+        return `Status predominante: ${labels[maxIdx] || 'N/A'} com ${Number(data[maxIdx]||0).toLocaleString('pt-BR')} chamados. Esta visão é um snapshot atual.`;
+      }
+      case 'aging': {
+        const labels = series.aging?.labels || [];
+        const data = series.aging?.data || [];
+        if (!data.length) return '';
+        const maxIdx = data.reduce((ix, v, i, arr) => v>arr[ix]?i:ix, 0);
+        return `Faixa com maior concentração de tickets: ${labels[maxIdx] || 'N/A'} (${Number(data[maxIdx]||0).toLocaleString('pt-BR')}). Focar em reduzir tickets nas faixas mais antigas.`;
+      }
+      case 'resolutionHours': {
+        const d = series.resolution_hours?.data || [];
+        if (!d.length) return '';
+        const avg = (d.reduce((a,b)=>a+Number(b||0),0) / d.length).toFixed(1);
+        return `Tempo médio de resolução (amostra): ${avg} horas úteis. Compare com o SLA alvo para avaliar desempenho.`;
+      }
+      case 'category': {
+        const labels = series.category?.labels || []; const data = series.category?.data || [];
+        if (!data.length) return '';
+        const maxIdx = data.reduce((ix, v, i, arr) => v>arr[ix]?i:ix, 0);
+        return `Categoria com maior volume: ${labels[maxIdx] || 'N/A'} — ${Number(data[maxIdx]||0).toLocaleString('pt-BR')} chamados no período.`;
+      }
+      case 'priority': {
+        const labels = series.priority?.labels || []; const data = series.priority?.data || [];
+        return `Distribuição por prioridade apresentada; analise picos em prioridades altas para alocar recursos.`;
+      }
+      case 'impact': {
+        return `Distribuição por impacto apresentada; priorize correções com maior impacto operacional.`;
+      }
+      case 'load_by_user':
+      case 'load_by_group': {
+        return `Carga por ${widgetId==='load_by_user'?'usuário':'grupo'} mostrada; identifique responsáveis com maior volume para balanceamento.`;
+      }
+      default: return '';
+    }
+  } catch (e) { return ''; }
+}
 
 // --- Help popover for small ❔ buttons ---
 function createHelpPopover(text) {
