@@ -107,7 +107,49 @@ const WidgetLayout = (() => {
       el.style.top = (w.y * SNAP_H) + 'px';
     });
     const maxBottom = layout.filter(w=>w.visible!==false).reduce((m,w)=> Math.max(m, (w.y + w.rows) * SNAP_H), 0);
+    // Calcula a largura máxima usada (extremo direito dos cards visíveis)
+    const maxRight = layout.filter(w=>w.visible!==false).reduce((m,w)=> Math.max(m, (w.x + w.cols) * SNAP_W), 0);
     grid.style.height = (maxBottom + 40) + 'px';
+    // Define explicitamente a largura do grid para garantir que o scrollWidth reflita o conteúdo usado
+    grid.style.width = (maxRight + 40) + 'px';
+
+    // Ajusta largura do header e barra de filtros para cobrir toda a área utilizada quando houver overflow horizontal
+    function adjustChromeWidths() {
+      const header = document.querySelector('header');
+      const controls = document.querySelector('.controls');
+      const fullWidth = maxRight + 40; // mesma margem usada acima
+      const needExpand = fullWidth > window.innerWidth + 1; // tolerância
+      [header, controls].forEach(el => {
+        if (!el) return;
+        if (needExpand) {
+          el.style.width = fullWidth + 'px';
+        } else {
+          el.style.width = '';
+        }
+      });
+    }
+    adjustChromeWidths();
+    // Recalcula em resize para retornar ao estado original se o usuário ampliar a janela
+    if (!window._glpiChromeResizeBound) {
+      window.addEventListener('resize', () => {
+        // Em resize só precisamos comparar com a largura atual do grid
+        const gridEl = document.querySelector('.grid');
+        if (!gridEl) return;
+        const gWidth = gridEl.scrollWidth; // largura efetiva usada
+        const header = document.querySelector('header');
+        const controls = document.querySelector('.controls');
+        const needExpand = gWidth > window.innerWidth + 1;
+        [header, controls].forEach(el => {
+          if (!el) return;
+          if (needExpand) {
+            el.style.width = gWidth + 'px';
+          } else {
+            el.style.width = '';
+          }
+        });
+      });
+      window._glpiChromeResizeBound = true;
+    }
     attachWidgetActions(layout);
   }
   function attachWidgetActions(layout) {

@@ -10,7 +10,6 @@
 <body data-ui-base="{{ ui_base }}">
   <header>
     <h1>Tickets GLPI • Observador = Meus grupos</h1>
-    <a href="/logout" class="logout-btn" title="Sair do dashboard">Sair</a>
   </header>
 
   <section class="controls">
@@ -127,6 +126,10 @@
       <button id="lpClose" type="button" title="Fechar">×</button>
     </div>
     <div class="lp-body">
+      <div class="logout-block">
+        <div><strong>Encerrar sessão</strong><br><span style="font-size:12px;color:#6b7280">Use esta opção para sair do dashboard com segurança.</span></div>
+        <a href="/logout" class="logout-link-modal" title="Sair do dashboard">Sair</a>
+      </div>
       <p>Arraste os cards diretamente na área principal para reordenar. Ajuste visibilidade e tamanho abaixo. As preferências ficam salvas neste navegador.</p>
       <div class="lp-config" style="margin-bottom:12px;">
         <label>Auto atualizar (min):
