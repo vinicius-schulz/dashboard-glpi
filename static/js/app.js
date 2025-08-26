@@ -345,19 +345,6 @@ function setMeta(meta, count, period) {
   let info = `Período: ${period.start} a ${period.end} • Tickets: ${count} `;
   if (typeof meta?.tids === 'number') info += `• Tickets retornados=${meta.tids}`;
   el.textContent = `Meus grupos: [${gids.join(', ')}] • ${info}`;
-  // Aging disclaimer badge
-  if (meta?.aging_note) {
-    let badge = document.getElementById('aging-note');
-    if (!badge) {
-      badge = document.createElement('div');
-      badge.id = 'aging-note';
-      badge.style.fontSize = '11px';
-      badge.style.color = '#7f1d1d';
-      badge.style.marginTop = '4px';
-      el.appendChild(badge);
-    }
-    badge.textContent = meta.aging_note;
-  }
   // Marca widgets que ignoram período (fallback se HTML não tiver badge)
   const ignore = meta?.ignore_period_widgets || [];
   ignore.forEach(id => {

@@ -253,8 +253,7 @@ def api_data():
                 return jsonify({
                     "meta": {**meta, "baseline_window": {"start": str(baseline_start.date()), "end": str(baseline_end.date()), "used": True},
                               "user_window": {"start": str(user_start.date()), "end": str(user_end.date())},
-                              "ignore_period_widgets": ["aging","backlog_status","open_today","created_today"],
-                              "aging_note": "Gráfico Aging mostra backlog atual ignorando filtro de período."},
+                              "ignore_period_widgets": ["aging","backlog_status","open_today","created_today"]},
                     "count": 0,
                     "note": "Nenhum ticket no filtro e baseline vazia.",
                     "series": {k: empty for k in ["created","resolved","backlog","backlog_trend","category","resolution_hours","resolution_hours_trend","backlog_status","aging","priority","impact","load_by_user","load_by_group"]},
@@ -274,8 +273,7 @@ def api_data():
             return jsonify({
                 "meta": {**meta, "baseline_window": {"start": str(baseline_start.date()), "end": str(baseline_end.date()), "used": True},
                           "user_window": {"start": str(user_start.date()), "end": str(user_end.date())},
-                          "ignore_period_widgets": ["aging","backlog_status","open_today","created_today"],
-                          "aging_note": "Gráfico Aging mostra backlog atual ignorando filtro de período."},
+                          "ignore_period_widgets": ["aging","backlog_status","open_today","created_today"]},
                 "count": 0,
                 "note": "Sem tickets no intervalo filtrado; exibindo métricas de baseline.",
                 "series": {
@@ -363,8 +361,7 @@ def api_data():
             "meta": {**meta,
                       "baseline_window": {"start": str(baseline_start.date()), "end": str(baseline_end.date()), "used": True},
                       "user_window": {"start": str(user_start.date()), "end": str(user_end.date())},
-                      "ignore_period_widgets": ["aging","backlog_status","open_today","created_today"],
-                      "aging_note": "Gráfico Aging mostra backlog atual ignorando filtro de período."},
+                      "ignore_period_widgets": ["aging","backlog_status","open_today","created_today"]},
             "count": int(len(df_strict)),
             "period": {"start": start_s, "end": end_s, "gran": gran},
             "series": {
