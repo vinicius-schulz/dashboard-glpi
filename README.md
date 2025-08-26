@@ -106,7 +106,7 @@ docker push SEU_USUARIO/dashboard-glpi:1.0.0
 | Área | Descrição |
 |------|-----------|
 | Header | Título do dashboard. Largura ajusta dinamicamente se o layout exceder a viewport. |
-| Barra de filtros | Granularidade (Diário/Semanal/Mensal). Período por datas ou meses. Presets de intervalo (1 semana, mês atual, 3/6 meses etc.). Filtro de categoria. Botão Aplicar & Exportar/Imprimir. |
+| Barra de filtros | Granularidade (Diário/Semanal/Mensal). Período por datas ou meses. Presets de intervalo (1 semana, mês atual, 3/6 meses etc.). Filtro de categoria. Atualização automática ao alterar qualquer filtro + botão Exportar/Imprimir. |
 | Engrenagem (⚙️) | Abre painel de personalização (mostrar/ocultar widgets, redimensionar, auto-refresh, logout). |
 | Widgets | Cartões com gráficos (Chart.js) ou números grandes (snapshot). Botão ❔ para ajuda (tooltip + popover clicável). |
 | Modal de tickets | Clique em ponto/barra/contador abre lista (até 1000 tickets) com ordenação e redimensionamento de colunas. |

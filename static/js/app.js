@@ -613,7 +613,24 @@ async function loadData() {
   }
 }
 
-document.getElementById('apply').addEventListener('click', () => { loadData(); saveFilters(); });
+// Removido botão Aplicar: atualização automática ao alterar filtros.
+function bindAutoFilterReload() {
+  const granSel = document.getElementById('gran');
+  const catSel = document.getElementById('catFilter');
+  const startInp = document.getElementById('start');
+  const endInp = document.getElementById('end');
+  const startMonthInp = document.getElementById('startMonth');
+  const endMonthInp = document.getElementById('endMonth');
+  const fire = () => { saveFilters(); loadData(); };
+  [granSel, catSel, startInp, endInp, startMonthInp, endMonthInp].forEach(el => {
+    if (!el) return;
+    el.addEventListener('change', () => {
+      // range buttons já chamam loadData; não duplicar se for preset (detecção básica)
+      fire();
+    });
+  });
+}
+window.addEventListener('DOMContentLoaded', bindAutoFilterReload);
 // Removido o loadData inicial antecipado para evitar corrida onde o primeiro carregamento (1 mês)
 // ocorre antes de aplicar o range padrão (3 meses). Agora o primeiro load acontece via
 // clique programático do botão de range default em initRangeButtons().
@@ -801,6 +818,11 @@ function initRangeButtons(){
   const monthInputs = [document.getElementById('startMonth'), document.getElementById('endMonth')].filter(Boolean);
 
   btns.forEach(b => {
+    // Botão 'Personalizado' não deve ser clicável diretamente
+    if (b.classList.contains('custom')) {
+      b.classList.add('non-clickable'); // classe opcional para estilização futura
+      return;
+    }
     b.addEventListener('click', (e) => {
       btns.forEach(x => x.classList.remove('active'));
       b.classList.add('active');

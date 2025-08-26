@@ -1,5 +1,6 @@
 <!doctype html>
 <html lang="pt-br">
+
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -7,6 +8,7 @@
   <link rel="stylesheet" href="/static/css/styles.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
+
 <body data-ui-base="{{ ui_base }}">
   <header>
     <h1>Tickets GLPI • Observador = Meus grupos</h1>
@@ -17,19 +19,20 @@
       <select id="gran">
         <option value="Diário">Diário</option>
         <option value="Semanal">Semanal</option>
-  <option value="Mensal">Mensal</option>
-      </select>
-    </label>
-    <label>Categorias:
-      <select id="catFilter">
-        <option value="todos">Todos</option>
-        <option value="holding">Holding</option>
-        <option value="unimed">Unimed</option>
+        <option value="Mensal">Mensal</option>
       </select>
     </label>
     <span id="dateRangeInputs">
       <label>Início: <input type="date" id="start" value="{{ default_start }}" required /></label>
       <label>Fim: <input type="date" id="end" value="{{ default_end }}" required /></label>
+    </span>
+    <span id="monthRangeInputs" class="hidden">
+      <label>Mês inicial:
+        <input type="month" id="startMonth" />
+      </label>
+      <label>Mês final:
+        <input type="month" id="endMonth" />
+      </label>
     </span>
     <div id="presetRanges" style="display:inline-flex;gap:6px;align-items:center;">
       <button class="range-btn" data-range="current_month" title="Mês atual">Mês atual</button>
@@ -40,16 +43,15 @@
       <button class="range-btn" data-months="6" title="Últimos 6 meses">6 meses</button>
       <button class="range-btn custom" data-custom="1" title="Intervalo personalizado">Personalizado</button>
     </div>
-    <span id="monthRangeInputs" class="hidden">
-      <label>Mês inicial:
-        <input type="month" id="startMonth" />
-      </label>
-      <label>Mês final:
-        <input type="month" id="endMonth" />
-      </label>
-    </span>
-  <button id="apply">Aplicar</button>
-  <button id="exportBtn" title="Exportar / Imprimir dashboard">Exportar / Imprimir</button>
+    <label>Categorias:
+      <select id="catFilter">
+        <option value="todos">Todos</option>
+        <option value="holding">Holding</option>
+        <option value="unimed">Unimed</option>
+      </select>
+    </label>
+    <!-- Botão Aplicar removido: atualização agora ocorre automaticamente em mudanças de filtros -->
+    <button id="exportBtn" title="Exportar / Imprimir dashboard">Exportar / Imprimir</button>
   </section>
 
   <section id="meta"></section>
@@ -57,66 +59,98 @@
   <section class="grid">
     <div class="card" data-widget="cumGap">
       <div class="card-inner">
-  <h2>Gap Cumulativo — evolução de Criados vs Resolvidos
-    <button class="help" title="Mostra o acumulado de tickets criados e de tickets resolvidos ao longo do período selecionado. A linha de 'Gap' (Criados - Resolvidos) evidencia se o volume de resolução acompanha a criação, apontando tendência de crescimento ou queda do backlog.">❔</button>
-  </h2>
+        <h2>Gap Cumulativo — evolução de Criados vs Resolvidos
+          <button class="help"
+            title="Mostra o acumulado de tickets criados e de tickets resolvidos ao longo do período selecionado. A linha de 'Gap' (Criados - Resolvidos) evidencia se o volume de resolução acompanha a criação, apontando tendência de crescimento ou queda do backlog.">❔</button>
+        </h2>
         <canvas id="chartCumGap"></canvas>
       </div>
     </div>
     <div class="card" data-widget="backlog">
       <div class="card-inner">
         <h2>Backlog no tempo — contagem e tendência
-          <button class="help" title="Exibe o número de tickets em aberto por ponto do período (backlog) e uma série suavizada para destacar a tendência. Útil para identificar aumento ou redução contínua do volume de chamados em aberto.">❔</button>
+          <button class="help"
+            title="Exibe o número de tickets em aberto por ponto do período (backlog) e uma série suavizada para destacar a tendência. Útil para identificar aumento ou redução contínua do volume de chamados em aberto.">❔</button>
         </h2>
         <canvas id="chartBacklogCombined"></canvas>
       </div>
     </div>
     <div class="card" data-widget="backlogStatus">
       <div class="card-inner">
-        <h2>Backlog por Status <span class="badge-period" title="Ignora filtro de período">(Ignora filtro de período)</span>
-          <button class="help" title="Distribuição atual dos tickets em aberto por status (ex.: Novo, Atribuído, Pendente, Resolvido). Este gráfico ignora o filtro de período e mostra o snapshot do backlog por status.">❔</button>
+        <h2>Backlog por Status <span class="badge-period" title="Ignora filtro de período">(Ignora filtro de
+            período)</span>
+          <button class="help"
+            title="Distribuição atual dos tickets em aberto por status (ex.: Novo, Atribuído, Pendente, Resolvido). Este gráfico ignora o filtro de período e mostra o snapshot do backlog por status.">❔</button>
         </h2>
         <canvas id="chartBacklogStatus"></canvas>
       </div>
     </div>
     <div class="card" data-widget="aging">
       <div class="card-inner">
-        <h2>Aging dos tickets abertos — faixas de tempo <span class="badge-period" title="Ignora filtro de período">(Ignora filtro de período)</span>
-          <button class="help" title="Agrupa os tickets abertos por faixas de idade (ex.: 0-7 dias, 8-30 dias, >30 dias) para identificar quanto tempo o backlog permanece sem resolução. Útil para priorização e detecção de chamados antigos.">❔</button>
+        <h2>Aging dos tickets abertos — faixas de tempo <span class="badge-period"
+            title="Ignora filtro de período">(Ignora filtro de período)</span>
+          <button class="help"
+            title="Agrupa os tickets abertos por faixas de idade (ex.: 0-7 dias, 8-30 dias, >30 dias) para identificar quanto tempo o backlog permanece sem resolução. Útil para priorização e detecção de chamados antigos.">❔</button>
         </h2>
         <canvas id="chartAging"></canvas>
       </div>
     </div>
     <div class="card" data-widget="openToday">
       <div class="card-inner">
-        <h2>Chamados Abertos Agora (Snapshot) <span class="badge-period" title="Ignora filtro de período">(Ignora filtro de período)</span>
-          <button class="help" title="Contagem instantânea de tickets que se encontram em estado aberto no momento. É um snapshot do backlog atual e não respeita o filtro de período aplicado aos outros gráficos.">❔</button>
+        <h2>Chamados Abertos Agora (Snapshot) <span class="badge-period" title="Ignora filtro de período">(Ignora filtro
+            de período)</span>
+          <button class="help"
+            title="Contagem instantânea de tickets que se encontram em estado aberto no momento. É um snapshot do backlog atual e não respeita o filtro de período aplicado aos outros gráficos.">❔</button>
         </h2>
-        <div id="openTodayValue" class="big-number" title="Contagem de tickets abertos agora (ignora filtro de período)">--</div>
+        <div id="openTodayValue" class="big-number"
+          title="Contagem de tickets abertos agora (ignora filtro de período)">--</div>
         <div id="openTodayNote" class="small-note">Ignora filtro de período.</div>
       </div>
     </div>
     <div class="card" data-widget="createdToday">
       <div class="card-inner">
-        <h2>Chamados Criados Hoje <span class="badge-period" title="Ignora filtro de período">(Ignora filtro de período)</span>
-          <button class="help" title="Total de tickets criados no dia corrente. Útil para monitorar picos diários de demanda. Este valor ignora o filtro de período." >❔</button>
+        <h2>Chamados Criados Hoje <span class="badge-period" title="Ignora filtro de período">(Ignora filtro de
+            período)</span>
+          <button class="help"
+            title="Total de tickets criados no dia corrente. Útil para monitorar picos diários de demanda. Este valor ignora o filtro de período.">❔</button>
         </h2>
-        <div id="createdTodayValue" class="big-number" title="Tickets criados no dia corrente (ignora filtro de período)">--</div>
+        <div id="createdTodayValue" class="big-number"
+          title="Tickets criados no dia corrente (ignora filtro de período)">--</div>
         <div id="createdTodayNote" class="small-note">Ignora filtro de período.</div>
       </div>
     </div>
-    <div class="card" data-widget="category"><div class="card-inner"><h2>Composição por Categoria — participação de tickets por categoria
-      <button class="help" title="Mostra a distribuição de tickets por categoria no período selecionado. Use para identificar quais áreas ou serviços geram mais chamados.">❔</button>
-    </h2><canvas id="chartCat"></canvas></div></div>
-  <div class="card" data-widget="priority"><div class="card-inner"><h2>Distribuição por Prioridade — urgência dos tickets
-      <button class="help" title="Exibe quantos tickets pertencem a cada nível de prioridade. Ajuda a visualizar a criticidade atual do backlog.">❔</button>
-    </h2><canvas id="chartPr"></canvas></div></div>
-  <div class="card" data-widget="impact"><div class="card-inner"><h2>Distribuição por Impacto — impacto dos tickets
-      <button class="help" title="Agrupa tickets por nível de impacto (ex.: operação, usuário, sistema). Útil para priorizar correções que afetam maior número de usuários/serviços.">❔</button>
-    </h2><canvas id="chartImp"></canvas></div></div>
-  <div class="card" data-widget="resolutionHours"><div class="card-inner"><h2>Tempo médio de resolução (horas úteis) — desempenho de atendimento
-      <button class="help" title="Mede o tempo médio entre abertura e solução dos tickets em horas úteis por ponto do período. Útil para acompanhar SLAs e eficiência da equipe.">❔</button>
-    </h2><canvas id="chartResolutionHours"></canvas></div></div>
+    <div class="card" data-widget="category">
+      <div class="card-inner">
+        <h2>Composição por Categoria — participação de tickets por categoria
+          <button class="help"
+            title="Mostra a distribuição de tickets por categoria no período selecionado. Use para identificar quais áreas ou serviços geram mais chamados.">❔</button>
+        </h2><canvas id="chartCat"></canvas>
+      </div>
+    </div>
+    <div class="card" data-widget="priority">
+      <div class="card-inner">
+        <h2>Distribuição por Prioridade — urgência dos tickets
+          <button class="help"
+            title="Exibe quantos tickets pertencem a cada nível de prioridade. Ajuda a visualizar a criticidade atual do backlog.">❔</button>
+        </h2><canvas id="chartPr"></canvas>
+      </div>
+    </div>
+    <div class="card" data-widget="impact">
+      <div class="card-inner">
+        <h2>Distribuição por Impacto — impacto dos tickets
+          <button class="help"
+            title="Agrupa tickets por nível de impacto (ex.: operação, usuário, sistema). Útil para priorizar correções que afetam maior número de usuários/serviços.">❔</button>
+        </h2><canvas id="chartImp"></canvas>
+      </div>
+    </div>
+    <div class="card" data-widget="resolutionHours">
+      <div class="card-inner">
+        <h2>Tempo médio de resolução (horas úteis) — desempenho de atendimento
+          <button class="help"
+            title="Mede o tempo médio entre abertura e solução dos tickets em horas úteis por ponto do período. Útil para acompanhar SLAs e eficiência da equipe.">❔</button>
+        </h2><canvas id="chartResolutionHours"></canvas>
+      </div>
+    </div>
   </section>
 
   <!-- Painel de personalização de layout -->
@@ -128,11 +162,13 @@
     <div class="lp-body">
       {% if enable_auth %}
       <div class="logout-block">
-        <div><strong>Encerrar sessão</strong><br><span style="font-size:12px;color:#6b7280">Use esta opção para sair do dashboard com segurança.</span></div>
+        <div><strong>Encerrar sessão</strong><br><span style="font-size:12px;color:#6b7280">Use esta opção para sair do
+            dashboard com segurança.</span></div>
         <a href="/logout" class="logout-link-modal" title="Sair do dashboard">Sair</a>
       </div>
       {% endif %}
-      <p>Arraste os cards diretamente na área principal para reordenar. Ajuste visibilidade e tamanho abaixo. As preferências ficam salvas neste navegador.</p>
+      <p>Arraste os cards diretamente na área principal para reordenar. Ajuste visibilidade e tamanho abaixo. As
+        preferências ficam salvas neste navegador.</p>
       <div class="lp-config" style="margin-bottom:12px;">
         <label>Auto atualizar (min):
           <input type="number" id="autoRefreshMin" min="0" step="1" style="width:80px" />
@@ -140,7 +176,13 @@
         </label>
       </div>
       <table class="lp-table">
-        <thead><tr><th>Widget</th><th>Visível</th><th>Largura / Altura</th></tr></thead>
+        <thead>
+          <tr>
+            <th>Widget</th>
+            <th>Visível</th>
+            <th>Largura / Altura</th>
+          </tr>
+        </thead>
         <tbody id="lpRows"></tbody>
       </table>
       <div class="lp-actions">
@@ -168,7 +210,9 @@
         <div id="modal-info" class="muted"></div>
         <div class="table-wrap">
           <table>
-            <thead><tr id="modal-head-row"></tr></thead>
+            <thead>
+              <tr id="modal-head-row"></tr>
+            </thead>
             <tbody id="modal-rows"></tbody>
           </table>
         </div>
@@ -177,9 +221,13 @@
   </div>
 
   <!-- Global loader and toasts (must appear before scripts) -->
-  <div id="loader" class="loader hidden"><div class="spinner"></div><div class="msg">Carregando...</div></div>
+  <div id="loader" class="loader hidden">
+    <div class="spinner"></div>
+    <div class="msg">Carregando...</div>
+  </div>
   <div id="toasts" class="toasts"></div>
 
   <script src="/static/js/app.js"></script>
 </body>
+
 </html>
