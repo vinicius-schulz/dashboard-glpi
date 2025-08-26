@@ -133,7 +133,8 @@ const WidgetLayout = (() => {
   // Grid cell size (px) for snap positioning
   const CELL_W = 80; // base logical cell width (will derive snap unit)
   const CELL_H = 80; // base logical cell height
-  const DEV_SHOW_GRID = true; // definir para false para ocultar marcações de desenvolvimento
+  const CARD_GAP = 4; // espaço (px) entre cards para não ficarem colados
+  const DEV_SHOW_GRID = false; // ocultar marcações de desenvolvimento (linhas da dev grid)
   const AUTO_RESOLVE = false; // quando true empurra outros cards; false permite sobreposição
   const MAX_COLS = 72; // allow more cards per linha (24 limited 8x -> 3 per row; 72 -> até 9 de largura 8)
   function load() {
@@ -196,14 +197,17 @@ const WidgetLayout = (() => {
       const w = map.get(id);
       if (!w || w.visible===false) { el.style.display='none'; return; } else el.style.display='';
       el.style.position='absolute';
-      el.style.width = (w.cols * SNAP_W) + 'px';
-      el.style.height = (w.rows * SNAP_H) + 'px';
-      el.style.left = (w.x * SNAP_W) + 'px';
-      el.style.top = (w.y * SNAP_H) + 'px';
+      // Ajusta larg/alt e posição com espaçamento interno (gap) sem alterar cálculo de maxRight/maxBottom
+      const calcW = (w.cols * SNAP_W) - (CARD_GAP * 2);
+      const calcH = (w.rows * SNAP_H) - (CARD_GAP * 2);
+      el.style.width = (calcW > 20 ? calcW : (w.cols * SNAP_W)) + 'px';
+      el.style.height = (calcH > 20 ? calcH : (w.rows * SNAP_H)) + 'px';
+      el.style.left = (w.x * SNAP_W + CARD_GAP) + 'px';
+      el.style.top = (w.y * SNAP_H + CARD_GAP) + 'px';
     });
-    const maxBottom = layout.filter(w=>w.visible!==false).reduce((m,w)=> Math.max(m, (w.y + w.rows) * SNAP_H), 0);
-    // Calcula a largura máxima usada (extremo direito dos cards visíveis)
-    const maxRight = layout.filter(w=>w.visible!==false).reduce((m,w)=> Math.max(m, (w.x + w.cols) * SNAP_W), 0);
+  const maxBottom = layout.filter(w=>w.visible!==false).reduce((m,w)=> Math.max(m, (w.y + w.rows) * SNAP_H + CARD_GAP), 0);
+  // Calcula a largura máxima usada (extremo direito dos cards visíveis)
+  const maxRight = layout.filter(w=>w.visible!==false).reduce((m,w)=> Math.max(m, (w.x + w.cols) * SNAP_W + CARD_GAP), 0);
     grid.style.height = (maxBottom + 40) + 'px';
     // Define explicitamente a largura do grid para garantir que o scrollWidth reflita o conteúdo usado
     grid.style.width = (maxRight + 40) + 'px';
