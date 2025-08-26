@@ -517,7 +517,9 @@ async function loadData() {
 }
 
 document.getElementById('apply').addEventListener('click', () => loadData());
-window.addEventListener('DOMContentLoaded', () => loadData());
+// Removido o loadData inicial antecipado para evitar corrida onde o primeiro carregamento (1 mês)
+// ocorre antes de aplicar o range padrão (3 meses). Agora o primeiro load acontece via
+// clique programático do botão de range default em initRangeButtons().
 
 // --- Export / Print dashboard ---
 async function exportDashboard() {
