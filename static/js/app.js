@@ -162,56 +162,37 @@ const WidgetLayout = (() => {
         act.addEventListener('click', (e) => {
           const btn = e.target.closest('button'); if (!btn) return;
           const id = card.getAttribute('data-widget');
-            const item = layout.find(x => x.id===id); if (!item) return;
-            if (btn.dataset.act === 'hide') { item.visible=false; save(layout); apply(layout); Toasts.push('info', 'Widget ocultado: '+id); }
+          const item = layout.find(x => x.id===id); if (!item) return;
+          if (btn.dataset.act === 'hide') { item.visible=false; save(layout); apply(layout); Toasts.push('info', 'Widget ocultado: '+id); }
         });
       }
-      // Ensure resize handle exists
+      // Resize handle
       if (!card.querySelector('.resize-handle')) {
         const rh = document.createElement('div'); rh.className='resize-handle'; card.appendChild(rh);
-        let sx, sy, sw, sh, startCols, startRows; const snapW = CELL_W/2, snapH = CELL_H/2; const id = card.getAttribute('data-widget');
+        const id = card.getAttribute('data-widget');
         rh.addEventListener('mousedown', e => { e.preventDefault(); e.stopPropagation();
-          const item = layout.find(x=>x.id===id); if(!item) return; sx=e.clientX; sy=e.clientY; sw=card.offsetWidth; sh=card.offsetHeight; startCols=item.cols; startRows=item.rows;
+          const item = layout.find(x=>x.id===id); if(!item) return; const sx=e.clientX, sy=e.clientY; const sw=card.offsetWidth, sh=card.offsetHeight; const snapW=CELL_W/2, snapH=CELL_H/2;
           function move(ev){
-            const dx=ev.clientX-sx; const dy=ev.clientY-sy; const newW=sw+dx; const newH=sh+dy;
-            const cols = Math.max(3, Math.round(newW / snapW));
-            const rows = Math.max(3, Math.round(newH / snapH));
-            if (cols!==item.cols || rows!==item.rows){ item.cols=cols; item.rows=rows; apply(layout); }
+            const dx=ev.clientX-sx, dy=ev.clientY-sy; const newW=sw+dx, newH=sh+dy;
+            const cols=Math.max(3, Math.round(newW / snapW)); const rows=Math.max(3, Math.round(newH / snapH));
+            if(cols!==item.cols || rows!==item.rows){ item.cols=cols; item.rows=rows; apply(layout); }
           }
-          function up(){ save(layout); document.removeEventListener('mousemove',move); document.removeEventListener('mouseup',up); }
+            function up(){ save(layout); document.removeEventListener('mousemove',move); document.removeEventListener('mouseup',up); }
           document.addEventListener('mousemove',move); document.addEventListener('mouseup',up);
         });
       }
-      if (!card.dataset.freeInit) { initDrag(card, layout); card.dataset.freeInit='1'; }
+      // Drag init
+      if (!card.dataset.dragInit) { initDrag(card, layout); card.dataset.dragInit='1'; }
     });
   }
-  function initDrag(card, layout) {
-    let startX, startY, origX, origY, previewX, previewY; const id = card.getAttribute('data-widget');
-    function onMouseDown(e){
-      if(e.button!==0) return;
-      const item = layout.find(w=>w.id===id); if(!item) return;
+  function initDrag(card, layout){
+    let startX,startY,origX,origY,previewX,previewY; const id=card.getAttribute('data-widget');
+    function onMouseDown(e){ if(e.button!==0) return; const item=layout.find(w=>w.id===id); if(!item) return;
       startX=e.clientX; startY=e.clientY; origX=item.x||0; origY=item.y||0; previewX=origX; previewY=origY;
-      card.classList.add('dragging'); document.body.classList.add('drag-mode');
-      // bring to front
-      card.style.zIndex = 999;
-      document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
-    }
-    function onMove(e){
-      const item = layout.find(w=>w.id===id); if(!item) return;
-      const dx=e.clientX-startX; const dy=e.clientY-startY;
-      const snapW = CELL_W/2; const snapH = CELL_H/2;
-      const deltaCols=Math.round(dx/snapW); const deltaRows=Math.round(dy/snapH);
-      let newX=Math.max(0, origX+deltaCols); let newY=Math.max(0, origY+deltaRows);
-      if(newX!==previewX || newY!==previewY){
-        previewX=newX; previewY=newY;
-        card.style.left = (previewX * snapW) + 'px';
-        card.style.top  = (previewY * snapH) + 'px';
-      }
-    }
-    function onUp(){
-      const item = layout.find(w=>w.id===id); if(item){ item.x=previewX; item.y=previewY; if (AUTO_RESOLVE) resolveCollisions(item, layout); apply(layout); save(layout); }
-      card.classList.remove('dragging'); document.body.classList.remove('drag-mode'); card.style.zIndex='';
-      document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp);
+      card.classList.add('dragging'); document.body.classList.add('drag-mode'); card.style.zIndex=999;
+      function onMove(ev){ const dx=ev.clientX-startX, dy=ev.clientY-startY; const snapW=CELL_W/2, snapH=CELL_H/2; const deltaCols=Math.round(dx/snapW), deltaRows=Math.round(dy/snapH); const newX=Math.max(0, origX+deltaCols), newY=Math.max(0, origY+deltaRows); if(newX!==previewX || newY!==previewY){ previewX=newX; previewY=newY; card.style.left=(previewX*snapW)+'px'; card.style.top=(previewY*snapH)+'px'; } }
+      function onUp(){ const item=layout.find(w=>w.id===id); if(item){ item.x=previewX; item.y=previewY; if(AUTO_RESOLVE) resolveCollisions(item,layout); apply(layout); save(layout); } card.classList.remove('dragging'); document.body.classList.remove('drag-mode'); card.style.zIndex=''; document.removeEventListener('mousemove',onMove); document.removeEventListener('mouseup',onUp); }
+      document.addEventListener('mousemove',onMove); document.addEventListener('mouseup',onUp);
     }
     card.addEventListener('mousedown', onMouseDown);
   }
@@ -249,12 +230,23 @@ const WidgetLayout = (() => {
   function init() {
     const layout = load();
     apply(layout);
-    enableDrag(layout);
     // Panel buttons
     document.getElementById('customizeToggle').addEventListener('click', () => openPanel(layout));
     document.getElementById('lpClose').addEventListener('click', () => document.getElementById('layoutPanel').classList.add('hidden'));
     document.getElementById('lpDone').addEventListener('click', () => document.getElementById('layoutPanel').classList.add('hidden'));
-    document.getElementById('lpReset').addEventListener('click', () => { localStorage.removeItem(STORAGE_KEY); const fresh = load(); apply(fresh); Toasts.push('success','Layout redefinido'); });
+    document.getElementById('lpReset').addEventListener('click', () => {
+      localStorage.removeItem(STORAGE_KEY);
+      const fresh = load();
+      layout.splice(0, layout.length, ...fresh);
+      apply(layout);
+      save(layout);
+      // re-init drag for any newly created cards
+      document.querySelectorAll('.card[data-widget]').forEach(c => { if(!c.dataset.dragInit){ initDrag(c, layout); c.dataset.dragInit='1'; } });
+      Toasts.push('success','Layout redefinido');
+      // width recalibration
+      try { const header=document.querySelector('header'); const controls=document.querySelector('.controls'); if(header) header.style.minWidth=''; if(controls) controls.style.minWidth=''; } catch{}
+      requestAnimationFrame(()=>requestAnimationFrame(()=>adjustHeaderWidth&&adjustHeaderWidth()));
+    });
   }
   return { init };
 })();
