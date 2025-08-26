@@ -265,28 +265,95 @@ const WidgetLayout = (() => {
           if (btn.dataset.act === 'hide') { item.visible=false; save(layout); apply(layout); Toasts.push('info', 'Widget ocultado: '+id); }
         });
       }
-      // Resize handle
-      if (!card.querySelector('.resize-handle')) {
-        const rh = document.createElement('div'); rh.className='resize-handle'; card.appendChild(rh);
-        const id = card.getAttribute('data-widget');
-        rh.addEventListener('mousedown', e => { e.preventDefault(); e.stopPropagation();
-          const item = layout.find(x=>x.id===id); if(!item) return; const sx=e.clientX, sy=e.clientY; const sw=card.offsetWidth, sh=card.offsetHeight; const snapW=CELL_W/2, snapH=CELL_H/2;
-          function move(ev){
-            const dx=ev.clientX-sx, dy=ev.clientY-sy; const newW=sw+dx, newH=sh+dy;
-            const cols=Math.max(3, Math.round(newW / snapW)); const rows=Math.max(3, Math.round(newH / snapH));
-            if(cols!==item.cols || rows!==item.rows){ item.cols=cols; item.rows=rows; apply(layout); }
-          }
-            function up(){ save(layout); document.removeEventListener('mousemove',move); document.removeEventListener('mouseup',up); }
-          document.addEventListener('mousemove',move); document.addEventListener('mouseup',up);
-        });
+      // Multi-edge / corner resize (remove handle; detect edges by proximity)
+      if (!card._resizeBound) {
+        initMultiResize(card, layout);
+        card._resizeBound = true;
       }
       // Drag init
       if (!card.dataset.dragInit) { initDrag(card, layout); card.dataset.dragInit='1'; }
     });
   }
+  function initMultiResize(card, layout){
+    const EDGE = 8; // px detection zone
+    const id = card.getAttribute('data-widget');
+    let resizing = false; let region = ''; let startX=0, startY=0; let startW=0, startH=0; let startCols=0, startRows=0; let startGridX=0, startGridY=0;
+    function detectRegion(e){
+      const r = card.getBoundingClientRect();
+      const x = e.clientX - r.left; const y = e.clientY - r.top;
+      const left = x <= EDGE; const right = (r.width - x) <= EDGE; const top = y <= EDGE; const bottom = (r.height - y) <= EDGE;
+      let reg='';
+      if (top && left) reg='nw'; else if (top && right) reg='ne'; else if (bottom && left) reg='sw'; else if (bottom && right) reg='se';
+      else if (top) reg='n'; else if (bottom) reg='s'; else if (left) reg='w'; else if (right) reg='e';
+      return reg;
+    }
+    function regionCursor(reg){
+      switch(reg){
+        case 'n': case 's': return 'ns-resize';
+        case 'e': case 'w': return 'ew-resize';
+        case 'ne': case 'sw': return 'nesw-resize';
+        case 'nw': case 'se': return 'nwse-resize';
+        default: return '';
+      }
+    }
+    card.addEventListener('mousemove', e => {
+      if (resizing) return; // keep cursor during resize
+      const reg = detectRegion(e);
+      region = reg;
+      const cur = regionCursor(reg);
+      card.style.cursor = cur || '';
+      card.dataset.resizeRegion = reg;
+    });
+    card.addEventListener('mouseleave', () => { if(!resizing){ card.style.cursor=''; region=''; }});
+    card.addEventListener('mousedown', e => {
+      if (e.button!==0) return;
+      // only start if on edge region (and not inside interactive header buttons)
+      if (!region) return;
+      const item = layout.find(x=>x.id===id); if(!item) return;
+      resizing = true; card.dataset.resizing='1'; e.stopPropagation(); e.preventDefault();
+      startX = e.clientX; startY = e.clientY; startW = card.offsetWidth; startH = card.offsetHeight;
+      startCols = item.cols; startRows = item.rows; startGridX = item.x; startGridY = item.y;
+      const snapW = CELL_W/2, snapH = CELL_H/2;
+      function move(ev){
+        const dx = ev.clientX - startX; const dy = ev.clientY - startY;
+        let dColsRight=0, dRowsDown=0, dColsLeft=0, dRowsUp=0;
+        if (region.includes('e')) dColsRight = Math.round(dx / snapW);
+        if (region.includes('s')) dRowsDown = Math.round(dy / snapH);
+        if (region.includes('w')) dColsLeft = Math.round(-dx / snapW); // moving left increases width
+        if (region.includes('n')) dRowsUp = Math.round(-dy / snapH);
+        let newCols = startCols + dColsRight + dColsLeft; // dColsLeft acts like expansion
+        let newRows = startRows + dRowsDown + dRowsUp;
+        let newX = startGridX - dColsLeft;
+        let newY = startGridY - dRowsUp;
+        // clamp
+        if (newX < 0){ newCols += newX; newX = 0; }
+        if (newY < 0){ newRows += newY; newY = 0; }
+        newCols = Math.max(3, newCols);
+        newRows = Math.max(3, newRows);
+        // apply tentative
+        if (newCols !== item.cols || newRows !== item.rows || newX !== item.x || newY !== item.y){
+          item.cols = newCols; item.rows = newRows; item.x = newX; item.y = newY;
+          apply(layout);
+          // keep resizing flag on updated DOM card
+          const fresh = document.querySelector(`.card[data-widget="${id}"]`);
+          if (fresh) { fresh.dataset.resizing='1'; fresh.style.cursor = regionCursor(region); }
+        }
+      }
+      function up(){
+        resizing = false; delete card.dataset.resizing; save(layout);
+        document.removeEventListener('mousemove', move);
+        document.removeEventListener('mouseup', up);
+        card.style.cursor='';
+      }
+      document.addEventListener('mousemove', move);
+      document.addEventListener('mouseup', up);
+    });
+  }
   function initDrag(card, layout){
     let startX,startY,origX,origY,previewX,previewY; const id=card.getAttribute('data-widget');
     function onMouseDown(e){ if(e.button!==0) return; const item=layout.find(w=>w.id===id); if(!item) return;
+  // se cursor indica resize ou região de resize ativa, não iniciar drag
+  if (card.dataset.resizing==='1' || card.dataset.resizeRegion){ return; }
       startX=e.clientX; startY=e.clientY; origX=item.x||0; origY=item.y||0; previewX=origX; previewY=origY;
       card.classList.add('dragging'); document.body.classList.add('drag-mode'); card.style.zIndex=999;
       function onMove(ev){ const dx=ev.clientX-startX, dy=ev.clientY-startY; const snapW=CELL_W/2, snapH=CELL_H/2; const deltaCols=Math.round(dx/snapW), deltaRows=Math.round(dy/snapH); const newX=Math.max(0, origX+deltaCols), newY=Math.max(0, origY+deltaRows); if(newX!==previewX || newY!==previewY){ previewX=newX; previewY=newY; card.style.left=(previewX*snapW)+'px'; card.style.top=(previewY*snapH)+'px'; } }
