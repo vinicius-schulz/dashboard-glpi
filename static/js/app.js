@@ -466,6 +466,86 @@ async function loadData() {
 document.getElementById('apply').addEventListener('click', () => loadData());
 window.addEventListener('DOMContentLoaded', () => loadData());
 
+// Preset range buttons: set start/end quickly. Default active = 3 months
+function isoDate(d) { return d.toISOString().slice(0,10); }
+function setRangeDays(days) {
+  const end = new Date();
+  const start = new Date();
+  // user requested exact N days before today
+  start.setDate(end.getDate() - days);
+  document.getElementById('start').value = isoDate(start);
+  document.getElementById('end').value = isoDate(end);
+}
+function setRangeMonths(months) {
+  const end = new Date();
+  const start = new Date();
+  // use approximate month = 30 days as requested (1 month = 30 days)
+  const days = months * 30;
+  start.setDate(end.getDate() - days);
+  document.getElementById('start').value = isoDate(start);
+  document.getElementById('end').value = isoDate(end);
+}
+
+let _suppressRangeChange = false; // suppress custom activation when programmatically changing inputs
+function initRangeButtons(){
+  const btns = Array.from(document.querySelectorAll('.range-btn'));
+  const dateInputs = [document.getElementById('start'), document.getElementById('end')].filter(Boolean);
+  const monthInputs = [document.getElementById('startMonth'), document.getElementById('endMonth')].filter(Boolean);
+
+  btns.forEach(b => {
+    b.addEventListener('click', (e) => {
+      btns.forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      const rangeType = b.dataset.range || null;
+      const days = b.dataset.days ? Number(b.dataset.days) : null;
+      const months = b.dataset.months ? Number(b.dataset.months) : null;
+      _suppressRangeChange = true;
+      try {
+        if (rangeType === 'current_month') {
+          // first day of this month to today
+          const now = new Date();
+          const start = new Date(now.getFullYear(), now.getMonth(), 1);
+          const end = new Date();
+          document.getElementById('start').value = isoDate(start);
+          document.getElementById('end').value = isoDate(end);
+        } else if (rangeType === 'prev_month') {
+          const now = new Date();
+          const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+          const end = new Date(now.getFullYear(), now.getMonth(), 0); // last day previous month
+          document.getElementById('start').value = isoDate(start);
+          document.getElementById('end').value = isoDate(end);
+        } else if (days) {
+          setRangeDays(days);
+        } else if (months) {
+          setRangeMonths(months);
+        }
+        // If current granularity is Mensal, also set month inputs
+        if (document.getElementById('gran').value === 'Mensal') {
+          const s = document.getElementById('start').value.slice(0,7);
+          const e = document.getElementById('end').value.slice(0,7);
+          if (document.getElementById('startMonth')) document.getElementById('startMonth').value = s;
+          if (document.getElementById('endMonth')) document.getElementById('endMonth').value = e;
+        }
+      } finally { _suppressRangeChange = false; }
+      loadData();
+    });
+  });
+
+  // If user manually edits date/month inputs, mark 'Personalizado'
+  function onManualChange() {
+    if (_suppressRangeChange) return; // ignore programmatic changes
+    btns.forEach(x => x.classList.remove('active'));
+    const custom = document.querySelector('.range-btn.custom'); if (custom) custom.classList.add('active');
+  }
+  dateInputs.forEach(inp => inp.addEventListener('change', onManualChange));
+  monthInputs.forEach(inp => inp.addEventListener('change', onManualChange));
+
+  // default: 3 meses active on load
+  const def = document.querySelector('.range-btn.active');
+  if (def) def.click();
+}
+window.addEventListener('DOMContentLoaded', initRangeButtons);
+
 // ---- Auto Refresh ----
 let autoTimer = null;
 function setupAutoRefresh() {

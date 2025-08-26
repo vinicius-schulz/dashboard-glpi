@@ -28,9 +28,18 @@
       </select>
     </label>
     <span id="dateRangeInputs">
-      <label>Início: <input type="date" id="start" value="{{ default_start }}" /></label>
-      <label>Fim: <input type="date" id="end" value="{{ default_end }}" /></label>
+      <label>Início: <input type="date" id="start" value="{{ default_start }}" required /></label>
+      <label>Fim: <input type="date" id="end" value="{{ default_end }}" required /></label>
     </span>
+    <div id="presetRanges" style="display:inline-flex;gap:6px;align-items:center;">
+      <button class="range-btn" data-range="current_month" title="Mês atual">Mês atual</button>
+      <button class="range-btn" data-range="prev_month" title="Mês anterior">Mês anterior</button>
+      <button class="range-btn" data-days="7" title="Última semana">1 semana</button>
+      <button class="range-btn" data-months="1" title="Último mês">1 mês</button>
+      <button class="range-btn active" data-months="3" title="Últimos 3 meses">3 meses</button>
+      <button class="range-btn" data-months="6" title="Últimos 6 meses">6 meses</button>
+      <button class="range-btn custom" data-custom="1" title="Intervalo personalizado">Personalizado</button>
+    </div>
     <span id="monthRangeInputs" class="hidden">
       <label>Mês inicial:
         <input type="month" id="startMonth" />

@@ -7,6 +7,10 @@ header h1 { margin: 0; font-size: 20px; }
 .controls { display: flex; gap: 12px; align-items: center; padding: 12px 20px; background: #fff; border-bottom: 1px solid #e5e7eb; position: sticky; top: 0; z-index: 1000; }
 .controls label { font-size: 14px; }
 .controls input, .controls select, .controls button { padding: 6px 8px; }
+/* Preset range buttons */
+.range-btn { background:#fff; border:1px solid #e5e7eb; padding:6px 8px; border-radius:6px; cursor:pointer; font-size:13px; }
+.range-btn:hover { background:#f8fafc; }
+.range-btn.active { background:#0f172a; color:#fff; border-color:#0f172a; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; width: 100%; align-items: start; }
 /* Free layout mode overrides (absolute positioning with snap grid) */
 .grid.free-layout { position: relative; display: block; min-height: 400px; padding-top: 8px; margin-top: 8px; }
