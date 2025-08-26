@@ -266,7 +266,6 @@ document.addEventListener('change', (e) => { if (e.target && e.target.id === 'gr
 function lineChart(canvasId, labels, datasets) {
   const ctx = document.getElementById(canvasId);
   if (!ctx) return; // canvas not present
-  // Ensure parent has a fixed height via CSS; Chart.js will fill canvas
   if (charts[canvasId]) charts[canvasId].destroy();
   charts[canvasId] = new Chart(ctx, {
     type: 'line',
@@ -276,24 +275,55 @@ function lineChart(canvasId, labels, datasets) {
       maintainAspectRatio: false,
       animation: false,
       resizeDelay: 200,
-      interaction: { mode: 'nearest', intersect: false }
+      interaction: { mode: 'nearest', intersect: false },
+      scales: { y: { beginAtZero: true } },
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const dsLabel = ctx.dataset.label || '';
+              return `${dsLabel}: ${ctx.parsed.y}`;
+            },
+            footer: function(tooltipItems) {
+              if (!tooltipItems || !tooltipItems.length) return '';
+              try {
+                const ds = this.chart.data.datasets[tooltipItems[0].datasetIndex];
+                return ds && ds.help ? ds.help : '';
+              } catch (e) { return ''; }
+            }
+          }
+        }
+      }
     }
   });
 }
 
-function barChart(canvasId, labels, data, label) {
+function barChart(canvasId, labels, data, label, help) {
   const ctx = document.getElementById(canvasId);
   if (!ctx) return; // canvas not present
   if (charts[canvasId]) charts[canvasId].destroy();
   charts[canvasId] = new Chart(ctx, {
     type: 'bar',
-    data: { labels, datasets: [{ label, data }] },
+    data: { labels, datasets: [{ label, data, help }] },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       animation: false,
       resizeDelay: 200,
-      scales: { y: { beginAtZero: true } }
+      scales: { y: { beginAtZero: true } },
+      plugins: {
+        tooltip: {
+          callbacks: {
+            footer: function(tooltipItems) {
+              if (!tooltipItems || !tooltipItems.length) return '';
+              try {
+                const ds = this.chart.data.datasets[tooltipItems[0].datasetIndex];
+                return ds && ds.help ? ds.help : '';
+              } catch (e) { return ''; }
+            }
+          }
+        }
+      }
     }
   });
 }
@@ -312,8 +342,8 @@ function destroyChart(id) {
 function setMeta(meta, count, period) {
   const el = document.getElementById('meta');
   const gids = meta?.groups || [];
-    let info = `Período: ${period.start} a ${period.end} • Tickets: ${count} `;
-    if (typeof meta?.tids === 'number') info += `• Tickets retornados=${meta.tids}`;
+  let info = `Período: ${period.start} a ${period.end} • Tickets: ${count} `;
+  if (typeof meta?.tids === 'number') info += `• Tickets retornados=${meta.tids}`;
   el.textContent = `Meus grupos: [${gids.join(', ')}] • ${info}`;
   // Aging disclaimer badge
   if (meta?.aging_note) {
@@ -404,16 +434,16 @@ async function loadData() {
       charts['chartCumGap'] = new Chart(document.getElementById('chartCumGap'), {
         type: 'line',
         data: { labels: s.created.labels, datasets: [
-          { label: 'Criados (Acum.)', data: cumCreated, borderColor: '#1d4ed8', backgroundColor: 'rgba(29,78,216,0.15)', tension:0.15 },
-          { label: 'Resolvidos (Acum.)', data: cumResolved, borderColor: '#059669', backgroundColor: 'rgba(5,150,105,0.15)', tension:0.15 },
-          { label: 'Gap Cumulativo (Criados - Resolvidos)', data: gap, borderColor: '#dc2626', backgroundColor: 'rgba(220,38,38,0.15)', tension:0.15 }
+          { label: 'Criados (Acum.)', data: cumCreated, borderColor: '#1d4ed8', backgroundColor: 'rgba(29,78,216,0.15)', tension:0.15, help: 'Acumulado de tickets criados desde o início do período selecionado.' },
+          { label: 'Resolvidos (Acum.)', data: cumResolved, borderColor: '#059669', backgroundColor: 'rgba(5,150,105,0.15)', tension:0.15, help: 'Acumulado de tickets resolvidos desde o início do período selecionado.' },
+          { label: 'Gap Cumulativo (Criados - Resolvidos)', data: gap, borderColor: '#dc2626', backgroundColor: 'rgba(220,38,38,0.15)', tension:0.15, help: 'Diferença acumulada entre tickets criados e resolvidos; valores positivos indicam aumento do backlog.' }
         ]},
         options: {
           responsive:true, maintainAspectRatio:false, animation:false, resizeDelay:200,
           interaction:{ mode:'nearest', intersect:false },
           scales:{ y:{ beginAtZero:true } },
           plugins:{ tooltip:{ callbacks:{ label: ctx => {
-            const dsLabel = ctx.dataset.label || ''; return `${dsLabel}: ${ctx.parsed.y}`; } } } }
+            const dsLabel = ctx.dataset.label || ''; return `${dsLabel}: ${ctx.parsed.y}`; }, footer: function(items){ try{ const ds = this.chart.data.datasets[items[0].datasetIndex]; return ds && ds.help ? ds.help : ''; }catch(e){ return ''; } } } } }
         }
       });
       attachPointClick('chartCumGap', s.created.labels, ['created','resolved']);
@@ -425,8 +455,8 @@ async function loadData() {
       const smoothData = (s.backlog_trend && s.backlog_trend.data) ? s.backlog_trend.data : [];
 
       const datasets = [
-        { label: 'Backlog (Tendência)', data: rawData, borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.2)', tension: 0.2 },
-        { label: 'Backlog (Suavizado)', data: smoothData, borderColor: '#7c3aed', backgroundColor: 'rgba(124,58,237,0.15)', tension:0.25 }
+        { label: 'Backlog (Tendência)', data: rawData, borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.2)', tension: 0.2, help: 'Número de tickets em aberto por ponto do período (valor bruto).'},
+        { label: 'Backlog (Suavizado)', data: smoothData, borderColor: '#7c3aed', backgroundColor: 'rgba(124,58,237,0.15)', tension:0.25, help: 'Série suavizada para destacar a tendência do backlog ao longo do tempo.' }
       ];
 
       lineChart('chartBacklogCombined', labels, datasets);
@@ -434,25 +464,25 @@ async function loadData() {
   } else { destroyChart('chartBacklogCombined'); }
 
     // Bar charts
-  if (s.backlog_status && s.backlog_status.data && s.backlog_status.data.length) { barChart('chartBacklogStatus', s.backlog_status.labels, s.backlog_status.data, 'Status'); attachBarClick('chartBacklogStatus', s.backlog_status.labels, 'backlog_status'); } else if (charts['chartBacklogStatus']) { charts['chartBacklogStatus'].destroy(); }
-  if (s.aging && s.aging.data && s.aging.data.length) { barChart('chartAging', s.aging.labels, s.aging.data, 'Aging'); attachBarClick('chartAging', s.aging.labels, 'aging'); } else if (charts['chartAging']) { charts['chartAging'].destroy(); }
-  if (s.category && s.category.data && s.category.data.length) { barChart('chartCat', s.category.labels, s.category.data, 'Categoria'); attachBarClick('chartCat', s.category.labels, 'category'); } else if (charts['chartCat']) { charts['chartCat'].destroy(); }
-  if (s.priority && s.priority.data && s.priority.data.length) { barChart('chartPr', s.priority.labels, s.priority.data, 'Prioridade'); attachBarClick('chartPr', s.priority.labels, 'priority'); } else if (charts['chartPr']) { charts['chartPr'].destroy(); }
-  if (s.impact && s.impact.data && s.impact.data.length) { barChart('chartImp', s.impact.labels, s.impact.data, 'Impacto'); attachBarClick('chartImp', s.impact.labels, 'impact'); } else if (charts['chartImp']) { charts['chartImp'].destroy(); }
+  if (s.backlog_status && s.backlog_status.data && s.backlog_status.data.length) { barChart('chartBacklogStatus', s.backlog_status.labels, s.backlog_status.data, 'Status', 'Distribuição atual dos tickets em aberto por status (snapshot — ignora filtro de período).'); attachBarClick('chartBacklogStatus', s.backlog_status.labels, 'backlog_status'); } else if (charts['chartBacklogStatus']) { charts['chartBacklogStatus'].destroy(); }
+  if (s.aging && s.aging.data && s.aging.data.length) { barChart('chartAging', s.aging.labels, s.aging.data, 'Aging', 'Agrupa tickets abertos por faixas de idade para identificar chamados antigos em backlog (ignora filtro de período).'); attachBarClick('chartAging', s.aging.labels, 'aging'); } else if (charts['chartAging']) { charts['chartAging'].destroy(); }
+  if (s.category && s.category.data && s.category.data.length) { barChart('chartCat', s.category.labels, s.category.data, 'Categoria', 'Distribuição de tickets por categoria no período selecionado. Use para identificar áreas com maior volume.'); attachBarClick('chartCat', s.category.labels, 'category'); } else if (charts['chartCat']) { charts['chartCat'].destroy(); }
+  if (s.priority && s.priority.data && s.priority.data.length) { barChart('chartPr', s.priority.labels, s.priority.data, 'Prioridade', 'Número de tickets agrupados por nível de prioridade. Útil para visualizar criticidade.'); attachBarClick('chartPr', s.priority.labels, 'priority'); } else if (charts['chartPr']) { charts['chartPr'].destroy(); }
+  if (s.impact && s.impact.data && s.impact.data.length) { barChart('chartImp', s.impact.labels, s.impact.data, 'Impacto', 'Distribuição por impacto dos tickets; ajuda a priorizar correções que afetam mais usuários ou sistemas.'); attachBarClick('chartImp', s.impact.labels, 'impact'); } else if (charts['chartImp']) { charts['chartImp'].destroy(); }
   if (s.resolution_hours && s.resolution_hours.data && s.resolution_hours.data.length) {
       const labels = s.resolution_hours.labels;
       const meanData = s.resolution_hours.data;
       const smoothData = (s.resolution_hours_trend && s.resolution_hours_trend.data) ? s.resolution_hours_trend.data : [];
       const datasets = [
-        { label: 'Horas úteis (média)', data: meanData, borderColor: '#0ea5e9', backgroundColor: 'rgba(14,165,233,0.08)', tension:0.15 },
-        { label: 'Horas úteis (suavizado)', data: smoothData, borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.08)', tension:0.25 }
+        { label: 'Horas úteis (média)', data: meanData, borderColor: '#0ea5e9', backgroundColor: 'rgba(14,165,233,0.08)', tension:0.15, help: 'Tempo médio entre abertura e solução em horas úteis; útil para acompanhar SLAs.' },
+        { label: 'Horas úteis (suavizado)', data: smoothData, borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.08)', tension:0.25, help: 'Versão suavizada para destacar tendências de tempo de resolução.' }
       ];
       lineChart('chartResolutionHours', labels, datasets);
   } else { destroyChart('chartResolutionHours'); }
   // refresh hidden state (in case layout toggled visibility before load)
   document.querySelectorAll('.card[data-widget]').forEach(el => { if (el.style.display==='none') return; /* skip hidden */ });
-    if (s.load_by_user) { barChart('chartUser', s.load_by_user.labels, s.load_by_user.data, 'Usuário'); attachBarClick('chartUser', s.load_by_user.labels, 'load_by_user'); }
-    if (s.load_by_group) { barChart('chartGroup', s.load_by_group.labels, s.load_by_group.data, 'Grupo'); attachBarClick('chartGroup', s.load_by_group.labels, 'load_by_group'); }
+  if (s.load_by_user) { barChart('chartUser', s.load_by_user.labels, s.load_by_user.data, 'Usuário', 'Quantidade de tickets abertos por usuário (pode representar solicitante ou responsável conforme configuração).'); attachBarClick('chartUser', s.load_by_user.labels, 'load_by_user'); }
+  if (s.load_by_group) { barChart('chartGroup', s.load_by_group.labels, s.load_by_group.data, 'Grupo', 'Quantidade de tickets por grupo. Útil para identificar equipes com maior carga de chamados.'); attachBarClick('chartGroup', s.load_by_group.labels, 'load_by_group'); }
 
   } catch (e) {
     Toasts.push('error', String(e));
@@ -465,6 +495,55 @@ async function loadData() {
 
 document.getElementById('apply').addEventListener('click', () => loadData());
 window.addEventListener('DOMContentLoaded', () => loadData());
+
+// --- Help popover for small ❔ buttons ---
+function createHelpPopover(text) {
+  const el = document.createElement('div');
+  el.className = 'help-popover';
+  el.tabIndex = -1;
+  el.innerHTML = `<button class="help-close" aria-label="Fechar">×</button><div class="help-popover-inner"></div>`;
+  el.querySelector('.help-popover-inner').textContent = text;
+  el.querySelector('.help-close').addEventListener('click', () => { if (el && el.parentNode) el.parentNode.removeChild(el); });
+  return el;
+}
+
+function attachHelpPopovers() {
+  // Delegated so we can call it after dynamic changes if needed
+  document.querySelectorAll('button.help').forEach(btn => {
+    if (btn._helpAttached) return; // idempotent
+    btn._helpAttached = true;
+    btn.type = 'button';
+    btn.setAttribute('aria-haspopup', 'dialog');
+    btn.setAttribute('aria-expanded', 'false');
+    btn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      // close any other popovers
+      document.querySelectorAll('.help-popover').forEach(p => p.remove());
+      const helpText = btn.getAttribute('title') || btn.dataset.help || '';
+      const pop = createHelpPopover(helpText);
+      document.body.appendChild(pop);
+      // position near button (prefer below-right)
+      const r = btn.getBoundingClientRect();
+      const left = Math.min(window.innerWidth - 16 - 360, r.left + window.scrollX + 6);
+      const top = r.bottom + window.scrollY + 8;
+      pop.style.left = `${left}px`;
+      pop.style.top = `${top}px`;
+      btn.setAttribute('aria-expanded', 'true');
+
+      // close on outside click or Escape
+      function onDocClick(e) {
+        if (!pop.contains(e.target) && e.target !== btn) { pop.remove(); btn.setAttribute('aria-expanded','false'); document.removeEventListener('click', onDocClick); document.removeEventListener('keydown', onEsc); }
+      }
+      function onEsc(e) { if (e.key === 'Escape') { pop.remove(); btn.setAttribute('aria-expanded','false'); document.removeEventListener('click', onDocClick); document.removeEventListener('keydown', onEsc); } }
+      setTimeout(() => document.addEventListener('click', onDocClick));
+      document.addEventListener('keydown', onEsc);
+      // focus popover for keyboard users
+      pop.focus();
+    });
+  });
+}
+
+window.addEventListener('DOMContentLoaded', attachHelpPopovers);
 
 // Preset range buttons: set start/end quickly. Default active = 3 months
 function isoDate(d) { return d.toISOString().slice(0,10); }

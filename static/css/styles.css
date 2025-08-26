@@ -125,3 +125,16 @@ th.sortable .col-resizer:hover { background: rgba(0,0,0,0.12); }
 
 /* Badge para widgets que ignoram o filtro de período */
 .badge-period { font-size:11px; color:#b45309; background:#fef3c7; border:1px solid #fcd34d; padding:2px 4px; border-radius:4px; }
+
+/* Small help button in headings */
+.help { background: transparent; border: none; font-size: 14px; margin-left: 8px; cursor: help; padding: 2px 6px; border-radius: 6px; }
+.help:hover { background: rgba(15,23,42,0.06); }
+
+/* Popover shown when user clicks the small help button */
+.help { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; border:1px solid #e6eef8; background: #f8fafc; color:#0f172a; font-weight:600; line-height:1; padding:0; }
+.help:focus { outline: 2px solid rgba(14,165,233,0.25); }
+
+.help-popover { position: absolute; z-index: 2600; background: #fff; border: 1px solid #e2e8f0; box-shadow: 0 8px 30px rgba(2,6,23,0.12); border-radius: 8px; padding: 10px 12px; max-width: 360px; font-size: 13px; color: #0f172a; }
+.help-popover .help-close { position: absolute; top: 6px; right: 6px; border: none; background: transparent; font-size:14px; cursor:pointer; color:#64748b; }
+.help-popover .help-close:hover { color:#0f172a; }
+.help-popover-inner { white-space: normal; line-height:1.3; }
