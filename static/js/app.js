@@ -1,5 +1,100 @@
 let charts = {};
 const UI_BASE = document.body.getAttribute('data-ui-base') || '';
+// ---- Persistência de filtros (granularidade, categoria, datas, meses, range preset) ----
+const FILTERS_KEY = 'glpiDashboardFilters.v1';
+let _originalDefaults = null; // guarda valores iniciais vindos do backend (primeiro load)
+function captureOriginalDefaultsOnce() {
+  if (_originalDefaults) return;
+  _originalDefaults = {
+    gran: document.getElementById('gran')?.value || '',
+    cat: document.getElementById('catFilter')?.value || '',
+    start: document.getElementById('start')?.value || '',
+    end: document.getElementById('end')?.value || '',
+    startMonth: document.getElementById('startMonth')?.value || '',
+    endMonth: document.getElementById('endMonth')?.value || ''
+  };
+}
+function getActiveRangeDescriptor() {
+  const btn = document.querySelector('.range-btn.active');
+  if (!btn) return { mode: 'none' };
+  if (btn.classList.contains('custom')) return { mode: 'custom' };
+  const { range, days, months } = btn.dataset;
+  if (range) return { mode: 'range', range };
+  if (days) return { mode: 'days', days: Number(days) };
+  if (months) return { mode: 'months', months: Number(months) };
+  return { mode: 'unknown' };
+}
+function saveFilters() {
+  try {
+    const data = {
+      gran: document.getElementById('gran')?.value,
+      cat: document.getElementById('catFilter')?.value,
+      start: document.getElementById('start')?.value,
+      end: document.getElementById('end')?.value,
+      startMonth: document.getElementById('startMonth')?.value,
+      endMonth: document.getElementById('endMonth')?.value,
+      range: getActiveRangeDescriptor()
+    };
+    localStorage.setItem(FILTERS_KEY, JSON.stringify(data));
+  } catch {}
+}
+function applyRangeDescriptor(desc) {
+  if (!desc) return false;
+  const btns = Array.from(document.querySelectorAll('.range-btn'));
+  btns.forEach(b => b.classList.remove('active'));
+  let matched = false;
+  btns.forEach(b => {
+    if (matched) return;
+    if (desc.mode === 'custom' && b.classList.contains('custom')) { b.classList.add('active'); matched = true; return; }
+    if (desc.mode === 'range' && b.dataset.range === desc.range) { b.classList.add('active'); matched = true; return; }
+    if (desc.mode === 'days' && b.dataset.days && Number(b.dataset.days) === desc.days) { b.classList.add('active'); matched = true; return; }
+    if (desc.mode === 'months' && b.dataset.months && Number(b.dataset.months) === desc.months) { b.classList.add('active'); matched = true; return; }
+  });
+  return matched;
+}
+function loadFilters() {
+  captureOriginalDefaultsOnce();
+  let parsed = null;
+  try { parsed = JSON.parse(localStorage.getItem(FILTERS_KEY) || 'null'); } catch { parsed = null; }
+  if (!parsed) return false;
+  try {
+    if (parsed.gran && document.getElementById('gran')) document.getElementById('gran').value = parsed.gran;
+    if (parsed.cat && document.getElementById('catFilter')) document.getElementById('catFilter').value = parsed.cat;
+    if (parsed.start && document.getElementById('start')) document.getElementById('start').value = parsed.start;
+    if (parsed.end && document.getElementById('end')) document.getElementById('end').value = parsed.end;
+    if (parsed.startMonth && document.getElementById('startMonth')) document.getElementById('startMonth').value = parsed.startMonth;
+    if (parsed.endMonth && document.getElementById('endMonth')) document.getElementById('endMonth').value = parsed.endMonth;
+    applyRangeDescriptor(parsed.range);
+    window._filtersRestored = true;
+    toggleDateInputs();
+  } catch {}
+  return true;
+}
+function resetFilters() {
+  try { localStorage.removeItem(FILTERS_KEY); } catch {}
+  if (_originalDefaults) {
+    if (document.getElementById('gran')) document.getElementById('gran').value = _originalDefaults.gran || 'Diário';
+    if (document.getElementById('catFilter')) document.getElementById('catFilter').value = _originalDefaults.cat || 'todos';
+    if (document.getElementById('start')) document.getElementById('start').value = _originalDefaults.start || '';
+    if (document.getElementById('end')) document.getElementById('end').value = _originalDefaults.end || '';
+    if (document.getElementById('startMonth')) document.getElementById('startMonth').value = _originalDefaults.startMonth || '';
+    if (document.getElementById('endMonth')) document.getElementById('endMonth').value = _originalDefaults.endMonth || '';
+  }
+  // range visual volta para 3 meses
+  const btns = Array.from(document.querySelectorAll('.range-btn'));
+  btns.forEach(b => b.classList.remove('active'));
+  const three = document.querySelector('.range-btn[data-months="3"]');
+  if (three) three.classList.add('active');
+  if (three) {
+    const months = Number(three.dataset.months);
+    if (!isNaN(months)) setRangeMonths(months);
+  }
+  toggleDateInputs();
+  saveFilters();
+  loadData();
+}
+// Carrega filtros cedo para evitar corrida com primeiro load
+window.addEventListener('DOMContentLoaded', () => { loadFilters(); });
 const Loader = {
   el: null,
   init() { this.el = document.getElementById('loader'); },
@@ -246,6 +341,8 @@ const WidgetLayout = (() => {
       // width recalibration
       try { const header=document.querySelector('header'); const controls=document.querySelector('.controls'); if(header) header.style.minWidth=''; if(controls) controls.style.minWidth=''; } catch{}
       requestAnimationFrame(()=>requestAnimationFrame(()=>adjustHeaderWidth&&adjustHeaderWidth()));
+  // Também redefinir filtros para valores originais
+  resetFilters();
     });
   }
   return { init };
@@ -516,7 +613,7 @@ async function loadData() {
   }
 }
 
-document.getElementById('apply').addEventListener('click', () => loadData());
+document.getElementById('apply').addEventListener('click', () => { loadData(); saveFilters(); });
 // Removido o loadData inicial antecipado para evitar corrida onde o primeiro carregamento (1 mês)
 // ocorre antes de aplicar o range padrão (3 meses). Agora o primeiro load acontece via
 // clique programático do botão de range default em initRangeButtons().
@@ -738,7 +835,8 @@ function initRangeButtons(){
           if (document.getElementById('endMonth')) document.getElementById('endMonth').value = e;
         }
       } finally { _suppressRangeChange = false; }
-      loadData();
+  loadData();
+  saveFilters();
     });
   });
 
@@ -747,13 +845,19 @@ function initRangeButtons(){
     if (_suppressRangeChange) return; // ignore programmatic changes
     btns.forEach(x => x.classList.remove('active'));
     const custom = document.querySelector('.range-btn.custom'); if (custom) custom.classList.add('active');
+    saveFilters();
   }
   dateInputs.forEach(inp => inp.addEventListener('change', onManualChange));
   monthInputs.forEach(inp => inp.addEventListener('change', onManualChange));
 
-  // default: 3 meses active on load
-  const def = document.querySelector('.range-btn.active');
-  if (def) def.click();
+  // default: só aplica preset se filtros não foram restaurados do storage
+  if (!window._filtersRestored) {
+    const def = document.querySelector('.range-btn.active');
+    if (def) def.click();
+  } else {
+    // filtros restaurados -> garantir primeiro carregamento
+    loadData();
+  }
 }
 window.addEventListener('DOMContentLoaded', initRangeButtons);
 
