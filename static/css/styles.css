@@ -4,6 +4,7 @@ body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarel
 .hidden { display: none !important; }
 header { background: #0f172a; color: #fff; padding: 16px 20px; }
 header h1 { margin: 0; font-size: 20px; }
+.logout-btn { position: absolute; right: 20px; top: 14px; }
 .controls { display: flex; gap: 12px; align-items: center; padding: 12px 20px; background: #fff; border-bottom: 1px solid #e5e7eb; position: sticky; top: 0; z-index: 1000; }
 .controls label { font-size: 14px; }
 .controls input, .controls select, .controls button { padding: 6px 8px; }
@@ -138,3 +139,7 @@ th.sortable .col-resizer:hover { background: rgba(0,0,0,0.12); }
 .help-popover .help-close { position: absolute; top: 6px; right: 6px; border: none; background: transparent; font-size:14px; cursor:pointer; color:#64748b; }
 .help-popover .help-close:hover { color:#0f172a; }
 .help-popover-inner { white-space: normal; line-height:1.3; }
+
+/* logout button in header */
+.logout-btn { color: #fff; background: transparent; border: 1px solid rgba(255,255,255,0.12); padding:6px 10px; border-radius:6px; text-decoration:none; font-size:13px; cursor:pointer; }
+.logout-btn:hover { background: rgba(255,255,255,0.06); }

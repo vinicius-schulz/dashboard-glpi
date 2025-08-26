@@ -19,6 +19,23 @@ PORT=8000
 MAX_TICKETS=800
 ```
 
+Adicionalmente, o dashboard suporta uma autenticação simples (usuário único) controlada por variáveis de ambiente:
+
+```text
+# Habilita/desabilita a exigência de login (true/false). Se 'false', o dashboard abre direto sem pedir credenciais.
+DASHBOARD_ENABLE_AUTHENTICATION=true
+# Usuário e senha (apenas necessários se a autenticação estiver habilitada)
+DASHBOARD_ADMIN=admin
+DASHBOARD_PASSWORD=troca_essa_senha
+# opcional: chave secreta do Flask para sessões
+FLASK_SECRET_KEY=uma_chave_complexa
+```
+
+Notas:
+- Quando `DASHBOARD_ENABLE_AUTHENTICATION` estiver definida como `false` (ou 0/No/Off), o sistema não exigirá login e qualquer pessoa que acesse a URL terá acesso ao dashboard.
+- Se a autenticação estiver habilitada, defina `DASHBOARD_ADMIN` e `DASHBOARD_PASSWORD`. O usuário usa a tela de `/login` para entrar.
+- `FLASK_SECRET_KEY` é recomendada em produção para garantir a integridade das sessões; se não informada, uma chave aleatória será gerada a cada start (invalida sessions entre reinícios).
+
 Observações:
 - `GLPI_URL` normalmente termina com `/apirest.php`.
 - O arquivo `.env` está no `.dockerignore` por segurança e **não** é copiado para a imagem.

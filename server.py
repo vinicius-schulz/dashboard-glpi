@@ -13,7 +13,7 @@ import os
 from typing import Any, Dict, Tuple
 
 import pandas as pd
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, session, redirect, url_for
 from dotenv import load_dotenv
 
 from glpi_client import GLPIClient
@@ -38,6 +38,51 @@ GLPI_URL = os.getenv("GLPI_URL", "").rstrip("/")
 GLPI_USER_TOKEN = os.getenv("GLPI_USER_TOKEN", "")
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
+
+# Authentication: single admin user from env
+DASHBOARD_ADMIN = os.getenv('DASHBOARD_ADMIN')
+DASHBOARD_PASSWORD = os.getenv('DASHBOARD_PASSWORD')
+# session secret
+app.secret_key = os.getenv('FLASK_SECRET_KEY') or os.urandom(24)
+# Feature flag: enable/disable authentication globally (default: enabled)
+# When False, the app does not require login and serves the dashboard directly.
+DASHBOARD_ENABLE_AUTHENTICATION = os.getenv('DASHBOARD_ENABLE_AUTHENTICATION', 'true')
+ENABLE_AUTH = str(DASHBOARD_ENABLE_AUTHENTICATION).strip().lower() in ('1', 'true', 'yes', 'on')
+
+
+def check_credentials(user: str, pwd: str) -> bool:
+    if not DASHBOARD_ADMIN or not DASHBOARD_PASSWORD:
+        return False
+    return str(user) == str(DASHBOARD_ADMIN) and str(pwd) == str(DASHBOARD_PASSWORD)
+
+
+def is_authenticated() -> bool:
+    # session first
+    if session.get('auth'):
+        return True
+    # HTTP Basic header
+    auth = request.authorization
+    if auth and check_credentials(auth.username, auth.password):
+        return True
+    return False
+
+
+@app.before_request
+def require_login():
+    # If authentication is turned off via env, allow all requests
+    if not ENABLE_AUTH:
+        return None
+    # Allow static assets, login page and favicon without auth
+    path = request.path or ''
+    if path.startswith('/static/') or path == '/favicon.ico' or path.startswith('/login'):
+        return None
+    if is_authenticated():
+        return None
+    # API clients should get 401 JSON
+    if path.startswith('/api/'):
+        return jsonify({'error': 'Unauthorized'}), 401, {'WWW-Authenticate': 'Basic realm="Dashboard"'}
+    # otherwise redirect to login page
+    return redirect(url_for('login'))
 
 
 def _series_to_labels_data(s: pd.Series) -> Dict[str, Any]:
@@ -171,6 +216,35 @@ def index():
         default_end=end,
         ui_base=ui_base,
     )
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    # Simple form-based login; also accept Basic Auth
+    notice = None
+    if not DASHBOARD_ADMIN or not DASHBOARD_PASSWORD:
+        notice = 'Autenticação não configurada no servidor. Defina DASHBOARD_ADMIN e DASHBOARD_PASSWORD para habilitar o login.'
+    if request.method == 'GET':
+        return render_template('login.html', notice=notice)
+    # POST
+    user = request.form.get('user')
+    pwd = request.form.get('password')
+    if not DASHBOARD_ADMIN or not DASHBOARD_PASSWORD:
+        # explicit feedback if server not configured
+        return render_template('login.html', error='Autenticação não configurada. Contate o administrador.', notice=notice), 503
+    if not user or not pwd:
+        return render_template('login.html', error='Informe usuário e senha.', notice=notice), 400
+    if check_credentials(user, pwd):
+        session['auth'] = True
+        return redirect(url_for('index'))
+    # invalid credentials -> provide clear feedback
+    return render_template('login.html', error='Usuário ou senha inválidos. Verifique e tente novamente.', notice=notice), 401
+
+
+@app.get('/logout')
+def logout():
+    session.pop('auth', None)
+    return redirect(url_for('login'))
 
 
 @app.get("/api/data")

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Login — Dashboard GLPI</title>
+  <link rel="stylesheet" href="/static/css/styles.css" />
+</head>
+<body>
+  <main style="max-width:420px;margin:60px auto;padding:20px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;">
+    <h2>Login — Dashboard</h2>
+    {% if error %}
+      <div class="toast error" style="margin-bottom:10px">{{ error }}</div>
+    {% endif %}
+    {% if notice %}
+      <div class="toast warning" style="margin-bottom:10px">{{ notice }}</div>
+    {% endif %}
+    <form method="post" action="/login">
+      <label>Usuário<br><input name="user" type="text" required style="width:100%;padding:8px;margin-top:6px" /></label>
+      <label style="display:block;margin-top:8px">Senha<br><input name="password" type="password" required style="width:100%;padding:8px;margin-top:6px" /></label>
+      <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">
+        <button type="submit" style="padding:8px 12px">Entrar</button>
+      </div>
+    </form>
+  </main>
+</body>
+</html>
