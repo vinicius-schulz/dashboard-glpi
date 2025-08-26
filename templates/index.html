@@ -126,10 +126,12 @@
       <button id="lpClose" type="button" title="Fechar">×</button>
     </div>
     <div class="lp-body">
+      {% if enable_auth %}
       <div class="logout-block">
         <div><strong>Encerrar sessão</strong><br><span style="font-size:12px;color:#6b7280">Use esta opção para sair do dashboard com segurança.</span></div>
         <a href="/logout" class="logout-link-modal" title="Sair do dashboard">Sair</a>
       </div>
+      {% endif %}
       <p>Arraste os cards diretamente na área principal para reordenar. Ajuste visibilidade e tamanho abaixo. As preferências ficam salvas neste navegador.</p>
       <div class="lp-config" style="margin-bottom:12px;">
         <label>Auto atualizar (min):

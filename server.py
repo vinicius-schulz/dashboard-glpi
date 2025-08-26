@@ -215,6 +215,7 @@ def index():
         default_start=start,
         default_end=end,
         ui_base=ui_base,
+        enable_auth=ENABLE_AUTH,
     )
 
 
@@ -222,6 +223,9 @@ def index():
 def login():
     # Simple form-based login; also accept Basic Auth
     notice = None
+    # Se autenticação estiver desativada, não faz sentido exibir tela de login
+    if not ENABLE_AUTH:
+        return redirect(url_for('index'))
     if not DASHBOARD_ADMIN or not DASHBOARD_PASSWORD:
         notice = 'Autenticação não configurada no servidor. Defina DASHBOARD_ADMIN e DASHBOARD_PASSWORD para habilitar o login.'
     if request.method == 'GET':
@@ -244,6 +248,9 @@ def login():
 @app.get('/logout')
 def logout():
     session.pop('auth', None)
+    # Se auth desativada, voltar direto para index
+    if not ENABLE_AUTH:
+        return redirect(url_for('index'))
     return redirect(url_for('login'))
 
 
