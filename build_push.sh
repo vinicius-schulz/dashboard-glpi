@@ -41,7 +41,7 @@ succ() { echo -e "${COLOR_GREEN}[OK]${COLOR_RESET} $*"; }
 
 USER_NAME="viniciusschulz"
 IMAGE_NAME="dashboard-glpi"
-VERSION="1.0.11"
+VERSION="1.0.12"
 PLATFORMS=""
 NO_CACHE=0
 NO_PUSH=0
