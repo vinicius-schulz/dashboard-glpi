@@ -128,6 +128,7 @@ const WidgetLayout = (() => {
     { id: 'aging', cols: 8, rows: 8, visible: true },
   { id: 'openToday', cols: 8, rows: 8, visible: true },
   { id: 'createdToday', cols: 8, rows: 8, visible: true },
+  { id: 'resolvedToday', cols: 8, rows: 8, visible: true },
     { id: 'category', cols: 8, rows: 8, visible: true },
     { id: 'priority', cols: 8, rows: 8, visible: true },
     { id: 'impact', cols: 8, rows: 8, visible: true }
@@ -474,6 +475,11 @@ window.addEventListener('DOMContentLoaded', () => {
     ctd.style.cursor = 'pointer';
     ctd.addEventListener('click', () => openTicketsModal('created_today', 'Criados Hoje'));
   }
+  const rtd = document.getElementById('resolvedTodayValue');
+  if (rtd) {
+    rtd.style.cursor = 'pointer';
+    rtd.addEventListener('click', () => openTicketsModal('resolved_today', 'Resolvidos Hoje'));
+  }
 });
 
 // ---- Month range controls for "Mensal" granularity ----
@@ -703,6 +709,10 @@ async function loadData() {
     if (typeof js.created_today === 'number') {
       const el2 = document.getElementById('createdTodayValue');
       if (el2) el2.textContent = js.created_today.toLocaleString('pt-BR');
+    }
+    if (typeof js.resolved_today === 'number') {
+      const el3 = document.getElementById('resolvedTodayValue');
+      if (el3) el3.textContent = js.resolved_today.toLocaleString('pt-BR');
     }
 
   const s = js.series || {};
