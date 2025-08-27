@@ -590,12 +590,18 @@ async function loadData() {
 
   const catSel = document.getElementById('catFilter').value;
   const r = await fetch(`/api/data?gran=${encodeURIComponent(gran)}&start=${startNorm}&end=${endNorm}&cat=${encodeURIComponent(catSel)}`);
-    if (!r.ok) {
-      const txt = await r.text().catch(() => '');
-      throw new Error(`HTTP ${r.status}: ${txt.slice(0,200)}`);
+    let js = null;
+    try { js = await r.clone().json(); } catch { /* ignore parse errors */ }
+    if (r.status === 503) {
+      const friendly = (js && (js.mensagem || js.message)) || 'Serviço temporariamente indisponível.';
+      Toasts.push('error', friendly);
+      return; // encerra sem lançar erro técnico
     }
-    const js = await r.json();
-    if (js.error) throw new Error(js.error);
+    if (!r.ok) {
+      const msg = (js && (js.mensagem || js.message || js.error)) || `Falha (HTTP ${r.status})`;
+      throw new Error(msg);
+    }
+    if (js && js.error) throw new Error(js.error);
 
   setMeta(js.meta || {}, js.count || 0, js.period || {});
   lastMeta = js.meta || null;
@@ -1192,12 +1198,19 @@ async function openTicketsModal(source, label) {
   document.body.style.cursor = 'progress';
   try {
   const r = await fetch(`/api/tickets?${params.toString()}`);
-    if (!r.ok) {
-      const txt = await r.text().catch(() => '');
-      throw new Error(`HTTP ${r.status}: ${txt.slice(0,200)}`);
+    let js = null;
+    try { js = await r.clone().json(); } catch { /* ignore */ }
+    if (r.status === 503) {
+      const friendly = (js && (js.mensagem || js.message)) || 'Serviço temporariamente indisponível.';
+      modal.info.textContent = friendly;
+      Toasts.push('warn', friendly);
+      return;
     }
-    const js = await r.json();
-    if (js.error) throw new Error(js.error);
+    if (!r.ok) {
+      const msg = (js && (js.mensagem || js.message || js.error)) || `Falha (HTTP ${r.status})`;
+      throw new Error(msg);
+    }
+    if (js && js.error) throw new Error(js.error);
     modal.info.textContent = `Total no filtro: ${js.count} • Mostrando: ${js.returned}`;
   const rows = js.tickets || [];
   TicketTable.setRows(rows);

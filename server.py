@@ -53,19 +53,46 @@ ENABLE_AUTH = str(DASHBOARD_ENABLE_AUTHENTICATION).strip().lower() in ('1', 'tru
 
 
 def is_glpi_operational(timeout: int = 5) -> Tuple[bool, str]:
-    """Quick health check for the GLPI backend.
+    """Checa disponibilidade básica do GLPI com uma única chamada HTTP.
 
-    Returns (True, "ok") if GLPI responds to initSession, otherwise (False, message).
-    This is intentionally lightweight and uses a short timeout.
+    Timeout é limitado a no máximo 30s. Retorna (True, 'ok') em sucesso.
     """
     if not GLPI_URL or not GLPI_USER_TOKEN:
         return False, "GLPI_URL ou GLPI_USER_TOKEN não configurados"
+    use_timeout = min(max(int(timeout or 5), 1), 30)
     try:
-        client = GLPIClient(GLPI_URL, GLPI_USER_TOKEN)
-        # attempt to init session without full session payload to keep check light
-        client.init_session(get_full=False)
-        client.kill_session()
-        return True, "ok"
+        base = GLPI_URL.rstrip('/')
+        if not base.endswith('/apirest.php'):
+            base = base + '/apirest.php'
+        url = f"{base}/initSession"
+        r = requests.get(
+            url,
+            headers={
+                'Authorization': f'user_token {GLPI_USER_TOKEN}',
+                'Accept': 'application/json'
+            },
+            params={'get_full_session': 'false'},
+            timeout=use_timeout,
+            allow_redirects=False
+        )
+        if r.is_redirect or r.is_permanent_redirect:
+            return False, 'Redirect detectado (verifique GLPI_URL)'
+        if r.status_code >= 400:
+            snippet = ''
+            try:
+                snippet = r.text[:150]
+            except Exception:
+                pass
+            return False, f'HTTP {r.status_code} {snippet}'
+        try:
+            js = r.json()
+        except Exception:
+            return False, 'Resposta não JSON'
+        if isinstance(js, dict) and (js.get('session_token') or js.get('session')):
+            return True, 'ok'
+        return False, 'Resposta inesperada'
+    except requests.exceptions.Timeout:
+        return False, 'Timeout'
     except Exception as e:
         return False, str(e)
 
@@ -89,31 +116,15 @@ def is_authenticated() -> bool:
 
 @app.before_request
 def require_login():
-    # If authentication is turned off via env, allow all requests
     if not ENABLE_AUTH:
         return None
-    # Allow static assets, login page and favicon without auth
     path = request.path or ''
-    # allow health probe without auth
     if path.startswith('/static/') or path == '/favicon.ico' or path.startswith('/login') or path == '/health':
         return None
     if is_authenticated():
-        # If authenticated, ensure GLPI backend is reachable before serving API or pages
-        try:
-            ok, msg = is_glpi_operational(timeout=5)
-        except Exception:
-            ok, msg = False, "erro ao checar GLPI"
-        if not ok:
-            # API clients get JSON 503
-            if path.startswith('/api/'):
-                return jsonify({'error': 'GLPI indisponível', 'detail': msg}), 503
-            # Browser clients get a simple HTML 503 page
-            return (f"<h2>Serviço indisponível</h2><p>Não foi possível conectar ao serviço GLPI.</p>" , 503)
         return None
-    # API clients should get 401 JSON
     if path.startswith('/api/'):
         return jsonify({'error': 'Unauthorized'}), 401, {'WWW-Authenticate': 'Basic realm="Dashboard"'}
-    # otherwise redirect to login page
     return redirect(url_for('login'))
 
 
@@ -285,10 +296,6 @@ def login():
     # POST
     user = request.form.get('user')
     pwd = request.form.get('password')
-    # Before attempting login, ensure GLPI backend is reachable
-    ok, msg = is_glpi_operational(timeout=5)
-    if not ok:
-        return render_template('login.html', error=f'Serviço GLPI indisponível: {msg}', notice=notice), 503
     if not DASHBOARD_ADMIN or not DASHBOARD_PASSWORD:
         # explicit feedback if server not configured
         return render_template('login.html', error='Autenticação não configurada. Contate o administrador.', notice=notice), 503
@@ -331,6 +338,10 @@ def api_data():
       expomos metadados para possível uso futuro).
     """
     try:
+        # Verifica rapidamente disponibilidade do GLPI apenas agora (não bloqueia login)
+        ok_glpi, msg_glpi = is_glpi_operational(timeout=10)
+        if not ok_glpi:
+            return jsonify({"mensagem": "O GLPI está temporariamente indisponível. Tente novamente em alguns instantes."}), 503
         # --- Params ---
         gran = request.args.get("gran", "Diário")
         mode = request.args.get("mode", "bulk").lower()
@@ -543,6 +554,9 @@ def api_tickets():
     - baseline=1 indica que start/end representam a janela baseline de 6 meses
     """
     try:
+        ok_glpi, msg_glpi = is_glpi_operational(timeout=10)
+        if not ok_glpi:
+            return jsonify({"mensagem": "O GLPI está temporariamente indisponível. Tente novamente em alguns instantes."}), 503
         gran = request.args.get("gran", "Diário")
         mode = request.args.get("mode", "bulk").lower()
         start_s = request.args.get("start")
