@@ -1259,6 +1259,7 @@ async function openTicketsModal(source, label) {
 
   // Enviar também userStart/userEnd para o backend poder restringir as séries que respeitam filtro
   const catSel = document.getElementById('catFilter').value;
+  const assignedSel = document.getElementById('assignedGroupFilter') ? document.getElementById('assignedGroupFilter').value : 'todos';
   const params = new URLSearchParams({
     gran,
     start: bstart,
@@ -1269,6 +1270,7 @@ async function openTicketsModal(source, label) {
     uend: userEnd,
     baseline: needBaseline ? '1' : '0',
     cat: catSel
+    , assigned_group: assignedSel
   });
 
   modal.title.textContent = `Chamados — ${source} · ${label}`;

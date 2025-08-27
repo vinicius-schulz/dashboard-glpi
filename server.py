@@ -539,6 +539,7 @@ def api_data():
         try:
             if baseline_df is not None and not baseline_df.empty and 'assigned_group' in baseline_df.columns:
                 seen = set()
+                gids_to_resolve = []
                 for val in baseline_df['assigned_group'].dropna().unique():
                     # val may be dict expanded, id, or text
                     gid = None; gname = None
@@ -557,6 +558,27 @@ def api_data():
                         continue
                     seen.add(key)
                     assigned_groups.append({"id": gid if gid is not None else gname, "name": gname if gname is not None else (str(gid) if gid is not None else str(gname))})
+                    if gid is not None and (gname is None or gname == str(gid)):
+                        gids_to_resolve.append(gid)
+                # Resolve numeric gids to human names via GLPI if any unresolved
+                if gids_to_resolve and GLPI_URL and GLPI_USER_TOKEN:
+                    client = GLPIClient(GLPI_URL, GLPI_USER_TOKEN)
+                    try:
+                        client.init_session(get_full=False)
+                        cache = {}
+                        for i, ag in enumerate(assigned_groups):
+                            try:
+                                if isinstance(ag.get('id'), int):
+                                    name = _resolve_group_name(client, ag['id'], cache)
+                                    if name:
+                                        assigned_groups[i]['name'] = name
+                            except Exception:
+                                continue
+                    finally:
+                        try:
+                            client.kill_session()
+                        except Exception:
+                            pass
         except Exception:
             assigned_groups = []
 
@@ -687,6 +709,33 @@ def api_tickets():
                 elif cat_filter == "unimed":
                     df = df[~mask_h].copy()
                 meta["cat_filter"] = cat_filter
+        # Apply assigned_group filter (same semantics as /api/data)
+        assigned_group_param = request.args.get('assigned_group', 'todos')
+
+        def filter_assigned_group(df: pd.DataFrame) -> pd.DataFrame:
+            if df is None or df.empty or assigned_group_param in (None, '', 'todos'):
+                return df
+            try:
+                aid = int(float(assigned_group_param))
+                def match(row):
+                    val = row.get('assigned_group')
+                    if isinstance(val, dict):
+                        try:
+                            return int(val.get('id')) == aid
+                        except Exception:
+                            return False
+                    try:
+                        return int(float(val)) == aid
+                    except Exception:
+                        return False
+                return df[df.apply(match, axis=1)].copy()
+            except Exception:
+                if 'assigned_group' in df.columns and df['assigned_group'].dtype == object:
+                    s = df['assigned_group'].astype(str).fillna('')
+                    return df[s == assigned_group_param].copy()
+                return df
+
+        df = filter_assigned_group(df)
         if df is None or df.empty:
             return jsonify({"meta": meta, "count": 0, "tickets": []})
 
