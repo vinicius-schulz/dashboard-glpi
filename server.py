@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 from typing import Any, Dict, Tuple
+from datetime import datetime
 
 import pandas as pd
 from flask import Flask, jsonify, render_template, request, session, redirect, url_for
@@ -74,7 +75,8 @@ def require_login():
         return None
     # Allow static assets, login page and favicon without auth
     path = request.path or ''
-    if path.startswith('/static/') or path == '/favicon.ico' or path.startswith('/login'):
+    # allow health probe without auth
+    if path.startswith('/static/') or path == '/favicon.ico' or path.startswith('/login') or path == '/health':
         return None
     if is_authenticated():
         return None
@@ -217,6 +219,26 @@ def index():
         ui_base=ui_base,
         enable_auth=ENABLE_AUTH,
     )
+
+
+@app.get("/health")
+def health():
+    """Lightweight health endpoint intended for Kubernetes liveness/readiness probes.
+
+    This endpoint is explicitly allowed without authentication in `require_login()`.
+    """
+    try:
+        now = datetime.utcnow().isoformat() + "Z"
+        payload = {
+            "status": "ok",
+            "time": now,
+            "service": "dashboard-glpi",
+            "version": os.getenv("APP_VERSION", "unknown"),
+            "auth_enabled": ENABLE_AUTH,
+        }
+        return jsonify(payload)
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
 
 
 @app.route('/login', methods=['GET', 'POST'])
