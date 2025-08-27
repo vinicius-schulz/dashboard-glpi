@@ -132,6 +132,7 @@ const WidgetLayout = (() => {
     { id: 'category', cols: 8, rows: 8, visible: true },
     { id: 'priority', cols: 8, rows: 8, visible: true },
     { id: 'impact', cols: 8, rows: 8, visible: true }
+  ,{ id: 'load_by_group', cols: 8, rows: 8, visible: true }
   ,{ id: 'resolutionHours', cols: 8, rows: 8, visible: true }
   ].map((w,i) => ({...w, order: i}));
   // Grid cell size (px) for snap positioning
@@ -809,7 +810,23 @@ async function loadData() {
   // refresh hidden state (in case layout toggled visibility before load)
   document.querySelectorAll('.card[data-widget]').forEach(el => { if (el.style.display==='none') return; /* skip hidden */ });
   if (s.load_by_user) { barChart('chartUser', s.load_by_user.labels, s.load_by_user.data, 'Usuário', 'Quantidade de tickets abertos por usuário (pode representar solicitante ou responsável conforme configuração).'); attachBarClick('chartUser', s.load_by_user.labels, 'load_by_user'); }
-  if (s.load_by_group) { barChart('chartGroup', s.load_by_group.labels, s.load_by_group.data, 'Grupo', 'Quantidade de tickets por grupo. Útil para identificar equipes com maior carga de chamados.'); attachBarClick('chartGroup', s.load_by_group.labels, 'load_by_group'); }
+  if (s.load_by_group) {
+    // Sort groups by descending count so bars show from largest to smallest
+    try {
+      const labels = (s.load_by_group.labels || []).slice();
+      const data = (s.load_by_group.data || []).slice();
+      const pairs = labels.map((lab, i) => ({ lab, val: Number(data[i] || 0) }));
+      pairs.sort((a,b) => b.val - a.val);
+      const sortedLabels = pairs.map(p => p.lab);
+      const sortedData = pairs.map(p => p.val);
+      barChart('chartGroup', sortedLabels, sortedData, 'Grupo', 'Quantidade de tickets por grupo. Útil para identificar equipes com maior carga de chamados.');
+      attachBarClick('chartGroup', sortedLabels, 'load_by_group');
+    } catch (e) {
+      // fallback to unsorted
+      barChart('chartGroup', s.load_by_group.labels, s.load_by_group.data, 'Grupo', 'Quantidade de tickets por grupo. Útil para identificar equipes com maior carga de chamados.');
+      attachBarClick('chartGroup', s.load_by_group.labels, 'load_by_group');
+    }
+  }
 
   } catch (e) {
     Toasts.push('error', String(e));

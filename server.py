@@ -825,14 +825,39 @@ def api_tickets():
         elif source in ("load_by_user", "load_by_group"):
             base = df_strict
             col = "assigned_user" if source == "load_by_user" else "assigned_group"
+            sel = pd.DataFrame()
+            # First try numeric id matching (handles raw ids stored as int/float or dict with 'id')
             try:
-                v = int(float(label))
+                aid = int(float(label))
+                def match_id(row):
+                    val = row.get(col)
+                    if isinstance(val, dict):
+                        try:
+                            return int(val.get('id')) == aid
+                        except Exception:
+                            return False
+                    try:
+                        return int(float(val)) == aid
+                    except Exception:
+                        return False
+                sel = base[base.apply(match_id, axis=1)].copy()
             except Exception:
-                v = None
-            if v is None:
-                sel = base[base[col].isna()]
-            else:
-                sel = base[base[col] == v]
+                # Fallback: try textual/name matching (handles dicts with 'completename'/'name' or plain text)
+                if col in base.columns and base[col].dtype == object:
+                    def match_name(row):
+                        val = row.get(col)
+                        if isinstance(val, dict):
+                            name = val.get('completename') or val.get('name') or ""
+                            return str(name) == str(label)
+                        else:
+                            return str(val) == str(label)
+                    sel = base[base.apply(match_name, axis=1)].copy()
+                else:
+                    # As a last resort compare stringified values
+                    try:
+                        sel = base[base[col].astype(str) == str(label)].copy()
+                    except Exception:
+                        sel = pd.DataFrame()
         else:
             sel = df_strict
 
