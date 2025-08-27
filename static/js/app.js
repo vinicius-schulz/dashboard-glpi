@@ -8,6 +8,7 @@ function captureOriginalDefaultsOnce() {
   _originalDefaults = {
     gran: document.getElementById('gran')?.value || '',
     cat: document.getElementById('catFilter')?.value || '',
+  assignedGroup: document.getElementById('assignedGroupFilter')?.value || 'todos',
     start: document.getElementById('start')?.value || '',
     end: document.getElementById('end')?.value || '',
     startMonth: document.getElementById('startMonth')?.value || '',
@@ -29,6 +30,7 @@ function saveFilters() {
     const data = {
       gran: document.getElementById('gran')?.value,
       cat: document.getElementById('catFilter')?.value,
+  assignedGroup: document.getElementById('assignedGroupFilter')?.value,
       start: document.getElementById('start')?.value,
       end: document.getElementById('end')?.value,
       startMonth: document.getElementById('startMonth')?.value,
@@ -60,6 +62,7 @@ function loadFilters() {
   try {
     if (parsed.gran && document.getElementById('gran')) document.getElementById('gran').value = parsed.gran;
     if (parsed.cat && document.getElementById('catFilter')) document.getElementById('catFilter').value = parsed.cat;
+  if (parsed.assignedGroup && document.getElementById('assignedGroupFilter')) document.getElementById('assignedGroupFilter').value = parsed.assignedGroup;
     if (parsed.start && document.getElementById('start')) document.getElementById('start').value = parsed.start;
     if (parsed.end && document.getElementById('end')) document.getElementById('end').value = parsed.end;
     if (parsed.startMonth && document.getElementById('startMonth')) document.getElementById('startMonth').value = parsed.startMonth;
@@ -633,8 +636,9 @@ async function loadData() {
       endNorm = end;
     }
 
-  const catSel = document.getElementById('catFilter').value;
-  const r = await fetch(`/api/data?gran=${encodeURIComponent(gran)}&start=${startNorm}&end=${endNorm}&cat=${encodeURIComponent(catSel)}`);
+    const catSel = document.getElementById('catFilter').value;
+    const assignedSel = (document.getElementById('assignedGroupFilter') && document.getElementById('assignedGroupFilter').value) || 'todos';
+  const r = await fetch(`/api/data?gran=${encodeURIComponent(gran)}&start=${startNorm}&end=${endNorm}&cat=${encodeURIComponent(catSel)}&assigned_group=${encodeURIComponent(assignedSel)}`);
     let js = null;
     try { js = await r.clone().json(); } catch { /* ignore parse errors */ }
     if (r.status === 503) {
@@ -663,6 +667,30 @@ async function loadData() {
 
   const s = js.series || {};
   lastSeries = s;
+    // Populate assigned group filter if backend provided
+    try {
+      const sel = document.getElementById('assignedGroupFilter');
+      if (sel && s && typeof js === 'object' && js.assigned_groups) {
+        // preserve current selection
+        const current = sel.value || 'todos';
+        // ensure 'Todos' option exists
+        if (!sel.querySelector('option[value="todos"]')) {
+          const opt = document.createElement('option'); opt.value = 'todos'; opt.textContent = 'Todos'; sel.appendChild(opt);
+        }
+        // Add options only if not present (avoid reordering)
+        js.assigned_groups.forEach(g => {
+          const val = g.id === null || g.id === undefined ? String(g.name) : String(g.id);
+          if (!sel.querySelector(`option[value="${val}"]`)) {
+            const o = document.createElement('option');
+            o.value = val;
+            o.textContent = g.name || String(g.id);
+            sel.appendChild(o);
+          }
+        });
+        // restore selection if still available
+        if (sel.querySelector(`option[value="${current}"]`)) sel.value = current;
+      }
+    } catch (e) { /* ignore populate errors */ }
     // Line charts
   if (s.created && s.resolved && s.created.data && s.resolved.data && s.created.data.length && s.resolved.data.length && document.getElementById('chartCumGap')) {
       const cumCreated = []; const cumResolved = []; const gap = [];
@@ -746,12 +774,13 @@ async function loadData() {
 function bindAutoFilterReload() {
   const granSel = document.getElementById('gran');
   const catSel = document.getElementById('catFilter');
+  const assignedSel = document.getElementById('assignedGroupFilter');
   const startInp = document.getElementById('start');
   const endInp = document.getElementById('end');
   const startMonthInp = document.getElementById('startMonth');
   const endMonthInp = document.getElementById('endMonth');
   const fire = () => { saveFilters(); loadData(); };
-  [granSel, catSel, startInp, endInp, startMonthInp, endMonthInp].forEach(el => {
+  [granSel, catSel, assignedSel, startInp, endInp, startMonthInp, endMonthInp].forEach(el => {
     if (!el) return;
     el.addEventListener('change', () => {
       // range buttons já chamam loadData; não duplicar se for preset (detecção básica)

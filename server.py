@@ -369,6 +369,9 @@ def api_data():
         user_df, user_meta = _fetch_data(user_start, user_end, mode=mode)
         meta = {**baseline_meta, "tids_baseline": baseline_meta.get("tids"), "tids_user": user_meta.get("tids")}
 
+        # Optional assigned_group filter from query params (sent by frontend)
+        assigned_group_param = request.args.get('assigned_group', 'todos')
+
         def filter_category(df: pd.DataFrame) -> pd.DataFrame:
             if df is None or df.empty or cat_filter == "todos":
                 return df
@@ -393,6 +396,37 @@ def api_data():
 
         baseline_df = filter_category(baseline_df)
         user_df = filter_category(user_df)
+
+        # Apply assigned_group filter to both datasets if provided
+        def filter_assigned_group(df: pd.DataFrame) -> pd.DataFrame:
+            if df is None or df.empty or assigned_group_param in (None, '', 'todos'):
+                return df
+            # assigned_group in rows may be dict (expanded) or id or text; handle common cases
+            try:
+                # try numeric id
+                aid = int(float(assigned_group_param))
+                # match either numeric stored as int/float or dict with 'id'
+                def match(row):
+                    val = row.get('assigned_group')
+                    if isinstance(val, dict):
+                        try:
+                            return int(val.get('id')) == aid
+                        except Exception:
+                            return False
+                    try:
+                        return int(float(val)) == aid
+                    except Exception:
+                        return False
+                return df[df.apply(match, axis=1)].copy()
+            except Exception:
+                # fallback: match text name
+                if 'assigned_group' in df.columns and df['assigned_group'].dtype == object:
+                    s = df['assigned_group'].astype(str).fillna('')
+                    return df[s == assigned_group_param].copy()
+                return df
+
+        baseline_df = filter_assigned_group(baseline_df)
+        user_df = filter_assigned_group(user_df)
 
         # If user filtered dataset empty -> return baseline widgets + empty filtered ones
         if user_df is None or user_df.empty:
@@ -500,6 +534,32 @@ def api_data():
         created_today_count = int(created_today_mask.sum())
         load = load_by_assignee(df_strict)
 
+        # Build list of unique assigned groups from baseline window for the filter dropdown
+        assigned_groups = []
+        try:
+            if baseline_df is not None and not baseline_df.empty and 'assigned_group' in baseline_df.columns:
+                seen = set()
+                for val in baseline_df['assigned_group'].dropna().unique():
+                    # val may be dict expanded, id, or text
+                    gid = None; gname = None
+                    if isinstance(val, dict):
+                        gid = val.get('id')
+                        gname = val.get('completename') or val.get('name') or None
+                    else:
+                        s = str(val)
+                        # if purely numeric, treat as id
+                        if s.isdigit():
+                            gid = int(s)
+                        else:
+                            gname = s
+                    key = (gid if gid is not None else gname)
+                    if key is None or key in seen:
+                        continue
+                    seen.add(key)
+                    assigned_groups.append({"id": gid if gid is not None else gname, "name": gname if gname is not None else (str(gid) if gid is not None else str(gname))})
+        except Exception:
+            assigned_groups = []
+
         def map_series_labels(s: pd.Series, mapper: dict):
             if s is None or s.empty:
                 return s
@@ -546,6 +606,7 @@ def api_data():
                       "ignore_period_widgets": ["aging","backlog_status","open_today","created_today"]},
             "count": int(len(df_strict)),
             "period": {"start": start_s, "end": end_s, "gran": gran},
+            "assigned_groups": assigned_groups,
             "series": {
                 "created": _series_to_labels_data(created),
                 "resolved": _series_to_labels_data(resolved),
