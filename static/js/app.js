@@ -530,6 +530,51 @@ function barChart(canvasId, labels, data, label, help) {
   });
 }
 
+// Novo: gráfico de barras empilhadas
+function stackedBarChart(canvasId, stackedSeries, help) {
+  const ctx = document.getElementById(canvasId);
+  if (!ctx) return;
+  if (charts[canvasId]) charts[canvasId].destroy();
+  const labels = stackedSeries.labels || [];
+  const datasetsRaw = stackedSeries.datasets || [];
+  // Paleta de cores consistente (extendida se necessário)
+  const palette = [
+    '#1d4ed8','#059669','#f59e0b','#dc2626','#7c3aed','#0ea5e9','#10b981','#6366f1','#ef4444','#14b8a6'
+  ];
+  const datasets = datasetsRaw.map((d, i) => ({
+    label: d.label,
+    data: d.data,
+    backgroundColor: palette[i % palette.length],
+    borderColor: palette[i % palette.length],
+    borderWidth: 1,
+    stack: 'status'
+  }));
+  charts[canvasId] = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      resizeDelay: 200,
+      scales: { x: { stacked: true }, y: { beginAtZero: true, stacked: true } },
+      plugins: {
+        tooltip: {
+          callbacks: {
+            footer: function(items){
+              // Somatório total daquela barra
+              if (!items || !items.length) return '';
+              const total = items.reduce((acc, it) => acc + (it.parsed.y||0), 0);
+              return `Total: ${total}` + (help ? `\n${help}` : '');
+            }
+          }
+        },
+        legend: { position: 'bottom' }
+      }
+    }
+  });
+}
+
 function destroyChart(id) {
   if (charts[id]) {
     try { charts[id].destroy(); } catch(e) {}
@@ -663,7 +708,14 @@ async function loadData() {
     // Bar charts
   if (s.backlog_status && s.backlog_status.data && s.backlog_status.data.length) { barChart('chartBacklogStatus', s.backlog_status.labels, s.backlog_status.data, 'Status', 'Distribuição atual dos tickets em aberto por status (snapshot — ignora filtro de período).'); attachBarClick('chartBacklogStatus', s.backlog_status.labels, 'backlog_status'); } else if (charts['chartBacklogStatus']) { charts['chartBacklogStatus'].destroy(); }
   if (s.aging && s.aging.data && s.aging.data.length) { barChart('chartAging', s.aging.labels, s.aging.data, 'Aging', 'Agrupa tickets abertos por faixas de idade para identificar chamados antigos em backlog (ignora filtro de período).'); attachBarClick('chartAging', s.aging.labels, 'aging'); } else if (charts['chartAging']) { charts['chartAging'].destroy(); }
-  if (s.category && s.category.data && s.category.data.length) { barChart('chartCat', s.category.labels, s.category.data, 'Categoria', 'Distribuição de tickets por categoria no período selecionado. Use para identificar áreas com maior volume.'); attachBarClick('chartCat', s.category.labels, 'category'); } else if (charts['chartCat']) { charts['chartCat'].destroy(); }
+  // Categoria: se existir série empilhada (category_stacked) usar empilhada; senão fallback simples
+  if (s.category_stacked && s.category_stacked.labels && s.category_stacked.labels.length && s.category_stacked.datasets && s.category_stacked.datasets.length) {
+    stackedBarChart('chartCat', s.category_stacked, 'Distribuição de tickets por categoria subdividida por status (barras empilhadas) no período selecionado.');
+    attachBarClick('chartCat', s.category_stacked.labels, 'category');
+  } else if (s.category && s.category.data && s.category.data.length) {
+    barChart('chartCat', s.category.labels, s.category.data, 'Categoria', 'Distribuição de tickets por categoria no período selecionado. Use para identificar áreas com maior volume.');
+    attachBarClick('chartCat', s.category.labels, 'category');
+  } else if (charts['chartCat']) { charts['chartCat'].destroy(); }
   if (s.priority && s.priority.data && s.priority.data.length) { barChart('chartPr', s.priority.labels, s.priority.data, 'Prioridade', 'Número de tickets agrupados por nível de prioridade. Útil para visualizar criticidade.'); attachBarClick('chartPr', s.priority.labels, 'priority'); } else if (charts['chartPr']) { charts['chartPr'].destroy(); }
   if (s.impact && s.impact.data && s.impact.data.length) { barChart('chartImp', s.impact.labels, s.impact.data, 'Impacto', 'Distribuição por impacto dos tickets; ajuda a priorizar correções que afetam mais usuários ou sistemas.'); attachBarClick('chartImp', s.impact.labels, 'impact'); } else if (charts['chartImp']) { charts['chartImp'].destroy(); }
   if (s.resolution_hours && s.resolution_hours.data && s.resolution_hours.data.length) {

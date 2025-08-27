@@ -464,11 +464,25 @@ def api_data():
             cat_filtered = pd.Series(dtype=float)
             pr_filtered = pd.Series(dtype=float)
             imp_filtered = pd.Series(dtype=float)
+            cat_status_pivot = pd.DataFrame()
         else:
             created, resolved, _discard = created_resolved(df_strict, freq=freq)
             _c_ext, _r_ext, backlog_ext = created_resolved(df_extended, freq=freq)
             backlog_trend = backlog_trend_series(backlog_ext)
             cat_filtered, pr_filtered, imp_filtered = composition(df_strict)
+            # --- Nova pivot de categorias por status (para barras empilhadas) ---
+            try:
+                tmp_cat = df_strict[['category', 'status']].copy()
+                # Mapear status numérico para nome legível
+                tmp_cat['status_name'] = tmp_cat['status'].apply(lambda x: STATUS_MAP.get(int(x), str(x)) if pd.notna(x) else 'Desconhecido')
+                # Pivot: linhas = categoria, colunas = status_name
+                cat_status_pivot = tmp_cat.groupby(['category', 'status_name']).size().unstack(fill_value=0)
+                # Manter apenas categorias presentes em cat_filtered (top N) e na mesma ordem
+                if not cat_filtered.empty:
+                    ordered_index = [c for c in cat_filtered.index if c in cat_status_pivot.index]
+                    cat_status_pivot = cat_status_pivot.reindex(ordered_index)
+            except Exception:
+                cat_status_pivot = pd.DataFrame()
 
         # Resolution hours by solved_at in window
         solved_dt_ext = pd.to_datetime(df_extended["solved_at"], errors="coerce")
@@ -505,6 +519,26 @@ def api_data():
         pr_named = map_series_labels(pr_filtered, LEVEL_MAP)
         imp_named = map_series_labels(imp_filtered, LEVEL_MAP)
 
+        # Preparar datasets empilhados de categoria por status
+        category_stacked_payload = {"labels": [], "datasets": []}
+        if 'cat_status_pivot' not in locals():
+            cat_status_pivot = pd.DataFrame()
+        if cat_status_pivot is not None and not cat_status_pivot.empty:
+            category_stacked_payload['labels'] = [str(i) for i in cat_status_pivot.index]
+            # Ordem de status conforme STATUS_MAP; incluir somente presentes
+            status_order = [v for _, v in STATUS_MAP.items() if v in cat_status_pivot.columns]
+            # Acrescentar quaisquer outros status inesperados
+            for extra in [c for c in cat_status_pivot.columns if c not in status_order]:
+                status_order.append(extra)
+            for st in status_order:
+                vals = cat_status_pivot.get(st)
+                if vals is None:
+                    continue
+                category_stacked_payload['datasets'].append({
+                    'label': st,
+                    'data': [int(v) for v in vals.values]
+                })
+
         payload = {
             "meta": {**meta,
                       "baseline_window": {"start": str(baseline_start.date()), "end": str(baseline_end.date()), "used": True},
@@ -518,6 +552,7 @@ def api_data():
                 "backlog": _series_to_labels_data(backlog_ext),
                 "backlog_trend": _series_to_labels_data(backlog_trend) if backlog_trend is not None else {"labels": [], "data": []},
                 "category": _dict_to_labels_data(cat_filtered),
+                "category_stacked": category_stacked_payload,
                 "resolution_hours": _series_to_labels_data(resolution_hours_series),
                 "resolution_hours_trend": _series_to_labels_data(resolution_hours_trend) if resolution_hours_trend is not None else {"labels": [], "data": []},
                 "backlog_status": _dict_to_labels_data(bs_named),
