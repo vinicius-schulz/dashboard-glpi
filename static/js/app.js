@@ -433,8 +433,10 @@ const WidgetLayout = (() => {
       document.querySelectorAll('.card[data-widget]').forEach(c => { if(!c.dataset.dragInit){ initDrag(c, layout); c.dataset.dragInit='1'; } });
       Toasts.push('success','Layout redefinido');
       // width recalibration
-      try { const header=document.querySelector('header'); const controls=document.querySelector('.controls'); if(header) header.style.minWidth=''; if(controls) controls.style.minWidth=''; } catch{}
-      requestAnimationFrame(()=>requestAnimationFrame(()=>adjustHeaderWidth&&adjustHeaderWidth()));
+  try { const header=document.querySelector('header'); const controls=document.querySelector('.controls'); if(header) header.style.minWidth=''; if(controls) controls.style.minWidth=''; } catch{}
+  // Removido: chamada a adjustHeaderWidth inexistente que causava ReferenceError após redefinir layout.
+  // Se no futuro for reintroduzida uma função global adjustHeaderWidth, esta verificação segura a execução.
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{ try { if (typeof adjustHeaderWidth === 'function') adjustHeaderWidth(); } catch(e) { /* noop */ } }));
   // Também redefinir filtros para valores originais
   resetFilters();
     });
