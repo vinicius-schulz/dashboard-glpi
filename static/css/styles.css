@@ -31,12 +31,22 @@ header h1 { margin: 0; font-size: 20px; }
 	.controls #presetRanges { flex:1 1 100%; }
 }
 @media (max-width: 700px) {
-	/* Stack controls on small screens but avoid forcing 100% widths - keep a max width and center */
-	.controls { flex-direction:column; align-items:start; }
-	.controls #presetRanges { order:5; width:auto; max-width:760px; }
-	.controls span#dateRangeInputs, .controls span#monthRangeInputs { width:auto; }
-	.controls label, .controls #presetRanges, .controls button#exportBtn { width:auto; max-width:760px; }
-	.controls .range-btn { flex:0 1 auto; }
+	/* Stack controls on small screens and force preset buttons to occupy separate lines */
+	.controls { flex-direction: column; align-items: start; }
+
+	/* Ensure preset container wraps vertically even if inline style exists */
+	.controls #presetRanges { order: 5; width: auto; max-width: 760px; display: flex !important; flex-direction: column !important; gap: 6px !important; }
+
+	/* Make each preset button a full-line block to avoid horizontal scrolling */
+	.controls #presetRanges .range-btn { display: block !important; width: 100% !important; box-sizing: border-box; }
+
+	.controls span#dateRangeInputs, .controls span#monthRangeInputs { width: auto; }
+	.controls label, .controls #presetRanges, .controls button#exportBtn { width: auto; max-width: 760px; }
+	.controls .range-btn { flex: 0 1 auto; }
+
+	/* Also stack month inputs so each label/input sits on its own line */
+	.controls span#monthRangeInputs { display: flex !important; flex-direction: column !important; gap: 8px !important; order: 41; }
+	.controls span#monthRangeInputs label { flex: 0 0 auto; }
 }
 /* Preset range buttons */
 /* legacy range-btn base retained for specificity fallback; new styles above override in .controls scope */
