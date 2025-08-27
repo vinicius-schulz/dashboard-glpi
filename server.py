@@ -12,6 +12,7 @@ from __future__ import annotations
 import os
 from typing import Any, Dict, Tuple
 from datetime import datetime
+import requests
 
 import pandas as pd
 from flask import Flask, jsonify, render_template, request, session, redirect, url_for
@@ -51,6 +52,24 @@ DASHBOARD_ENABLE_AUTHENTICATION = os.getenv('DASHBOARD_ENABLE_AUTHENTICATION', '
 ENABLE_AUTH = str(DASHBOARD_ENABLE_AUTHENTICATION).strip().lower() in ('1', 'true', 'yes', 'on')
 
 
+def is_glpi_operational(timeout: int = 5) -> Tuple[bool, str]:
+    """Quick health check for the GLPI backend.
+
+    Returns (True, "ok") if GLPI responds to initSession, otherwise (False, message).
+    This is intentionally lightweight and uses a short timeout.
+    """
+    if not GLPI_URL or not GLPI_USER_TOKEN:
+        return False, "GLPI_URL ou GLPI_USER_TOKEN não configurados"
+    try:
+        client = GLPIClient(GLPI_URL, GLPI_USER_TOKEN)
+        # attempt to init session without full session payload to keep check light
+        client.init_session(get_full=False)
+        client.kill_session()
+        return True, "ok"
+    except Exception as e:
+        return False, str(e)
+
+
 def check_credentials(user: str, pwd: str) -> bool:
     if not DASHBOARD_ADMIN or not DASHBOARD_PASSWORD:
         return False
@@ -79,6 +98,17 @@ def require_login():
     if path.startswith('/static/') or path == '/favicon.ico' or path.startswith('/login') or path == '/health':
         return None
     if is_authenticated():
+        # If authenticated, ensure GLPI backend is reachable before serving API or pages
+        try:
+            ok, msg = is_glpi_operational(timeout=5)
+        except Exception:
+            ok, msg = False, "erro ao checar GLPI"
+        if not ok:
+            # API clients get JSON 503
+            if path.startswith('/api/'):
+                return jsonify({'error': 'GLPI indisponível', 'detail': msg}), 503
+            # Browser clients get a simple HTML 503 page
+            return (f"<h2>Serviço indisponível</h2><p>Não foi possível conectar ao serviço GLPI.</p>" , 503)
         return None
     # API clients should get 401 JSON
     if path.startswith('/api/'):
@@ -255,6 +285,10 @@ def login():
     # POST
     user = request.form.get('user')
     pwd = request.form.get('password')
+    # Before attempting login, ensure GLPI backend is reachable
+    ok, msg = is_glpi_operational(timeout=5)
+    if not ok:
+        return render_template('login.html', error=f'Serviço GLPI indisponível: {msg}', notice=notice), 503
     if not DASHBOARD_ADMIN or not DASHBOARD_PASSWORD:
         # explicit feedback if server not configured
         return render_template('login.html', error='Autenticação não configurada. Contate o administrador.', notice=notice), 503
