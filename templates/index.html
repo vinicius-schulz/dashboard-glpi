@@ -185,24 +185,23 @@
           <tr>
             <th>Widget</th>
             <th>Visível</th>
-            <th>Largura / Altura</th>
+            <th>Posição (X/Y) & Largura / Altura</th>
           </tr>
         </thead>
         <tbody id="lpRows"></tbody>
       </table>
       <div class="lp-actions">
-        <button id="lpReset" type="button">Redefinir layout</button>
-        <button id="lpDone" type="button" class="primary">Concluir</button>
+  <button id="exportSetupBtn" type="button">Exportar setup</button>
+  <button id="importSetupBtn" type="button">Importar setup</button>
+  <input type="file" id="importSetupFile" accept="application/json" style="display:none" />
+  <button id="lpReset" type="button">Redefinir layout</button>
+  <button id="lpDone" type="button" class="primary">Concluir</button>
       </div>
     </div>
   </div>
 
   <!-- Botão flutuante para ativar personalização -->
   <button id="customizeToggle" class="fab" title="Personalizar layout">⚙️</button>
-
-  <footer>
-    <small>Filtro aplicado: Observador = Meus grupos (via campo "Grupo observador"). Status = Todos.</small>
-  </footer>
 
   <!-- Modal for ticket list -->
   <div id="modal" class="modal hidden">

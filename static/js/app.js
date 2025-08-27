@@ -379,16 +379,34 @@ const WidgetLayout = (() => {
     tbody.innerHTML = '';
     layout.forEach(w => {
       const row = document.createElement('tr');
+      // Provide explicit X/Y coordinate inputs (grid units) so keyboard-only users can position widgets.
+      const curX = (typeof w.x === 'number') ? w.x : (w.x || 0);
+      const curY = (typeof w.y === 'number') ? w.y : (w.y || 0);
       row.innerHTML = `<td>${w.id}</td><td><input type="checkbox" data-f="vis" ${w.visible!==false?'checked':''}></td>
         <td>
+          X:<input data-f="x" type="number" min="0" value="${curX}" style="width:60px"> 
+          Y:<input data-f="y" type="number" min="0" value="${curY}" style="width:60px"> 
           L:<input data-f="cols" type="number" min="3" max="${MAX_COLS}" value="${w.cols|| (w.width||1)*3}" style="width:60px"> 
           H:<input data-f="rows" type="number" min="3" max="60" value="${w.rows|| (w.height||1)*3}" style="width:60px">
         </td>`;
       row.querySelectorAll('input,select').forEach(inp => {
         inp.addEventListener('change', () => {
-          if (inp.dataset.f==='vis') w.visible = inp.checked;
-          if (inp.dataset.f==='cols') w.cols = Math.min(MAX_COLS, Math.max(3, parseInt(inp.value)||3));
-          if (inp.dataset.f==='rows') w.rows = Math.max(3, parseInt(inp.value)||3);
+          const f = inp.dataset.f;
+          if (f === 'vis') {
+            w.visible = inp.checked;
+          } else if (f === 'cols') {
+            w.cols = Math.min(MAX_COLS, Math.max(3, parseInt(inp.value) || 3));
+          } else if (f === 'rows') {
+            w.rows = Math.max(3, parseInt(inp.value) || 3);
+          } else if (f === 'x') {
+            let v = parseInt(inp.value);
+            if (isNaN(v) || v < 0) v = 0;
+            w.x = v;
+          } else if (f === 'y') {
+            let v2 = parseInt(inp.value);
+            if (isNaN(v2) || v2 < 0) v2 = 0;
+            w.y = v2;
+          }
           save(layout); apply(layout);
         });
       });
@@ -417,6 +435,28 @@ const WidgetLayout = (() => {
       requestAnimationFrame(()=>requestAnimationFrame(()=>adjustHeaderWidth&&adjustHeaderWidth()));
   // Também redefinir filtros para valores originais
   resetFilters();
+    });
+    // Export / Import setup handlers
+    const exportBtn = document.getElementById('exportSetupBtn');
+    const importBtn = document.getElementById('importSetupBtn');
+    const importFile = document.getElementById('importSetupFile');
+    if (exportBtn) exportBtn.addEventListener('click', () => {
+      try {
+        const payload = buildFullSetupSnapshot();
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = 'glpi_dashboard_setup.json'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+        Toasts.push('success','Setup exportado');
+      } catch (e) { Toasts.push('error','Falha ao exportar setup'); }
+    });
+    if (importBtn && importFile) importBtn.addEventListener('click', () => importFile.click());
+    if (importFile) importFile.addEventListener('change', async (e) => {
+      const f = e.target.files && e.target.files[0]; if (!f) return; try {
+        const txt = await f.text(); const obj = JSON.parse(txt);
+        applyImportedSetup(obj);
+        Toasts.push('success','Setup importado');
+      } catch (err) { Toasts.push('error','Arquivo inválido'); }
+      importFile.value = '';
     });
   }
   return { init };
@@ -1072,6 +1112,53 @@ function setupAutoRefresh() {
   applyInterval();
 }
 window.addEventListener('DOMContentLoaded', setupAutoRefresh);
+
+// Build a single JSON snapshot containing all relevant storage keys
+function buildFullSetupSnapshot() {
+  const snapshot = { meta: { exported_at: new Date().toISOString(), app: 'dashboard-glpi' }, storage: {} };
+  // Keys we manage
+  const keys = [ 'glpiDashboardLayout.v2', FILTERS_KEY, 'glpiAutoRefreshMin' ];
+  keys.forEach(k => {
+    try {
+      const v = localStorage.getItem(k);
+      snapshot.storage[k] = v === null ? null : JSON.parse(v);
+    } catch (e) {
+      // fallback: store raw string
+      try { snapshot.storage[k] = localStorage.getItem(k); } catch { snapshot.storage[k] = null; }
+    }
+  });
+  // Also include any other key starting with our app prefix
+  try {
+    for (let i=0;i<localStorage.length;i++){
+      const k = localStorage.key(i);
+      if (!k) continue;
+      if (k.startsWith('glpiDashboard') && !snapshot.storage[k]) {
+        try { snapshot.storage[k] = JSON.parse(localStorage.getItem(k)); } catch { snapshot.storage[k] = localStorage.getItem(k); }
+      }
+    }
+  } catch (e) {}
+  return snapshot;
+}
+
+// Apply imported setup object into localStorage and refresh UI
+function applyImportedSetup(obj) {
+  if (!obj || !obj.storage) throw new Error('Formato inválido');
+  const mapping = obj.storage;
+  // Overwrite known keys
+  Object.keys(mapping).forEach(k => {
+    try {
+      const v = mapping[k];
+      if (v === null) { localStorage.removeItem(k); }
+      else { localStorage.setItem(k, typeof v === 'string' ? v : JSON.stringify(v)); }
+    } catch (e) { /* ignore */ }
+  });
+  // Re-apply changes to the UI: reload filters, layout, auto-refresh
+  try { loadFilters(); } catch (e) {}
+  try { const wl = WidgetLayout && WidgetLayout.init && (function(){ WidgetLayout.init(); return true; })(); } catch(e) {}
+  try { setupAutoRefresh(); } catch(e) {}
+  // Reload data to reflect imported filters/layout
+  try { loadData(); } catch (e) {}
+}
 
 // --- Modal helpers ---
 const modal = {
