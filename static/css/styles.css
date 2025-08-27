@@ -4,10 +4,42 @@ body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarel
 .hidden { display: none !important; }
 header { background: #0f172a; color: #fff; padding: 16px 20px; box-sizing: border-box; }
 header h1 { margin: 0; font-size: 20px; }
-.controls { display: flex; gap: 12px; align-items: center; padding: 12px 20px; background: #fff; border-bottom: 1px solid #e5e7eb; position: sticky; top: 0; z-index: 1000; box-sizing: border-box; }
-.controls label { font-size: 14px; }
-.controls input, .controls select, .controls button { padding: 6px 8px; }
+.controls { display:flex; flex-wrap:wrap; gap:14px; align-items:flex-end; padding:12px 20px; background:#fff; border-bottom:1px solid #e5e7eb; position:sticky; top:0; z-index:1000; box-sizing:border-box; }
+.controls label { font-size:12px; font-weight:600; color:#334155; display:flex; flex-direction:column; gap:4px; line-height:1.1; }
+.controls label > select,
+.controls label > input { font-weight:400; height: 34px}
+.controls select, .controls input[type=date], .controls input[type=month], .controls input[type=number] { height:24px; padding:4px 3px; font-size:13px; line-height:1.2; border:1px solid #cbd5e1; border-radius:8px; background:#f8fafc; color:#0f172a; box-shadow:0 1px 0 rgba(255,255,255,0.4) inset; transition:border-color .15s, background .15s; }
+.controls select:focus, .controls input[type=date]:focus, .controls input[type=month]:focus, .controls input[type=number]:focus { outline:none; border-color:#0ea5e9; box-shadow:0 0 0 2px rgba(14,165,233,0.25); background:#fff; }
+.controls #presetRanges { display:flex; flex-wrap:wrap; gap:6px; padding:2px 0 0; }
+.controls .range-btn { background:#fff; border:1px solid #cbd5e1; padding:6px 10px; border-radius:8px; cursor:pointer; font-size:12px; font-weight:500; color:#334155; line-height:1; display:inline-flex; align-items:center; justify-content:center; min-height:34px; box-sizing:border-box; }
+.controls .range-btn:hover:not(.active):not(.non-clickable) { background:#f1f5f9; border-color:#94a3b8; }
+.controls .range-btn.active { background:#0f172a; color:#fff; border-color:#0f172a; box-shadow:0 0 0 1px #0f172a; }
+.controls .range-btn.non-clickable { cursor:default; opacity:.65; }
+.controls button#exportBtn { background:#0f172a; color:#fff; border:1px solid #0f172a; padding:8px 14px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; height:34px; display:inline-flex; align-items:center; gap:6px; }
+.controls button#exportBtn:hover { filter:brightness(.92); }
+.controls span#dateRangeInputs, .controls span#monthRangeInputs { display:flex; gap:12px; align-items:flex-end; }
+.controls span#dateRangeInputs label, .controls span#monthRangeInputs label { min-width:140px; }
+.controls span#dateRangeInputs input, .controls span#monthRangeInputs input { flex:0 0 24px; max-width:220px; }
+
+@media (max-width: 1100px) {
+	.controls { gap:12px; }
+	.controls span#dateRangeInputs, .controls span#monthRangeInputs { flex-wrap:wrap; }
+}
+@media (max-width: 900px) {
+	.controls { gap:10px; }
+	.controls label { min-width:140px; }
+	.controls #presetRanges { flex:1 1 100%; }
+}
+@media (max-width: 700px) {
+	/* Stack controls on small screens but avoid forcing 100% widths - keep a max width and center */
+	.controls { flex-direction:column; align-items:start; }
+	.controls #presetRanges { order:5; width:auto; max-width:760px; }
+	.controls span#dateRangeInputs, .controls span#monthRangeInputs { width:auto; }
+	.controls label, .controls #presetRanges, .controls button#exportBtn { width:auto; max-width:760px; }
+	.controls .range-btn { flex:0 1 auto; }
+}
 /* Preset range buttons */
+/* legacy range-btn base retained for specificity fallback; new styles above override in .controls scope */
 .range-btn { background:#fff; border:1px solid #e5e7eb; padding:6px 8px; border-radius:6px; cursor:pointer; font-size:13px; }
 .range-btn:hover { background:#f8fafc; }
 .range-btn.active { background:#0f172a; color:#fff; border-color:#0f172a; }
