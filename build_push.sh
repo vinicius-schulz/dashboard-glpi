@@ -40,7 +40,7 @@ err() { echo -e "${COLOR_RED}[ERRO]${COLOR_RESET} $*" >&2; }
 succ() { echo -e "${COLOR_GREEN}[OK]${COLOR_RESET} $*"; }
 
 USER_NAME="viniciusschulz"
-IMAGE_NAME="dashboard-glpi"
+IMAGE_NAME="dashboard-glpi" 
 VERSION="1.0.13"
 PLATFORMS=""
 NO_CACHE=0
