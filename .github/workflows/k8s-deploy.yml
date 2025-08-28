@@ -65,7 +65,6 @@ jobs:
           DASHBOARD_ADMIN: ${{ secrets.DASHBOARD_ADMIN }}
           DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_PASSWORD }}
           GLPI_USER_TOKEN: ${{ secrets.GLPI_USER_TOKEN }}
-          # Non-sensitive values are read from job env (Repository Variables)
           DASHBOARD_ENABLE_AUTHENTICATION: ${{ env.DASHBOARD_ENABLE_AUTHENTICATION }}
           GLPI_URL: ${{ env.GLPI_URL }}
           DEBUG_SEARCH_OPTIONS: ${{ env.DEBUG_SEARCH_OPTIONS }}
@@ -73,31 +72,32 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p k8s/prd/output
-          for f in k8s/prd/*.yaml; do
-            cp "$f" "k8s/prd/output/$(basename "$f")"
-          done
+          cp k8s/prd/*.yaml k8s/prd/output/
 
-          # Replace image placeholders in deployment
+          # imagem
           sed -i "s|<IMAGE_REPOSITORY>|${IMAGE_REPOSITORY}|g" k8s/prd/output/03-deployment.yaml
-          sed -i "s|<IMAGE_VERSION>|${IMAGE_VERSION}|g" k8s/prd/output/03-deployment.yaml
+          sed -i "s|<IMAGE_VERSION>|${IMAGE_VERSION}|g"     k8s/prd/output/03-deployment.yaml
 
-          # Secrets: base64 encode values because manifest uses 'data:'
+          # base64 para 'data:'
           DASH_ADMIN_B64=$(printf '%s' "${DASHBOARD_ADMIN}" | base64 | tr -d '\n')
           DASH_PASS_B64=$(printf '%s' "${DASHBOARD_PASSWORD}" | base64 | tr -d '\n')
-          GLPI_TOKEN_B64=$(printf '%s' "${GLPI_USER_TOKEN}" | base64 | tr -d '\n')
-          sed -i "s|'\<DASHBOARD_ADMIN\>'|${DASH_ADMIN_B64}|g" k8s/prd/output/01-secrets.yaml || true
-          sed -i "s|'\<DASHBOARD_PASSWORD\>'|${DASH_PASS_B64}|g" k8s/prd/output/01-secrets.yaml || true
-          sed -i "s|'\<GLPI_USER_TOKEN\>'|${GLPI_TOKEN_B64}|g" k8s/prd/output/01-secrets.yaml || true
+          GLPI_TOKEN_B64=$(printf '%s' "${GLPI_USER_TOKEN}"   | base64 | tr -d '\n')
 
-          # ConfigMap: direct substitution
+          # substituição EM <PLACEHOLDERS> (sem aspas)
+          sed -i "s|<DASHBOARD_ADMIN>|${DASH_ADMIN_B64}|g"   k8s/prd/output/01-secrets.yaml
+          sed -i "s|<DASHBOARD_PASSWORD>|${DASH_PASS_B64}|g" k8s/prd/output/01-secrets.yaml
+          sed -i "s|<GLPI_USER_TOKEN>|${GLPI_TOKEN_B64}|g"   k8s/prd/output/01-secrets.yaml
+
+          # configmap / ingress
           sed -i "s|<DASHBOARD_ENABLE_AUTHENTICATION>|${DASHBOARD_ENABLE_AUTHENTICATION}|g" k8s/prd/output/02-configmap.yaml
           sed -i "s|<GLPI_URL>|${GLPI_URL}|g" k8s/prd/output/02-configmap.yaml
           sed -i "s|<DEBUG_SEARCH_OPTIONS>|${DEBUG_SEARCH_OPTIONS}|g" k8s/prd/output/02-configmap.yaml
-
-          # Ingress: replace host
           sed -i "s|<URL_DASHBOARD>|${URL_DASHBOARD}|g" k8s/prd/output/05-ingress.yaml
 
-          echo "Prepared manifests in k8s/prd/output"
+          # sanity check: não pode sobrar '<DASHBOARD_...>'
+          if grep -R "<DASHBOARD_\|<GLPI_USER_TOKEN>" k8s/prd/output/01-secrets.yaml; then
+            echo "Placeholders de Secret não foram substituídos"; exit 1
+          fi
 
       - name: Setup kubectl
         uses: azure/setup-kubectl@v3
