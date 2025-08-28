@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: dashboard-glpi
+  namespace: dashboard-glpi
+spec:
+  selector:
+    app: dashboard-glpi
+  ports:
+  - name: http
+    port: 8000
+    targetPort: 8000
+  type: ClusterIP

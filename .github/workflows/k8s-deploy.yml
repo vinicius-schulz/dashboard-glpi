@@ -1,0 +1,123 @@
+name: Deploy to k8s (self-hosted)
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, k8s, prod]
+    env:
+      # Non-sensitive configuration should be set as repository Variables (Settings → Variables):
+      # DOCKERHUB_USERNAME, IMAGE_REPOSITORY (optional), DASHBOARD_ENABLE_AUTHENTICATION,
+      # GLPI_URL, DEBUG_SEARCH_OPTIONS, URL_DASHBOARD
+      # Sensitive values must be stored as repository Secrets: DASHBOARD_ADMIN, DASHBOARD_PASSWORD,
+      # DOCKERHUB_TOKEN, GLPI_USER_TOKEN
+      NAMESPACE: dashboard-glpi
+      DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+      IMAGE_REPOSITORY: ${{ vars.IMAGE_REPOSITORY }}
+      DASHBOARD_ENABLE_AUTHENTICATION: ${{ vars.DASHBOARD_ENABLE_AUTHENTICATION }}
+      GLPI_URL: ${{ vars.GLPI_URL }}
+      DEBUG_SEARCH_OPTIONS: ${{ vars.DEBUG_SEARCH_OPTIONS }}
+      URL_DASHBOARD: ${{ vars.URL_DASHBOARD }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Determine image name and version
+        id: vars
+        run: |
+          set -euo pipefail
+          # IMAGE_REPOSITORY can be provided via Repository Variables (IMAGE_REPOSITORY). If not, use DOCKERHUB_USERNAME/dashboard-glpi
+          if [ -n "${IMAGE_REPOSITORY:-}" ]; then
+            IMAGE_REPOSITORY="${IMAGE_REPOSITORY}"
+          else
+            IMAGE_REPOSITORY="${DOCKERHUB_USERNAME:-}/${GITHUB_REPOSITORY##*/}"
+          fi
+          # unique image version: short sha + run number
+          IMAGE_VERSION="${GITHUB_SHA::7}-${GITHUB_RUN_NUMBER}"
+          echo "IMAGE_REPOSITORY=${IMAGE_REPOSITORY}" >> $GITHUB_OUTPUT
+          echo "IMAGE_VERSION=${IMAGE_VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ steps.vars.outputs.IMAGE_REPOSITORY }}:${{ steps.vars.outputs.IMAGE_VERSION }}
+            ${{ steps.vars.outputs.IMAGE_REPOSITORY }}:latest
+
+      - name: Prepare k8s manifests (replace placeholders)
+        env:
+          IMAGE_REPOSITORY: ${{ steps.vars.outputs.IMAGE_REPOSITORY }}
+          IMAGE_VERSION: ${{ steps.vars.outputs.IMAGE_VERSION }}
+          DASHBOARD_ADMIN: ${{ secrets.DASHBOARD_ADMIN }}
+          DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_PASSWORD }}
+          GLPI_USER_TOKEN: ${{ secrets.GLPI_USER_TOKEN }}
+          # Non-sensitive values are read from job env (Repository Variables)
+          DASHBOARD_ENABLE_AUTHENTICATION: ${{ env.DASHBOARD_ENABLE_AUTHENTICATION }}
+          GLPI_URL: ${{ env.GLPI_URL }}
+          DEBUG_SEARCH_OPTIONS: ${{ env.DEBUG_SEARCH_OPTIONS }}
+          URL_DASHBOARD: ${{ env.URL_DASHBOARD }}
+        run: |
+          set -euo pipefail
+          mkdir -p k8s/prd/output
+          for f in k8s/prd/*.yaml; do
+            cp "$f" "k8s/prd/output/$(basename "$f")"
+          done
+
+          # Replace image placeholders in deployment
+          sed -i "s|<IMAGE_REPOSITORY>|${IMAGE_REPOSITORY}|g" k8s/prd/output/03-deployment.yaml
+          sed -i "s|<IMAGE_VERSION>|${IMAGE_VERSION}|g" k8s/prd/output/03-deployment.yaml
+
+          # Secrets: base64 encode values because manifest uses 'data:'
+          DASH_ADMIN_B64=$(printf '%s' "${DASHBOARD_ADMIN}" | base64 | tr -d '\n')
+          DASH_PASS_B64=$(printf '%s' "${DASHBOARD_PASSWORD}" | base64 | tr -d '\n')
+          GLPI_TOKEN_B64=$(printf '%s' "${GLPI_USER_TOKEN}" | base64 | tr -d '\n')
+          sed -i "s|'\<DASHBOARD_ADMIN\>'|${DASH_ADMIN_B64}|g" k8s/prd/output/01-secrets.yaml || true
+          sed -i "s|'\<DASHBOARD_PASSWORD\>'|${DASH_PASS_B64}|g" k8s/prd/output/01-secrets.yaml || true
+          sed -i "s|'\<GLPI_USER_TOKEN\>'|${GLPI_TOKEN_B64}|g" k8s/prd/output/01-secrets.yaml || true
+
+          # ConfigMap: direct substitution
+          sed -i "s|<DASHBOARD_ENABLE_AUTHENTICATION>|${DASHBOARD_ENABLE_AUTHENTICATION}|g" k8s/prd/output/02-configmap.yaml
+          sed -i "s|<GLPI_URL>|${GLPI_URL}|g" k8s/prd/output/02-configmap.yaml
+          sed -i "s|<DEBUG_SEARCH_OPTIONS>|${DEBUG_SEARCH_OPTIONS}|g" k8s/prd/output/02-configmap.yaml
+
+          # Ingress: replace host
+          sed -i "s|<URL_DASHBOARD>|${URL_DASHBOARD}|g" k8s/prd/output/05-ingress.yaml
+
+          echo "Prepared manifests in k8s/prd/output"
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: '1.30.0'
+
+      - name: Apply manifests to cluster
+        run: |
+          set -euo pipefail
+          # Use kubeconfig available on runner pod (in-cluster SA) or KUBECONFIG env provided by runner
+          kubectl apply -f k8s/prd/output
+          # wait for rollout
+          kubectl -n ${NAMESPACE} rollout status deployment/dashboard-glpi --timeout=120s
+
+      - name: Notify result
+        if: ${{ success() }}
+        run: |
+          echo "Deployment succeeded: ${IMAGE_REPOSITORY}:${IMAGE_VERSION}"
+
+      - name: Notify failure
+        if: ${{ failure() }}
+        run: |
+          echo "Deployment failed" >&2

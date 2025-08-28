@@ -1,0 +1,17 @@
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: dashboard-glpi
+  namespace: dashboard-glpi
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`<URL_DASHBOARD>`)
+      kind: Rule
+      services:
+        - name: dashboard-glpi
+          port: 8000
+  tls:
+    secretName: wildcard-uvxp-tls

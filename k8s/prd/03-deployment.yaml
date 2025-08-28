@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dashboard-glpi
+  namespace: dashboard-glpi
+  labels:
+    app: dashboard-glpi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dashboard-glpi
+  template:
+    metadata:
+      labels:
+        app: dashboard-glpi
+    spec:
+      containers:
+        - name: dashboard-glpi
+          image: <IMAGE_REPOSITORY>:<IMAGE_VERSION>
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: dashboard-glpi-config
+            - secretRef:
+                name: dashboard-glpi-secret
+          ports:
+          - name: http
+            containerPort: 8000
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+            successThreshold: 1
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "2"
+              memory: "500Mi"
