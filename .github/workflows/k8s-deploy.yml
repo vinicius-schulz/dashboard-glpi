@@ -102,7 +102,7 @@ jobs:
       - name: Setup kubectl
         uses: azure/setup-kubectl@v3
         with:
-          version: '1.30.0'
+          version: v1.30.0
 
       - name: Apply manifests to cluster
         run: |
