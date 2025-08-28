@@ -10,9 +10,6 @@
 </head>
 
 <body data-ui-base="{{ ui_base }}">
-  <header>
-    <h1>Tickets GLPI • Observador = Meus grupos</h1>
-  </header>
 
   <section class="controls">
     <label>Granularidade:
@@ -59,9 +56,8 @@
     </label>
     <!-- Botão Aplicar removido: atualização agora ocorre automaticamente em mudanças de filtros -->
     <button id="exportBtn" title="Exportar / Imprimir dashboard">Exportar / Imprimir</button>
+    <button id="controlsToggle" class="controls-toggle-extern" title="Mostrar/Ocultar filtros" aria-pressed="false">˅</button>
   </section>
-
-  <section id="meta"></section>
 
   <section class="grid">
     <div class="card" data-widget="cumGap">

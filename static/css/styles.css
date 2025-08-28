@@ -93,6 +93,23 @@ body.drag-mode { cursor: grabbing; }
 .fab { position: fixed; bottom: 20px; right: 20px; background: #0f172a; color: #fff; border: none; border-radius: 50%; width: 52px; height: 52px; font-size: 22px; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.25); }
 .fab:hover { background:#1e293b; }
 
+/* Controls collapse/expand */
+.controls.collapsed { /* fully collapse controls while keeping toggle visible */
+	padding: 4px 12px 0 12px; /* small top padding so header doesn't overlap */
+	margin-bottom: 0;
+	height: auto;
+	transition: padding 140ms ease, margin 140ms ease;
+}
+/* hide every descendant except the external toggle so nested elements don't leak */
+.controls.collapsed *:not(.controls-toggle-extern) { display: none !important; }
+
+/* External toggle: a small rectangular extension that sits flush with bottom-left of the controls */
+.controls-toggle-extern { position: absolute; left: 5px; height: 12px; width: 36px; bottom: -12px; z-index: 9999; background: #fff; border-bottom: 1px solid #e5e7eb; border-top: 0px solid #e5e7eb; border-left: 1px solid #e5e7eb; border-right: 1px solid #e5e7eb; display:flex; align-items:center; justify-content:center; cursor: pointer; font-weight:700; border-radius: 0px 0px 5px 5px;}
+.controls-toggle-extern[aria-pressed="true"] { background: #0f172a; color: #fff; border-top-color: #0f172a; }
+
+/* ensure the controls container is positioned so the external toggle can be absolutely positioned relative to it */
+.controls { position: sticky; top: 0; }
+
 /* Layout panel */
 .layout-panel.hidden { display: none; }
 .layout-panel { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(640px, 90vw); max-height: 80vh; background: #fff; border: 1px solid #cbd5e1; border-radius: 12px; z-index: 2200; display: flex; flex-direction: column; box-shadow: 0 8px 28px -4px rgba(0,0,0,0.25); }

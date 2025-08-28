@@ -639,12 +639,6 @@ function destroyChart(id) {
 }
 
 function setMeta(meta, count, period) {
-  const el = document.getElementById('meta');
-  const gids = meta?.groups || [];
-  let info = `Período: ${period.start} a ${period.end} • Tickets: ${count} `;
-  if (typeof meta?.tids === 'number') info += `• Tickets retornados=${meta.tids}`;
-  el.textContent = `Meus grupos: [${gids.join(', ')}] • ${info}`;
-  // Marca widgets que ignoram período (fallback se HTML não tiver badge)
   const ignore = meta?.ignore_period_widgets || [];
   ignore.forEach(id => {
     const card = document.querySelector(`.card[data-widget="${id}"] h2`);
@@ -1441,3 +1435,33 @@ function buildGlpiLink(id) {
   if (base.endsWith('/')) base = base.slice(0, -1);
   return `${base}/front/ticket.form.php?id=${encodeURIComponent(id)}`;
 }
+
+// --- Toggle de exibição da barra de filtros (.controls) via botão externo ---
+function initControlsToggle() {
+  const btn = document.getElementById('controlsToggle');
+  const controls = document.querySelector('.controls');
+  if (!btn || !controls) return;
+  const STORAGE_KEY = 'glpiControlsCollapsed.v1';
+  let collapsed = false;
+  try { collapsed = localStorage.getItem(STORAGE_KEY) === '1'; } catch {}
+  function applyState() {
+    if (collapsed) {
+      controls.classList.add('collapsed');
+      btn.setAttribute('aria-pressed', 'true');
+      // Mostra seta para cima indicando que pode expandir
+      btn.textContent = '˅';
+    } else {
+      controls.classList.remove('collapsed');
+      btn.setAttribute('aria-pressed', 'false');
+      // Mostra seta para baixo indicando que pode recolher
+      btn.textContent = '˄';
+    }
+  }
+  applyState();
+  btn.addEventListener('click', () => {
+    collapsed = !collapsed;
+    try { localStorage.setItem(STORAGE_KEY, collapsed ? '1' : '0'); } catch {}
+    applyState();
+  });
+}
+window.addEventListener('DOMContentLoaded', initControlsToggle);
