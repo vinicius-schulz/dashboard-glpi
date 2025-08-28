@@ -734,7 +734,7 @@ def api_tickets():
 
         # Determinar subset que respeita filtro (created dentro da janela do usuário)
         mask_strict = (df_created >= user_start) & (df_created < end_boundary)
-        df_strict = df[mask_strict].copy()
+        df_strict = df[mask_strict].copy() 
 
         # Para backlog precisamos incluir tickets criados antes mas abertos ou resolvidos dentro
         spans_window = (
