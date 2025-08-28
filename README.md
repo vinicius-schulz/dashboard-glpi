@@ -155,3 +155,57 @@ Disponível dentro do painel ⚙️ (link “Sair”). Só aparece se `DASHBOARD
 * `.env` não vai para a imagem Docker — use `--env-file`.
 * Fluxo legado baseado em `Group_Ticket` foi substituído por busca otimizada em “Grupo observador”.
 * Ajustes de layout e preferências são por navegador (não sincronizados).
+
+## CI / GitHub Actions (runner self-hosted)
+
+Este repositório inclui um workflow de exemplo para build/push e deploy em Kubernetes usando um runner self-hosted que pode rodar dentro do próprio cluster.
+
+Resumo rápido:
+- Instale/registre um runner dentro do cluster (manifests em `k8s/prd/02-runner-secret.yaml`, `03-runner-rbac.yaml`, `04-runner-deployment.yaml`).
+- Crie um Secret do tipo docker-registry chamado `ghcr-secret` se usar a imagem oficial do runner em `ghcr.io`.
+- Configure os Secrets e Repository Variables no GitHub (veja lista abaixo).
+- Faça commit na `main` para disparar o workflow `.github/workflows/k8s-deploy.yml`.
+
+Secrets necessários (Repository → Settings → Secrets → Actions):
+- `DASHBOARD_ADMIN`
+- `DASHBOARD_PASSWORD`
+- `DOCKERHUB_TOKEN` (para push no Docker Hub)
+- `GLPI_USER_TOKEN`
+
+Repository Variables recomendadas (Settings → Variables):
+- `DOCKERHUB_USERNAME`
+- `IMAGE_REPOSITORY` (opcional)
+- `DASHBOARD_ENABLE_AUTHENTICATION`
+- `GLPI_URL`
+- `DEBUG_SEARCH_OPTIONS`
+- `URL_DASHBOARD`
+
+Criar o Secret para pull do GHCR (exemplo, NÃO comite esse token):
+```bash
+GH_USER="seu-usuario-github"
+GH_TOKEN="seu_pat_com_read:packages"
+kubectl create secret docker-registry ghcr-secret \
+  --docker-server=ghcr.io \
+  --docker-username="$GH_USER" \
+  --docker-password="$GH_TOKEN" \
+  -n default
+```
+
+Gerar token de registro do runner (válido por poucos minutos):
+- Pela UI: GitHub → Settings → Actions → Runners → New self-hosted runner (gera token temporário)
+
+Aplicar os manifests do runner:
+```bash
+kubectl apply -f k8s/prd/02-runner-secret.yaml
+kubectl apply -f k8s/prd/03-runner-rbac.yaml
+kubectl apply -f k8s/prd/04-runner-deployment.yaml
+kubectl -n default rollout restart deployment/github-runner
+kubectl -n default rollout status deployment/github-runner --timeout=120s
+```
+
+Workflow de deploy: `.github/workflows/k8s-deploy.yml` — ele realiza build/push da imagem (Docker Hub), substitui placeholders em `k8s/prd/*` e aplica `k8s/prd/output` no cluster.
+
+Boas práticas rápidas:
+- Não comite tokens nem `.dockerconfigjson` no repo.
+- Em produção, considere Actions Runner Controller (ARC) para runners efêmeros e registro via GitHub App.
+- Use SealedSecrets / ExternalSecrets / Vault para gerenciar secrets no cluster.
