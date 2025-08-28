@@ -6,7 +6,7 @@ on:
 
 jobs:
   deploy:
-    runs-on: [self-hosted, k8s, prod]
+    runs-on: self-hosted
     env:
       # Non-sensitive configuration should be set as repository Variables (Settings → Variables):
       # DOCKERHUB_USERNAME, IMAGE_REPOSITORY (optional), DASHBOARD_ENABLE_AUTHENTICATION,
