@@ -12,6 +12,7 @@ from __future__ import annotations
 import os
 from typing import Any, Dict, Tuple
 from datetime import datetime
+import zoneinfo
 import requests
 
 import pandas as pd
@@ -338,55 +339,54 @@ def api_data():
       expomos metadados para possível uso futuro).
     """
     try:
-        # Verifica rapidamente disponibilidade do GLPI apenas agora (não bloqueia login)
-        ok_glpi, msg_glpi = is_glpi_operational(timeout=10)
+        # Disponibilidade GLPI
+        ok_glpi, _msg = is_glpi_operational(timeout=10)
         if not ok_glpi:
             return jsonify({"mensagem": "O GLPI está temporariamente indisponível. Tente novamente em alguns instantes."}), 503
-        # --- Params ---
+
         gran = request.args.get("gran", "Diário")
         mode = request.args.get("mode", "bulk").lower()
         cat_filter = request.args.get("cat", "todos").lower()
+        assigned_group_param = request.args.get('assigned_group', 'todos')
         gl = gran.lower()
         freq = "D" if gl.startswith("di") else ("W" if gl.startswith("se") else "M")
 
-        # --- Date range (user) ---
+        # Timezone -> usar data naïve para comparações
+        try:
+            _tz = zoneinfo.ZoneInfo(os.getenv("APP_TZ", "America/Sao_Paulo"))
+        except Exception:
+            _tz = None
+        now_dt = datetime.now(_tz) if _tz else datetime.now()
+        today_norm = pd.Timestamp(now_dt.date())  # naive midnight
+
+        # Intervalo do usuário
         start_s = request.args.get("start")
         end_s = request.args.get("end")
         if not start_s or not end_s:
-            today_norm = pd.Timestamp.today().normalize()
             start_s = (today_norm - pd.Timedelta(days=30)).date().isoformat()
             end_s = today_norm.date().isoformat()
         user_start = pd.Timestamp(start_s).normalize()
         user_end = pd.Timestamp(end_s).normalize()
 
-        # --- Baseline range (fixed last 6 months) ---
-        today_norm = pd.Timestamp.today().normalize()
+        # Baseline (últimos 6 meses)
         baseline_start = (today_norm - pd.DateOffset(months=6)).normalize()
         baseline_end = today_norm
 
-        # Fetch both datasets
         baseline_df, baseline_meta = _fetch_data(baseline_start, baseline_end, mode=mode)
         user_df, user_meta = _fetch_data(user_start, user_end, mode=mode)
         meta = {**baseline_meta, "tids_baseline": baseline_meta.get("tids"), "tids_user": user_meta.get("tids")}
 
-        # Optional assigned_group filter from query params (sent by frontend)
-        assigned_group_param = request.args.get('assigned_group', 'todos')
-
         def filter_category(df: pd.DataFrame) -> pd.DataFrame:
             if df is None or df.empty or cat_filter == "todos":
                 return df
-            # We'll try to classify by category name fields captured in bulk (we only have ID). Without name we can't split.
-            # If only numeric id present, skip filtering (can't determine prefix) to avoid dropping all.
             name_cols = [c for c in ["category_fullname", "category_name", "category_label"] if c in df.columns]
             if name_cols:
-                col = name_cols[0]
-                s = df[col].astype(str).fillna("")
+                s = df[name_cols[0]].astype(str).fillna("")
             else:
-                # Try to reuse raw 'category' if it already contains text (some GLPI setups expand dropdowns to text)
-                if df["category"].dtype == object:
-                    s = df["category"].astype(str).fillna("")
+                if 'category' in df.columns and df['category'].dtype == object:
+                    s = df['category'].astype(str).fillna("")
                 else:
-                    return df  # cannot classify
+                    return df
             mask_h = s.str.startswith("Holding", na=False)
             if cat_filter == "holding":
                 return df[mask_h].copy()
@@ -394,18 +394,11 @@ def api_data():
                 return df[~mask_h].copy()
             return df
 
-        baseline_df = filter_category(baseline_df)
-        user_df = filter_category(user_df)
-
-        # Apply assigned_group filter to both datasets if provided
         def filter_assigned_group(df: pd.DataFrame) -> pd.DataFrame:
             if df is None or df.empty or assigned_group_param in (None, '', 'todos'):
                 return df
-            # assigned_group in rows may be dict (expanded) or id or text; handle common cases
             try:
-                # try numeric id
                 aid = int(float(assigned_group_param))
-                # match either numeric stored as int/float or dict with 'id'
                 def match(row):
                     val = row.get('assigned_group')
                     if isinstance(val, dict):
@@ -419,16 +412,14 @@ def api_data():
                         return False
                 return df[df.apply(match, axis=1)].copy()
             except Exception:
-                # fallback: match text name
                 if 'assigned_group' in df.columns and df['assigned_group'].dtype == object:
                     s = df['assigned_group'].astype(str).fillna('')
                     return df[s == assigned_group_param].copy()
                 return df
 
-        baseline_df = filter_assigned_group(baseline_df)
-        user_df = filter_assigned_group(user_df)
+        baseline_df = filter_assigned_group(filter_category(baseline_df))
+        user_df = filter_assigned_group(filter_category(user_df))
 
-        # If user filtered dataset empty -> handle separately
         if user_df is None or user_df.empty:
             empty_series = {"labels": [], "data": []}
             if baseline_df is None or baseline_df.empty:
@@ -444,15 +435,13 @@ def api_data():
                     "created_today": 0,
                     "resolved_today": 0,
                 })
-            # Baseline-only metrics (when user filter empty but baseline has data)
             bs_full = backlog_status(baseline_df)
             age_full = aging_buckets(baseline_df)
             sla = sla_solution(baseline_df)
-            open_today_full = int(baseline_df[baseline_df["solved_at"].isna()].shape[0])
-            today_norm = pd.Timestamp.today().normalize()
-            created_today_mask = (pd.to_datetime(baseline_df["created_at"]) >= today_norm) & (pd.to_datetime(baseline_df["created_at"]) < today_norm + pd.Timedelta(days=1))
+            open_today_full = int(baseline_df[baseline_df['solved_at'].isna()].shape[0])
+            created_today_mask = (pd.to_datetime(baseline_df['created_at']) >= today_norm) & (pd.to_datetime(baseline_df['created_at']) < today_norm + pd.Timedelta(days=1))
             created_today_count = int(created_today_mask.sum())
-            solved_today_mask = (pd.to_datetime(baseline_df["solved_at"], errors="coerce") >= today_norm) & (pd.to_datetime(baseline_df["solved_at"], errors="coerce") < today_norm + pd.Timedelta(days=1))
+            solved_today_mask = (pd.to_datetime(baseline_df['solved_at'], errors='coerce') >= today_norm) & (pd.to_datetime(baseline_df['solved_at'], errors='coerce') < today_norm + pd.Timedelta(days=1))
             resolved_today_count = int(solved_today_mask.sum())
             return jsonify({
                 "meta": {**meta, "baseline_window": {"start": str(baseline_start.date()), "end": str(baseline_end.date()), "used": True},
@@ -481,17 +470,14 @@ def api_data():
                 "resolved_today": resolved_today_count,
             })
 
-        # Build extended + strict windows for user data
-        created_all = pd.to_datetime(user_df["created_at"], errors="coerce")
-        solved_all = pd.to_datetime(user_df["solved_at"], errors="coerce")
+        # Janela estendida
+        created_all = pd.to_datetime(user_df['created_at'], errors='coerce')
+        solved_all = pd.to_datetime(user_df['solved_at'], errors='coerce')
         end_boundary = user_end + pd.Timedelta(days=1)
         mask_strict = (created_all >= user_start) & (created_all < end_boundary)
-        spans_window = ((created_all < user_start) & ((solved_all.isna()) | (solved_all >= user_start))) | (
-            (solved_all.notna()) & (solved_all >= user_start) & (solved_all < end_boundary))
+        spans_window = ((created_all < user_start) & ((solved_all.isna()) | (solved_all >= user_start))) | ((solved_all.notna()) & (solved_all >= user_start) & (solved_all < end_boundary))
         df_extended = user_df[mask_strict | spans_window].copy()
         df_strict = user_df[mask_strict].copy()
-        df_extended.attrs.update(window_start=user_start, window_end=user_end)
-        df_strict.attrs.update(window_start=user_start, window_end=user_end)
 
         if df_strict.empty:
             created = pd.Series(dtype=float)
@@ -507,38 +493,35 @@ def api_data():
             _c_ext, _r_ext, backlog_ext = created_resolved(df_extended, freq=freq)
             backlog_trend = backlog_trend_series(backlog_ext)
             cat_filtered, pr_filtered, imp_filtered = composition(df_strict)
-            # --- Nova pivot de categorias por status (para barras empilhadas) ---
             try:
                 tmp_cat = df_strict[['category', 'status']].copy()
-                # Mapear status numérico para nome legível
                 tmp_cat['status_name'] = tmp_cat['status'].apply(lambda x: STATUS_MAP.get(int(x), str(x)) if pd.notna(x) else 'Desconhecido')
-                # Pivot: linhas = categoria, colunas = status_name
                 cat_status_pivot = tmp_cat.groupby(['category', 'status_name']).size().unstack(fill_value=0)
-                # Manter apenas categorias presentes em cat_filtered (top N) e na mesma ordem
                 if not cat_filtered.empty:
                     ordered_index = [c for c in cat_filtered.index if c in cat_status_pivot.index]
                     cat_status_pivot = cat_status_pivot.reindex(ordered_index)
             except Exception:
                 cat_status_pivot = pd.DataFrame()
 
-        # Resolution hours by solved_at in window
-        solved_dt_ext = pd.to_datetime(df_extended["solved_at"], errors="coerce")
+        # Resolution hours
+        solved_dt_ext = pd.to_datetime(df_extended['solved_at'], errors='coerce')
         res_mask = solved_dt_ext.notna() & (solved_dt_ext >= user_start) & (solved_dt_ext < end_boundary)
         df_resolved_window = df_extended[res_mask].copy()
         resolution_hours_series = resolution_time_series(df_resolved_window, freq=freq)
         resolution_hours_trend = backlog_trend_series(resolution_hours_series)
 
-        # Baseline-only widgets (when user filter has data as well)
+        # Baseline-only metrics
         bs_full = backlog_status(baseline_df)
         age_full = aging_buckets(baseline_df)
         sla = sla_solution(baseline_df)
-        open_today_full = int(baseline_df[baseline_df["solved_at"].isna()].shape[0])
-        created_today_mask = (pd.to_datetime(baseline_df["created_at"]) >= today_norm) & (pd.to_datetime(baseline_df["created_at"]) < today_norm + pd.Timedelta(days=1))
+        open_today_full = int(baseline_df[baseline_df['solved_at'].isna()].shape[0])
+        created_today_mask = (pd.to_datetime(baseline_df['created_at']) >= today_norm) & (pd.to_datetime(baseline_df['created_at']) < today_norm + pd.Timedelta(days=1))
         created_today_count = int(created_today_mask.sum())
-        solved_today_mask = (pd.to_datetime(baseline_df["solved_at"], errors="coerce") >= today_norm) & (pd.to_datetime(baseline_df["solved_at"], errors="coerce") < today_norm + pd.Timedelta(days=1))
+        solved_today_mask = (pd.to_datetime(baseline_df['solved_at'], errors='coerce') >= today_norm) & (pd.to_datetime(baseline_df['solved_at'], errors='coerce') < today_norm + pd.Timedelta(days=1))
         resolved_today_count = int(solved_today_mask.sum())
         load = load_by_assignee(df_strict)
-        # Build list of unique assigned groups from baseline window for the filter dropdown
+
+        # Lista de grupos
         assigned_groups = []
         try:
             if baseline_df is not None and not baseline_df.empty and 'assigned_group' in baseline_df.columns:
@@ -555,7 +538,7 @@ def api_data():
                             gid = int(s)
                         else:
                             gname = s
-                    key = (gid if gid is not None else gname)
+                    key = gid if gid is not None else gname
                     if key is None or key in seen:
                         continue
                     seen.add(key)
@@ -602,7 +585,6 @@ def api_data():
         pr_named = map_series_labels(pr_filtered, LEVEL_MAP)
         imp_named = map_series_labels(imp_filtered, LEVEL_MAP)
 
-        # Preparar datasets empilhados de categoria por status
         category_stacked_payload = {"labels": [], "datasets": []}
         if 'cat_status_pivot' not in locals():
             cat_status_pivot = pd.DataFrame()
@@ -615,7 +597,7 @@ def api_data():
                 vals = cat_status_pivot.get(st)
                 if vals is None:
                     continue
-                category_stacked_payload['datasets'].append({'label': st,'data': [int(v) for v in vals.values]})
+                category_stacked_payload['datasets'].append({'label': st, 'data': [int(v) for v in vals.values]})
 
         payload = {
             "meta": {**meta,
@@ -638,8 +620,8 @@ def api_data():
                 "aging": _dict_to_labels_data(age_full),
                 "priority": _dict_to_labels_data(pr_named),
                 "impact": _dict_to_labels_data(imp_named),
-                "load_by_user": _series_to_labels_data(load.get("by_user")) if "by_user" in load else {"labels": [], "data": []},
-                "load_by_group": _series_to_labels_data(load.get("by_group")) if "by_group" in load else {"labels": [], "data": []},
+                "load_by_user": _series_to_labels_data(load.get('by_user')) if 'by_user' in load else {"labels": [], "data": []},
+                "load_by_group": _series_to_labels_data(load.get('by_group')) if 'by_group' in load else {"labels": [], "data": []},
             },
             "sla": sla,
             "open_today": open_today_full,
@@ -647,7 +629,7 @@ def api_data():
             "resolved_today": resolved_today_count,
         }
         return jsonify(payload)
-    except Exception as exc:  # pragma: no cover
+    except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 
 
@@ -673,6 +655,13 @@ def api_tickets():
         if not ok_glpi:
             return jsonify({"mensagem": "O GLPI está temporariamente indisponível. Tente novamente em alguns instantes."}), 503
         gran = request.args.get("gran", "Diário")
+        try:
+            _tz = zoneinfo.ZoneInfo(os.getenv("APP_TZ", "America/Sao_Paulo"))
+        except Exception:
+            _tz = None
+        _now_dt = datetime.now(_tz) if _tz else datetime.now()
+        now_local = _now_dt
+        today_norm = pd.Timestamp(_now_dt.date())
         mode = request.args.get("mode", "bulk").lower()
         start_s = request.args.get("start")
         end_s = request.args.get("end")
@@ -684,7 +673,7 @@ def api_tickets():
         cat_filter = request.args.get("cat", "todos").lower()
 
         if not start_s or not end_s:
-            today = pd.Timestamp.today().normalize()
+            today = today_norm
             start_s = (today - pd.Timedelta(days=30)).date().isoformat()
             end_s = today.date().isoformat()
         df, meta = _fetch_data(pd.Timestamp(start_s), pd.Timestamp(end_s), mode=mode)
@@ -798,12 +787,10 @@ def api_tickets():
             sel = base[base["solved_at"].isna()]
         elif source == "created_today":
             base = df
-            today_norm = pd.Timestamp.today().normalize()
             created_dt = pd.to_datetime(base["created_at"], errors="coerce")
             sel = base[(created_dt >= today_norm) & (created_dt < today_norm + pd.Timedelta(days=1))]
         elif source == "resolved_today":
             base = df
-            today_norm = pd.Timestamp.today().normalize()
             solved_dt = pd.to_datetime(base["solved_at"], errors="coerce")
             sel = base[(solved_dt.notna()) & (solved_dt >= today_norm) & (solved_dt < today_norm + pd.Timedelta(days=1))]
         elif source in ("category", "priority", "impact"):

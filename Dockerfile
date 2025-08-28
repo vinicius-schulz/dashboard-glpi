@@ -10,15 +10,19 @@ RUN useradd --create-home --shell /bin/bash appuser || adduser --disabled-passwo
 
 WORKDIR /app
 
-# Install OS-level deps that help with common Python packages (kept minimal)
+# Install OS-level deps (add tzdata to ensure correct local timezone in container)
+ENV TZ=America/Sao_Paulo
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-       ca-certificates \
-       gcc \
-       libssl-dev \
-       libffi-dev \
-       build-essential \
-    && rm -rf /var/lib/apt/lists/*
+     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+         ca-certificates \
+         gcc \
+         libssl-dev \
+         libffi-dev \
+         build-essential \
+         tzdata \
+     && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
+     && echo $TZ > /etc/timezone \
+     && rm -rf /var/lib/apt/lists/*
 
 # Install Python deps. Copy requirements first to leverage Docker cache.
 COPY requirements.txt /app/requirements.txt
