@@ -435,9 +435,16 @@ def api_data():
                     s = df['assigned_group'].astype(str).fillna('')
                     return df[s == assigned_group_param].copy()
                 return df
+        # Primeiro aplicamos somente o filtro de categoria; guardamos baseline sem filtro de grupo
+        baseline_df_cat = filter_category(baseline_df)
+        user_df_cat = filter_category(user_df)
 
-        baseline_df = filter_assigned_group(filter_category(baseline_df))
-        user_df = filter_assigned_group(filter_category(user_df))
+        # Guardar baseline não filtrado por grupo para montar lista completa de grupos atribuídos
+        baseline_df_unfiltered_groups = baseline_df_cat.copy() if baseline_df_cat is not None else None
+
+        # Agora aplicamos filtro de grupo (quando selecionado) para as métricas
+        baseline_df = filter_assigned_group(baseline_df_cat)
+        user_df = filter_assigned_group(user_df_cat)
 
         if user_df is None or user_df.empty:
             empty_series = {"labels": [], "data": []}
@@ -585,13 +592,14 @@ def api_data():
         resolved_today_count = int(solved_today_mask.sum())
         load = load_by_assignee(df_strict)
 
-        # Lista de grupos
+        # Lista de grupos (sempre derivada do baseline SEM filtro de grupo para não "encolher" o dropdown)
         assigned_groups = []
         try:
-            if baseline_df is not None and not baseline_df.empty and 'assigned_group' in baseline_df.columns:
+            src_groups_df = baseline_df_unfiltered_groups
+            if src_groups_df is not None and not src_groups_df.empty and 'assigned_group' in src_groups_df.columns:
                 seen = set()
                 gids_to_resolve = []
-                for val in baseline_df['assigned_group'].dropna().unique():
+                for val in src_groups_df['assigned_group'].dropna().unique():
                     gid = None; gname = None
                     if isinstance(val, dict):
                         gid = val.get('id')
