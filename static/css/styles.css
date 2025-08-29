@@ -536,6 +536,34 @@ body.drag-mode {
 	font-size: 14px;
 }
 
+/* Tabs dentro do painel de layout */
+.lp-tabs {
+	display: flex;
+	gap: 6px;
+	margin-bottom: 12px;
+}
+.lp-tab {
+	background: #f1f5f9;
+	border: 1px solid #cbd5e1;
+	padding: 6px 14px;
+	border-radius: 20px;
+	font-size: 13px;
+	cursor: pointer;
+	color: #334155;
+}
+.lp-tab.active {
+	background: #0f172a;
+	color: #fff;
+	border-color: #0f172a;
+}
+.lp-pane.hidden { display: none; }
+
+/* SLA table refinements */
+.sla-table-wrap { max-height: 360px; overflow:auto; border:1px solid #e2e8f0; border-radius:8px; }
+.sla-table input[type=number] { width:80px; padding:4px 6px; font-size:13px; }
+.sla-table td { vertical-align: middle; }
+.sla-table tbody tr:nth-child(even) { background:#f8fafc; }
+
 #layoutPanel .logout-block {
 	display: flex;
 	align-items: center;

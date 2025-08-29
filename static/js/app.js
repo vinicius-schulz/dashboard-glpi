@@ -429,6 +429,9 @@ const WidgetLayout = (() => {
       tbody.appendChild(row);
     });
     panel.classList.remove('hidden');
+  initLayoutTabs();
+  // ao abrir, garantir SLA carregada se já temos baseline_titles em lastMeta (chamado após loadData)
+  if (window._lastBaselineTitles) buildSlaTable(window._lastBaselineTitles);
   }
   function init() {
     const layout = load();
@@ -480,6 +483,70 @@ const WidgetLayout = (() => {
   return { init };
 })();
 window.addEventListener('DOMContentLoaded', () => WidgetLayout.init());
+
+// ---- Abas do painel de layout (Layout / Dados / SLA) ----
+function initLayoutTabs() {
+  const tabs = document.querySelectorAll('#layoutPanel .lp-tab');
+  const panes = document.querySelectorAll('#layoutPanel .lp-pane');
+  if (!tabs.length) return;
+  tabs.forEach(tab => {
+    if (tab._tabBound) return; tab._tabBound = true;
+    tab.addEventListener('click', () => {
+      tabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      const target = tab.dataset.tab;
+      panes.forEach(p => {
+        if (p.dataset.pane === target) p.classList.remove('hidden'); else p.classList.add('hidden');
+      });
+      // lazy build SLA table if switching to sla
+      if (target === 'sla' && window._lastBaselineTitles) buildSlaTable(window._lastBaselineTitles);
+    });
+  });
+}
+
+// ---- SLA por título (inputs) ----
+const SLA_TITLES_KEY = 'glpiDashboardSlaTitles.v1';
+let _slaTitlesCache = null;
+function loadSlaTitleConfig() {
+  if (_slaTitlesCache) return _slaTitlesCache;
+  try { _slaTitlesCache = JSON.parse(localStorage.getItem(SLA_TITLES_KEY) || '{}') || {}; } catch { _slaTitlesCache = {}; }
+  return _slaTitlesCache;
+}
+function saveSlaTitleConfig() {
+  try { localStorage.setItem(SLA_TITLES_KEY, JSON.stringify(_slaTitlesCache || {})); } catch { }
+}
+function buildSlaTable(titles) {
+  const tb = document.getElementById('slaTitleRows');
+  if (!tb) return;
+  if (!Array.isArray(titles)) { tb.innerHTML = '<tr><td colspan="4">Sem dados de baseline.</td></tr>'; return; }
+  const cfg = loadSlaTitleConfig();
+  if (!titles.length) { tb.innerHTML = '<tr><td colspan="4">Nenhum título encontrado nos últimos 6 meses.</td></tr>'; return; }
+  const rowsHtml = titles.map(t => {
+    const rec = cfg[t] || {}; // {normal, moderate, critical}
+    const n = rec.normal != null ? rec.normal : '';
+    const m = rec.moderate != null ? rec.moderate : '';
+    const c = rec.critical != null ? rec.critical : '';
+    return `<tr data-title="${escapeHtml(t)}"><td style="font-size:12px;">${escapeHtml(t)}</td>
+      <td><input type="number" min="0" data-f="normal" value="${n}" /></td>
+      <td><input type="number" min="0" data-f="moderate" value="${m}" /></td>
+      <td><input type="number" min="0" data-f="critical" value="${c}" /></td></tr>`;
+  }).join('');
+  tb.innerHTML = rowsHtml;
+  tb.querySelectorAll('input').forEach(inp => {
+    if (inp._slaBound) return; inp._slaBound = true;
+    inp.addEventListener('change', () => {
+      const tr = inp.closest('tr'); if (!tr) return;
+      const title = tr.getAttribute('data-title'); if (!title) return;
+      const field = inp.dataset.f;
+      const val = inp.value === '' ? undefined : (isNaN(parseInt(inp.value)) ? undefined : parseInt(inp.value));
+      if (!cfg[title]) cfg[title] = {};
+      if (val == null) delete cfg[title][field]; else cfg[title][field] = val;
+      // remove object if empty
+      if (Object.keys(cfg[title]).length === 0) delete cfg[title];
+      _slaTitlesCache = cfg; saveSlaTitleConfig();
+    });
+  });
+}
 // Click handlers for big counters
 window.addEventListener('DOMContentLoaded', () => {
   const o = document.getElementById('openTodayValue');
@@ -710,6 +777,12 @@ async function loadData() {
     if (js && js.error) throw new Error(js.error);
 
     setMeta(js.meta || {}, js.count || 0, js.period || {});
+    if (Array.isArray(js.baseline_titles)) {
+      window._lastBaselineTitles = js.baseline_titles;
+      // se aba SLA já visível, reconstruir
+      const activeSla = document.querySelector('#layoutPanel .lp-tab.active[data-tab="sla"]');
+      if (activeSla) buildSlaTable(js.baseline_titles);
+    }
     lastMeta = js.meta || null;
 
     // Big number snapshot (ignora filtro): campo open_today
@@ -1163,7 +1236,7 @@ window.addEventListener('DOMContentLoaded', setupAutoRefresh);
 function buildFullSetupSnapshot() {
   const snapshot = { meta: { exported_at: new Date().toISOString(), app: 'dashboard-glpi' }, storage: {} };
   // Keys we manage
-  const keys = ['glpiDashboardLayout.v2', FILTERS_KEY, 'glpiAutoRefreshMin'];
+  const keys = ['glpiDashboardLayout.v2', FILTERS_KEY, 'glpiAutoRefreshMin', SLA_TITLES_KEY];
   keys.forEach(k => {
     try {
       const v = localStorage.getItem(k);

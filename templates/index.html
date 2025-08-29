@@ -188,30 +188,69 @@
         <a href="/logout" class="logout-link-modal" title="Sair do dashboard">Sair</a>
       </div>
       {% endif %}
-      <p>Arraste os cards diretamente na área principal para reordenar. Ajuste visibilidade e tamanho abaixo. As
-        preferências ficam salvas neste navegador.</p>
-      <div class="lp-config" style="margin-bottom:12px;">
-        <label>Auto atualizar (min):
-          <input type="number" id="autoRefreshMin" min="0" step="1" style="width:80px" />
-          <span class="small-note" style="display:block;font-size:11px;margin-top:2px;">0 desativa • Padrão: 30</span>
-        </label>
+      <div class="lp-tabs">
+        <button class="lp-tab active" data-tab="layout">Layout</button>
+        <button class="lp-tab" data-tab="dados">Dados</button>
+        <button class="lp-tab" data-tab="sla">SLA</button>
       </div>
-      <table class="lp-table">
-        <thead>
-          <tr>
-            <th>Widget</th>
-            <th>Visível</th>
-            <th>Posição (X/Y) & Largura / Altura</th>
-          </tr>
-        </thead>
-        <tbody id="lpRows"></tbody>
-      </table>
-      <div class="lp-actions">
-        <button id="exportSetupBtn" type="button">Exportar setup</button>
-        <button id="importSetupBtn" type="button">Importar setup</button>
-        <input type="file" id="importSetupFile" accept="application/json" style="display:none" />
-        <button id="lpReset" type="button">Redefinir layout</button>
-        <button id="lpDone" type="button" class="primary">Concluir</button>
+      <div class="lp-tabpanes">
+        <div class="lp-pane" data-pane="layout">
+          <p>Arraste os cards diretamente na área principal para reordenar. Ajuste visibilidade e tamanho abaixo. As
+            preferências ficam salvas neste navegador.</p>
+          <table class="lp-table">
+            <thead>
+              <tr>
+                <th>Widget</th>
+                <th>Visível</th>
+                <th>Posição (X/Y) & Largura / Altura</th>
+              </tr>
+            </thead>
+            <tbody id="lpRows"></tbody>
+          </table>
+
+        </div>
+        <div class="lp-pane hidden" data-pane="dados">
+          <h4 style="margin:4px 0 10px">Configurações de Dados</h4>
+          <div class="lp-config" style="margin-bottom:16px;">
+            <label>Auto atualizar (min):
+              <input type="number" id="autoRefreshMin" min="0" step="1" style="width:80px" />
+              <span class="small-note" style="display:block;font-size:11px;margin-top:2px;">0 desativa • Padrão:
+                30</span>
+            </label>
+          </div>
+          <p style="font-size:12px;color:#475569;margin-top:0">Outras preferências continuarão sendo adicionadas aqui.
+          </p>
+        </div>
+        <div class="lp-pane hidden" data-pane="sla">
+          <h4 style="margin:4px 0 12px">Baseline de Títulos (últimos 6 meses)</h4>
+          <p style="font-size:12px;color:#475569;margin-top:0;margin-bottom:10px">Defina limites em dias para cada
+            título de ticket. Campos podem ficar em branco. Os valores são salvos automaticamente neste navegador
+            (<code>glpiDashboardSlaTitles.v1</code>).</p>
+          <div class="sla-table-wrap">
+            <table class="lp-table sla-table">
+              <thead>
+                <tr>
+                  <th style="min-width:240px">Título do Ticket</th>
+                  <th>Tempo Normal (dias)</th>
+                  <th>Tempo Moderado (dias)</th>
+                  <th>Tempo Crítico (dias)</th>
+                </tr>
+              </thead>
+              <tbody id="slaTitleRows">
+                <tr>
+                  <td colspan="4" style="text-align:center;font-size:12px;color:#64748b">Carregando...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+                  <div class="lp-actions">
+            <button id="exportSetupBtn" type="button">Exportar setup</button>
+            <button id="importSetupBtn" type="button">Importar setup</button>
+            <input type="file" id="importSetupFile" accept="application/json" style="display:none" />
+            <button id="lpReset" type="button">Redefinir layout</button>
+            <button id="lpDone" type="button" class="primary">Concluir</button>
+          </div>
       </div>
     </div>
   </div>

@@ -434,6 +434,7 @@ def api_data():
                     "open_today": 0,
                     "created_today": 0,
                     "resolved_today": 0,
+                    "baseline_titles": [],
                 })
             bs_full = backlog_status(baseline_df)
             age_full = aging_buckets(baseline_df)
@@ -443,6 +444,13 @@ def api_data():
             created_today_count = int(created_today_mask.sum())
             solved_today_mask = (pd.to_datetime(baseline_df['solved_at'], errors='coerce') >= today_norm) & (pd.to_datetime(baseline_df['solved_at'], errors='coerce') < today_norm + pd.Timedelta(days=1))
             resolved_today_count = int(solved_today_mask.sum())
+            # títulos baseline
+            try:
+                baseline_titles = []
+                if 'title' in baseline_df.columns:
+                    baseline_titles = sorted({str(t).strip() for t in baseline_df['title'].dropna().astype(str) if str(t).strip()})
+            except Exception:
+                baseline_titles = []
             return jsonify({
                 "meta": {**meta, "baseline_window": {"start": str(baseline_start.date()), "end": str(baseline_end.date()), "used": True},
                           "user_window": {"start": str(user_start.date()), "end": str(user_end.date())},
@@ -468,6 +476,7 @@ def api_data():
                 "open_today": open_today_full,
                 "created_today": created_today_count,
                 "resolved_today": resolved_today_count,
+                "baseline_titles": baseline_titles,
             })
 
         # Janela estendida
@@ -599,6 +608,14 @@ def api_data():
                     continue
                 category_stacked_payload['datasets'].append({'label': st, 'data': [int(v) for v in vals.values]})
 
+        # baseline titles (6 meses) para configuração SLA manual por título
+        try:
+            baseline_titles = []
+            if 'title' in baseline_df.columns:
+                baseline_titles = sorted({str(t).strip() for t in baseline_df['title'].dropna().astype(str) if str(t).strip()})
+        except Exception:
+            baseline_titles = []
+
         payload = {
             "meta": {**meta,
                       "baseline_window": {"start": str(baseline_start.date()), "end": str(baseline_end.date()), "used": True},
@@ -627,6 +644,7 @@ def api_data():
             "open_today": open_today_full,
             "created_today": created_today_count,
             "resolved_today": resolved_today_count,
+            "baseline_titles": baseline_titles,
         }
         return jsonify(payload)
     except Exception as exc:
