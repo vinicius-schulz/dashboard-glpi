@@ -854,6 +854,23 @@ async function loadData() {
   // SLA Buckets (3 níveis) usando thresholds configurados localmente
     try {
       const tickets = Array.isArray(js.tickets_sla) ? js.tickets_sla : [];
+      // Função para calcular diferença em dias úteis (pode retornar fração, descontando fins de semana)
+      function businessDaysDiff(start, end) {
+        if (!start || !end || end <= start) return 0;
+        const msDay = 86400000;
+        let cur = new Date(start.getFullYear(), start.getMonth(), start.getDate(), start.getHours(), start.getMinutes(), start.getSeconds());
+        let totalMs = 0;
+        while (cur < end) {
+          const next = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + 1);
+            const segEnd = next < end ? next : end;
+          const dow = cur.getDay();
+          if (dow !== 0 && dow !== 6) { // Mon-Fri
+            totalMs += (segEnd - cur);
+          }
+          cur = next;
+        }
+        return totalMs / msDay;
+      }
       window._ticketsSlaRaw = tickets; // cache
       const cfg = loadSlaTitleConfig();
       const nowIso = new Date();
@@ -870,7 +887,7 @@ async function loadData() {
         if (!created || isNaN(created.getTime())) return;
         const solved = t.solved_at ? new Date(t.solved_at) : null;
         const effectiveEnd = solved && !isNaN(solved.getTime()) ? solved : nowIso;
-        const ageDays = (effectiveEnd - created) / 86400000; // ms to days
+  const ageDays = businessDaysDiff(created, effectiveEnd); // dias úteis (fração)
         // classificação
         if (thNorm != null && ageDays <= thNorm) { buckets.normal.push(t); return; }
         if (thMod != null && ageDays <= thMod) { buckets.moderado.push(t); return; }
@@ -884,7 +901,7 @@ async function loadData() {
   const labelsSla = ['Normal','Moderado','Crítico'];
   const dataSla = [buckets.normal.length, buckets.moderado.length, buckets.critico.length];
       if (labelsSla.some((_,i)=>dataSla[i]>0)) {
-  barChart('chartSlaBuckets', labelsSla, dataSla, 'Buckets SLA', 'Tickets em aberto (não resolvidos) por faixa de SLA (ignora filtro de período) conforme limites configurados por título nos últimos 6 meses.');
+  barChart('chartSlaBuckets', labelsSla, dataSla, 'Buckets SLA', 'Tickets em aberto (não resolvidos) por faixa de SLA (dias úteis; ignora filtro de período) conforme limites configurados por título nos últimos 6 meses.');
         // clique -> modal local com tickets (sem nova chamada API)
         const canvas = document.getElementById('chartSlaBuckets');
         if (canvas) {
