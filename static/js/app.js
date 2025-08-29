@@ -134,6 +134,8 @@ const WidgetLayout = (() => {
     { id: 'impact', cols: 8, rows: 8, visible: true }
     , { id: 'load_by_group', cols: 8, rows: 8, visible: true }
     , { id: 'resolutionHours', cols: 8, rows: 8, visible: true }
+    , { id: 'slaBuckets', cols: 8, rows: 8, visible: true }
+    
   ].map((w, i) => ({ ...w, order: i }));
   // Grid cell size (px) for snap positioning
   const CELL_W = 80; // base logical cell width (will derive snap unit)
@@ -604,6 +606,8 @@ function buildSlaTable(detailList) {
     });
   }
 }
+
+// Removido openLocalSlaModal: usamos modal padrão via /api/tickets com ids
 // Click handlers for big counters
 window.addEventListener('DOMContentLoaded', () => {
   const o = document.getElementById('openTodayValue');
@@ -846,6 +850,64 @@ async function loadData() {
       const activeSla = document.querySelector('#layoutPanel .lp-tab.active[data-tab="sla"]');
       if (activeSla) buildSlaTable(window._lastBaselineTitlesDetail);
     }
+
+  // SLA Buckets (3 níveis) usando thresholds configurados localmente
+    try {
+      const tickets = Array.isArray(js.tickets_sla) ? js.tickets_sla : [];
+      window._ticketsSlaRaw = tickets; // cache
+      const cfg = loadSlaTitleConfig();
+      const nowIso = new Date();
+  const buckets = { normal: [], moderado: [], critico: [] };
+      tickets.forEach(t => {
+        const title = t.title || ''; if (!title) return;
+        const conf = cfg[title] || {}; // {normal, moderate, critical}
+        // thresholds (dias) convertidos para números
+        const thNorm = Number.isFinite(conf.normal) ? conf.normal : (conf.normal!=null?parseInt(conf.normal):undefined);
+        const thMod = Number.isFinite(conf.moderate) ? conf.moderate : (conf.moderate!=null?parseInt(conf.moderate):undefined);
+        const thCrit = Number.isFinite(conf.critical) ? conf.critical : (conf.critical!=null?parseInt(conf.critical):undefined);
+        // calcular idade em dias (se resolvido usar solved_at, senão now)
+        const created = t.created_at ? new Date(t.created_at) : null;
+        if (!created || isNaN(created.getTime())) return;
+        const solved = t.solved_at ? new Date(t.solved_at) : null;
+        const effectiveEnd = solved && !isNaN(solved.getTime()) ? solved : nowIso;
+        const ageDays = (effectiveEnd - created) / 86400000; // ms to days
+        // classificação
+        if (thNorm != null && ageDays <= thNorm) { buckets.normal.push(t); return; }
+        if (thMod != null && ageDays <= thMod) { buckets.moderado.push(t); return; }
+  // Critico: acima dos limites anteriores e com threshold crítico definido
+  if (thCrit != null) { buckets.critico.push(t); return; }
+  if (thNorm==null && thMod==null && thCrit==null) return; // sem config => ignora
+  // Caso sem crítico definido mas passou moderado => classifica como crítico lógico
+  buckets.critico.push(t);
+      });
+      // montar gráfico
+  const labelsSla = ['Normal','Moderado','Crítico'];
+  const dataSla = [buckets.normal.length, buckets.moderado.length, buckets.critico.length];
+      if (labelsSla.some((_,i)=>dataSla[i]>0)) {
+  barChart('chartSlaBuckets', labelsSla, dataSla, 'Buckets SLA', 'Tickets em aberto (não resolvidos) por faixa de SLA (ignora filtro de período) conforme limites configurados por título nos últimos 6 meses.');
+        // clique -> modal local com tickets (sem nova chamada API)
+        const canvas = document.getElementById('chartSlaBuckets');
+        if (canvas) {
+          canvas.onclick = (evt) => {
+            const chart = charts['chartSlaBuckets'];
+            if (!chart) return;
+            const points = chart.getElementsAtEventForMode(evt, 'nearest', { intersect: true }, true);
+            if (!points.length) return;
+            const idx = points[0].index;
+            const key = ['normal','moderado','critico'][idx];
+            const arr = buckets[key] || [];
+            const human = key === 'normal' ? 'Normal' : key === 'moderado' ? 'Moderado' : 'Crítico';
+            const ids = arr.map(t => t.id).filter(x => x != null);
+            if (!ids.length) return;
+            openTicketsModal('ids', human, ids);
+          };
+        }
+        // guardar para refresh (ex: se thresholds mudarem -> reconstruir manual depois)
+        window._slaBucketsCache = { buckets, labels: labelsSla, data: dataSla };
+      } else {
+        destroyChart('chartSlaBuckets');
+      }
+    } catch(e) { console.warn('SLA buckets error', e); }
     lastMeta = js.meta || null;
 
     // Big number snapshot (ignora filtro): campo open_today
@@ -920,7 +982,7 @@ async function loadData() {
               }
             }
           }
-        }
+  }
       });
       attachPointClick('chartCumGap', s.created.labels, ['created', 'resolved']);
     } else { destroyChart('chartCumGap'); }
@@ -1503,7 +1565,7 @@ function attachBarClick(canvasId, labels, source) {
   };
 }
 
-async function openTicketsModal(source, label) {
+async function openTicketsModal(source, label, idsList) {
   const gran = document.getElementById('gran').value;
   let userStart, userEnd;
   if (gran === 'Mensal') {
@@ -1533,7 +1595,7 @@ async function openTicketsModal(source, label) {
     gran,
     start: bstart,
     end: bend,
-    source,
+    source: idsList && idsList.length ? 'ids' : source,
     label,
     ustart: userStart,
     uend: userEnd,
@@ -1541,15 +1603,16 @@ async function openTicketsModal(source, label) {
     cat: catSel
     , assigned_group: assignedSel
   });
+  if (idsList && idsList.length) params.set('ids', idsList.join(','));
 
-  modal.title.textContent = `Chamados — ${source} · ${label}`;
+  modal.title.textContent = idsList && idsList.length ? `Chamados — SLA ${label}` : `Chamados — ${source} · ${label}`;
   modal.info.textContent = 'Carregando...';
   modal.rows.innerHTML = '';
   modal.show();
   Loader.show('Carregando chamados...');
   document.body.style.cursor = 'progress';
   try {
-    const r = await fetch(`/api/tickets?${params.toString()}`);
+  const r = await fetch(`/api/tickets?${params.toString()}`);
     let js = null;
     try { js = await r.clone().json(); } catch { /* ignore */ }
     if (r.status === 503) {

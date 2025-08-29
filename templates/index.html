@@ -172,6 +172,15 @@
         </h2><canvas id="chartResolutionHours"></canvas>
       </div>
     </div>
+    <div class="card" data-widget="slaBuckets">
+      <div class="card-inner">
+        <h2>Distribuição por Expectativa
+          <button class="help"
+            title="Classifica tickets conforme limites configurados por título na aba SLA: Normal, Moderado, Crítico. Tickets acima do crítico entram em 'Acima do Crítico'.">❔</button>
+        </h2>
+        <canvas id="chartSlaBuckets"></canvas>
+      </div>
+    </div>
   </section>
 
   <!-- Painel de personalização de layout -->
@@ -245,13 +254,13 @@
             </table>
           </div>
         </div>
-                  <div class="lp-actions">
-            <button id="exportSetupBtn" type="button">Exportar setup</button>
-            <button id="importSetupBtn" type="button">Importar setup</button>
-            <input type="file" id="importSetupFile" accept="application/json" style="display:none" />
-            <button id="lpReset" type="button">Redefinir layout</button>
-            <button id="lpDone" type="button" class="primary">Concluir</button>
-          </div>
+      </div>
+      <div class="lp-actions">
+        <button id="exportSetupBtn" type="button">Exportar setup</button>
+        <button id="importSetupBtn" type="button">Importar setup</button>
+        <input type="file" id="importSetupFile" accept="application/json" style="display:none" />
+        <button id="lpReset" type="button">Redefinir layout</button>
+        <button id="lpDone" type="button" class="primary">Concluir</button>
       </div>
     </div>
   </div>

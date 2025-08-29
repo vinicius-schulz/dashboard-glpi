@@ -435,6 +435,7 @@ def api_data():
                     "created_today": 0,
                     "resolved_today": 0,
                     "baseline_titles": [],
+                    "tickets_sla": [],
                 })
             bs_full = backlog_status(baseline_df)
             age_full = aging_buckets(baseline_df)
@@ -511,6 +512,7 @@ def api_data():
                 "resolved_today": resolved_today_count,
                 "baseline_titles": baseline_titles,
                 "baseline_titles_detail": baseline_titles_detail,
+                "tickets_sla": [],
             })
 
         # Janela estendida
@@ -705,6 +707,22 @@ def api_data():
             "resolved_today": resolved_today_count,
             "baseline_titles": baseline_titles,
             "baseline_titles_detail": baseline_titles_detail,
+            # lista simplificada para cálculo client-side de buckets SLA customizados por título
+            # Apenas tickets ainda não resolvidos (backlog) para distribuição SLA
+            "tickets_sla": (lambda _df: [
+                {
+                    "id": int(r.ticket_id),
+                    "title": (str(getattr(r, 'title', '') or '')).strip(),
+                    "created_at": (pd.to_datetime(r.created_at, errors='coerce').isoformat() if pd.notna(pd.to_datetime(r.created_at, errors='coerce')) else None),
+                    "solved_at": (pd.to_datetime(r.solved_at, errors='coerce').isoformat() if pd.notna(pd.to_datetime(r.solved_at, errors='coerce')) else None)
+                }
+                for _, r in _df.head(5000).iterrows()
+                if str(getattr(r, 'title', '') or '').strip()
+            ])( (
+                (baseline_df[ pd.to_datetime(baseline_df['solved_at'], errors='coerce').isna() ])
+                if (baseline_df is not None and not baseline_df.empty and 'solved_at' in baseline_df.columns)
+                else (baseline_df if baseline_df is not None else pd.DataFrame())
+            ) ),
         }
         return jsonify(payload)
     except Exception as exc:
@@ -728,35 +746,35 @@ def api_tickets():
     - label: label ou id clicado
     - baseline=1 indica que start/end representam a janela baseline de 6 meses
     """
+    ok_glpi, msg_glpi = is_glpi_operational(timeout=10)
+    if not ok_glpi:
+        return jsonify({"mensagem": "O GLPI está temporariamente indisponível. Tente novamente em alguns instantes."}), 503
+    gran = request.args.get("gran", "Diário")
     try:
-        ok_glpi, msg_glpi = is_glpi_operational(timeout=10)
-        if not ok_glpi:
-            return jsonify({"mensagem": "O GLPI está temporariamente indisponível. Tente novamente em alguns instantes."}), 503
-        gran = request.args.get("gran", "Diário")
-        try:
-            _tz = zoneinfo.ZoneInfo(os.getenv("APP_TZ", "America/Sao_Paulo"))
-        except Exception:
-            _tz = None
-        _now_dt = datetime.now(_tz) if _tz else datetime.now()
-        now_local = _now_dt
-        today_norm = pd.Timestamp(_now_dt.date())
-        mode = request.args.get("mode", "bulk").lower()
-        start_s = request.args.get("start")
-        end_s = request.args.get("end")
-        user_start_s = request.args.get("ustart") or start_s
-        user_end_s = request.args.get("uend") or end_s
-        source = request.args.get("source", "")
-        label = request.args.get("label", "")
-        baseline_flag = request.args.get("baseline", "0") == "1"
-        cat_filter = request.args.get("cat", "todos").lower()
+        _tz = zoneinfo.ZoneInfo(os.getenv("APP_TZ", "America/Sao_Paulo"))
+    except Exception:
+        _tz = None
+    _now_dt = datetime.now(_tz) if _tz else datetime.now()
+    now_local = _now_dt
+    today_norm = pd.Timestamp(_now_dt.date())
+    mode = request.args.get("mode", "bulk").lower()
+    start_s = request.args.get("start")
+    end_s = request.args.get("end")
+    user_start_s = request.args.get("ustart") or start_s
+    user_end_s = request.args.get("uend") or end_s
+    source = request.args.get("source", "")
+    label = request.args.get("label", "")
+    baseline_flag = request.args.get("baseline", "0") == "1"
+    cat_filter = request.args.get("cat", "todos").lower()
+    ids_param = request.args.get("ids")  # lista opcional de IDs ("1,2,3")
 
-        if not start_s or not end_s:
-            today = today_norm
-            start_s = (today - pd.Timedelta(days=30)).date().isoformat()
-            end_s = today.date().isoformat()
-        df, meta = _fetch_data(pd.Timestamp(start_s), pd.Timestamp(end_s), mode=mode)
+    if not start_s or not end_s:
+        today = today_norm
+        start_s = (today - pd.Timedelta(days=30)).date().isoformat()
+        end_s = today.date().isoformat()
+    df, meta = _fetch_data(pd.Timestamp(start_s), pd.Timestamp(end_s), mode=mode)
         # Aplicar filtro de categoria igual ao /api/data
-        if df is not None and not df.empty and cat_filter not in ("todos", ""):
+    if df is not None and not df.empty and cat_filter not in ("todos", ""):
             name_cols = [c for c in ["category_fullname", "category_name", "category_label"] if c in df.columns]
             if name_cols:
                 col = name_cols[0]
@@ -774,162 +792,174 @@ def api_tickets():
                     df = df[~mask_h].copy()
                 meta["cat_filter"] = cat_filter
         # Apply assigned_group filter (same semantics as /api/data)
-        assigned_group_param = request.args.get('assigned_group', 'todos')
+    assigned_group_param = request.args.get('assigned_group', 'todos')
 
-        def filter_assigned_group(df: pd.DataFrame) -> pd.DataFrame:
-            if df is None or df.empty or assigned_group_param in (None, '', 'todos'):
-                return df
-            try:
-                aid = int(float(assigned_group_param))
-                def match(row):
-                    val = row.get('assigned_group')
-                    if isinstance(val, dict):
-                        try:
-                            return int(val.get('id')) == aid
-                        except Exception:
-                            return False
+    def filter_assigned_group(df_in: pd.DataFrame) -> pd.DataFrame:
+        if df_in is None or df_in.empty or assigned_group_param in (None, '', 'todos'):
+            return df_in
+        try:
+            aid = int(float(assigned_group_param))
+            def match(row):
+                val = row.get('assigned_group')
+                if isinstance(val, dict):
                     try:
-                        return int(float(val)) == aid
+                        return int(val.get('id')) == aid
                     except Exception:
                         return False
-                return df[df.apply(match, axis=1)].copy()
-            except Exception:
-                if 'assigned_group' in df.columns and df['assigned_group'].dtype == object:
-                    s = df['assigned_group'].astype(str).fillna('')
-                    return df[s == assigned_group_param].copy()
-                return df
+                try:
+                    return int(float(val)) == aid
+                except Exception:
+                    return False
+            return df_in[df_in.apply(match, axis=1)].copy()
+        except Exception:
+            if 'assigned_group' in df_in.columns and df_in['assigned_group'].dtype == object:
+                s = df_in['assigned_group'].astype(str).fillna('')
+                return df_in[s == assigned_group_param].copy()
+            return df_in
 
-        df = filter_assigned_group(df)
-        if df is None or df.empty:
-            return jsonify({"meta": meta, "count": 0, "tickets": []})
+    df = filter_assigned_group(df)
+    if df is None or df.empty:
+        return jsonify({"meta": meta, "count": 0, "tickets": []})
 
         # Converter campos de data
-        df_created = pd.to_datetime(df["created_at"], errors="coerce")
-        df_solved = pd.to_datetime(df["solved_at"], errors="coerce")
-        user_start = pd.Timestamp(user_start_s).normalize()
-        user_end = pd.Timestamp(user_end_s).normalize()
-        end_boundary = user_end + pd.Timedelta(days=1)
+    df_created = pd.to_datetime(df["created_at"], errors="coerce")
+    df_solved = pd.to_datetime(df["solved_at"], errors="coerce")
+    user_start = pd.Timestamp(user_start_s).normalize()
+    user_end = pd.Timestamp(user_end_s).normalize()
+    end_boundary = user_end + pd.Timedelta(days=1)
 
         # Determinar subset que respeita filtro (created dentro da janela do usuário)
-        mask_strict = (df_created >= user_start) & (df_created < end_boundary)
-        df_strict = df[mask_strict].copy() 
+    mask_strict = (df_created >= user_start) & (df_created < end_boundary)
+    df_strict = df[mask_strict].copy() 
 
         # Para backlog precisamos incluir tickets criados antes mas abertos ou resolvidos dentro
-        spans_window = (
-            (df_created < user_start) & ((df_solved.isna()) | (df_solved >= user_start))
-        ) | (
-            (df_solved.notna()) & (df_solved >= user_start) & (df_solved < end_boundary)
-        )
-        df_extended = df[mask_strict | spans_window].copy()
+    spans_window = (
+        (df_created < user_start) & ((df_solved.isna()) | (df_solved >= user_start))
+    ) | (
+        (df_solved.notna()) & (df_solved >= user_start) & (df_solved < end_boundary)
+    )
+    df_extended = df[mask_strict | spans_window].copy()
 
-        now = pd.Timestamp.now()
+    now = pd.Timestamp.now()
 
-        # Seleção baseada na fonte
-        sel = pd.DataFrame()
-        if source in ("created", "resolved"):
-            # label => período
-            ps, pe = _period_bounds_from_label(label, gran)
-            if source == "created":
-                base = df_strict  # created respeita filtro
+        # Seleção baseada em lista explícita de IDs (se fornecida) ou na fonte
+    sel = pd.DataFrame()
+    used_ids = False
+    if ids_param:
+        try:
+            wanted_ids = {int(x) for x in ids_param.split(',') if x.strip().isdigit()}
+        except Exception:
+            wanted_ids = set()
+        if wanted_ids:
+            sel = df[df['ticket_id'].isin(wanted_ids)].copy()
+            source = 'ids'  # identifica seleção direta
+            used_ids = True
+        # Caso não tenha ids (ou lista vazia) segue lógica tradicional de source
+    if not used_ids:
+            if source in ("created", "resolved"):
+                # label => período
+                ps, pe = _period_bounds_from_label(label, gran)
+                if source == "created":
+                    base = df_strict  # created respeita filtro
+                    created_dt = pd.to_datetime(base["created_at"], errors="coerce")
+                    sel = base[(created_dt >= ps) & (created_dt <= pe)]
+                else:  # resolved
+                    base = df_strict
+                    solved_dt = pd.to_datetime(base["solved_at"], errors="coerce")
+                    sel = base[(solved_dt.notna()) & (solved_dt >= ps) & (solved_dt <= pe)]
+            elif source == "backlog":
+                ps, pe = _period_bounds_from_label(label, gran)
+                base = df_extended  # backlog precisa considerar anteriores
                 created_dt = pd.to_datetime(base["created_at"], errors="coerce")
-                sel = base[(created_dt >= ps) & (created_dt <= pe)]
-            else:  # resolved
-                base = df_strict
                 solved_dt = pd.to_datetime(base["solved_at"], errors="coerce")
-                sel = base[(solved_dt.notna()) & (solved_dt >= ps) & (solved_dt <= pe)]
-        elif source == "backlog":
-            ps, pe = _period_bounds_from_label(label, gran)
-            base = df_extended  # backlog precisa considerar anteriores
-            created_dt = pd.to_datetime(base["created_at"], errors="coerce")
-            solved_dt = pd.to_datetime(base["solved_at"], errors="coerce")
-            sel = base[(created_dt <= pe) & ((solved_dt.isna()) | (solved_dt > pe))]
-        elif source == "backlog_status":
-            st = None
-            try:
-                st = int(float(label))
-            except Exception:
-                inv = {v.lower(): k for k, v in STATUS_MAP.items()}
-                st = inv.get(str(label).lower())
-            base = df if baseline_flag else df_strict
-            open_mask = base["solved_at"].isna()
-            sel = base[open_mask & ((base["status"] == st) if st is not None else False)]
-        elif source == "aging":
-            base = df if baseline_flag else df_strict
-            ages = (now - pd.to_datetime(base["created_at"], errors="coerce")) .dt.total_seconds() / 86400.0
-            bins = [-1, 2, 7, 14, 30, 60, 999999]
-            labels = ["0–2d", "3–7d", "8–14d", "15–30d", "31–60d", ">60d"]
-            cats = pd.cut(ages, bins=bins, labels=labels)
-            sel = base[(base["solved_at"].isna()) & (cats.astype(str) == label)]
-        elif source == "open_today":
-            base = df
-            sel = base[base["solved_at"].isna()]
-        elif source == "created_today":
-            base = df
-            created_dt = pd.to_datetime(base["created_at"], errors="coerce")
-            sel = base[(created_dt >= today_norm) & (created_dt < today_norm + pd.Timedelta(days=1))]
-        elif source == "resolved_today":
-            base = df
-            solved_dt = pd.to_datetime(base["solved_at"], errors="coerce")
-            sel = base[(solved_dt.notna()) & (solved_dt >= today_norm) & (solved_dt < today_norm + pd.Timedelta(days=1))]
-        elif source in ("category", "priority", "impact"):
-            base = df_strict  # respeitam filtro agora
-            col = {"category": "category", "priority": "priority", "impact": "impact"}[source]
-            if source in ("priority", "impact"):
+                sel = base[(created_dt <= pe) & ((solved_dt.isna()) | (solved_dt > pe))]
+            elif source == "backlog_status":
+                st = None
                 try:
-                    v = int(float(label))
-                    sel = base[base[col] == v]
+                    st = int(float(label))
                 except Exception:
-                    inv = {v.lower(): k for k, v in LEVEL_MAP.items()}
-                    mapped = inv.get(str(label).lower())
-                    if mapped is None:
-                        sel = base[base[col].astype(str) == str(label)]
-                    else:
-                        sel = base[base[col] == mapped]
-            else:
-                sel = base[base[col].astype(str) == str(label)]
-        elif source in ("load_by_user", "load_by_group"):
-            base = df_strict
-            col = "assigned_user" if source == "load_by_user" else "assigned_group"
-            sel = pd.DataFrame()
-            # First try numeric id matching (handles raw ids stored as int/float or dict with 'id')
-            try:
-                aid = int(float(label))
-                def match_id(row):
-                    val = row.get(col)
-                    if isinstance(val, dict):
-                        try:
-                            return int(val.get('id')) == aid
-                        except Exception:
-                            return False
+                    inv = {v.lower(): k for k, v in STATUS_MAP.items()}
+                    st = inv.get(str(label).lower())
+                base = df if baseline_flag else df_strict
+                open_mask = base["solved_at"].isna()
+                sel = base[open_mask & ((base["status"] == st) if st is not None else False)]
+            elif source == "aging":
+                base = df if baseline_flag else df_strict
+                ages = (now - pd.to_datetime(base["created_at"], errors="coerce")) .dt.total_seconds() / 86400.0
+                bins = [-1, 2, 7, 14, 30, 60, 999999]
+                labels = ["0–2d", "3–7d", "8–14d", "15–30d", "31–60d", ">60d"]
+                cats = pd.cut(ages, bins=bins, labels=labels)
+                sel = base[(base["solved_at"].isna()) & (cats.astype(str) == label)]
+            elif source == "open_today":
+                base = df
+                sel = base[base["solved_at"].isna()]
+            elif source == "created_today":
+                base = df
+                created_dt = pd.to_datetime(base["created_at"], errors="coerce")
+                sel = base[(created_dt >= today_norm) & (created_dt < today_norm + pd.Timedelta(days=1))]
+            elif source == "resolved_today":
+                base = df
+                solved_dt = pd.to_datetime(base["solved_at"], errors="coerce")
+                sel = base[(solved_dt.notna()) & (solved_dt >= today_norm) & (solved_dt < today_norm + pd.Timedelta(days=1))]
+            elif source in ("category", "priority", "impact"):
+                base = df_strict  # respeitam filtro agora
+                col = {"category": "category", "priority": "priority", "impact": "impact"}[source]
+                if source in ("priority", "impact"):
                     try:
-                        return int(float(val)) == aid
+                        v = int(float(label))
+                        sel = base[base[col] == v]
                     except Exception:
-                        return False
-                sel = base[base.apply(match_id, axis=1)].copy()
-            except Exception:
-                # Fallback: try textual/name matching (handles dicts with 'completename'/'name' or plain text)
-                if col in base.columns and base[col].dtype == object:
-                    def match_name(row):
+                        inv = {v.lower(): k for k, v in LEVEL_MAP.items()}
+                        mapped = inv.get(str(label).lower())
+                        if mapped is None:
+                            sel = base[base[col].astype(str) == str(label)]
+                        else:
+                            sel = base[base[col] == mapped]
+                else:
+                    sel = base[base[col].astype(str) == str(label)]
+            elif source in ("load_by_user", "load_by_group"):
+                base = df_strict
+                col = "assigned_user" if source == "load_by_user" else "assigned_group"
+                sel = pd.DataFrame()
+                # First try numeric id matching (handles raw ids stored as int/float or dict with 'id')
+                try:
+                    aid = int(float(label))
+                    def match_id(row):
                         val = row.get(col)
                         if isinstance(val, dict):
-                            name = val.get('completename') or val.get('name') or ""
-                            return str(name) == str(label)
-                        else:
-                            return str(val) == str(label)
-                    sel = base[base.apply(match_name, axis=1)].copy()
-                else:
-                    # As a last resort compare stringified values
-                    try:
-                        sel = base[base[col].astype(str) == str(label)].copy()
-                    except Exception:
-                        sel = pd.DataFrame()
-        else:
-            sel = df_strict
+                            try:
+                                return int(val.get('id')) == aid
+                            except Exception:
+                                return False
+                        try:
+                            return int(float(val)) == aid
+                        except Exception:
+                            return False
+                    sel = base[base.apply(match_id, axis=1)].copy()
+                except Exception:
+                    # Fallback: try textual/name matching (handles dicts with 'completename'/'name' or plain text)
+                    if col in base.columns and base[col].dtype == object:
+                        def match_name(row):
+                            val = row.get(col)
+                            if isinstance(val, dict):
+                                name = val.get('completename') or val.get('name') or ""
+                                return str(name) == str(label)
+                            else:
+                                return str(val) == str(label)
+                        sel = base[base.apply(match_name, axis=1)].copy()
+                    else:
+                        # As a last resort compare stringified values
+                        try:
+                            sel = base[base[col].astype(str) == str(label)].copy()
+                        except Exception:
+                            sel = pd.DataFrame()
+            else:
+                sel = df_strict
 
         # Build detailed rows with names
-        client = GLPIClient(GLPI_URL, GLPI_USER_TOKEN)
-        client.init_session(get_full=False)
-        try:
+    client = GLPIClient(GLPI_URL, GLPI_USER_TOKEN)
+    client.init_session(get_full=False)
+    try:
             user_cache: Dict[int, str] = {}
             group_cache: Dict[int, str] = {}
             cat_cache: Dict[int, str] = {}
@@ -1019,10 +1049,10 @@ def api_tickets():
                     "ultima_atualizacao": updated,
                     "grupo_atribuido": assigned_group_name,
                 })
-        finally:
-            client.kill_session()
+    finally:
+        client.kill_session()
 
-        return jsonify({
+    return jsonify({
             "meta": meta,
             "count": len(sel),
             "returned": len(rows),
@@ -1033,8 +1063,7 @@ def api_tickets():
             "user_window": {"start": user_start_s, "end": user_end_s},
             "fetch_window": {"start": start_s, "end": end_s},
         })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    # (Erros serão propagados e retornados pelo handler global se houver)
 
 
 if __name__ == "__main__":
