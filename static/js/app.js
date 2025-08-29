@@ -8,7 +8,7 @@ function captureOriginalDefaultsOnce() {
   _originalDefaults = {
     gran: document.getElementById('gran')?.value || '',
     cat: document.getElementById('catFilter')?.value || '',
-  assignedGroup: document.getElementById('assignedGroupFilter')?.value || 'todos',
+    assignedGroup: document.getElementById('assignedGroupFilter')?.value || 'todos',
     start: document.getElementById('start')?.value || '',
     end: document.getElementById('end')?.value || '',
     startMonth: document.getElementById('startMonth')?.value || '',
@@ -30,7 +30,7 @@ function saveFilters() {
     const data = {
       gran: document.getElementById('gran')?.value,
       cat: document.getElementById('catFilter')?.value,
-  assignedGroup: document.getElementById('assignedGroupFilter')?.value,
+      assignedGroup: document.getElementById('assignedGroupFilter')?.value,
       start: document.getElementById('start')?.value,
       end: document.getElementById('end')?.value,
       startMonth: document.getElementById('startMonth')?.value,
@@ -38,7 +38,7 @@ function saveFilters() {
       range: getActiveRangeDescriptor()
     };
     localStorage.setItem(FILTERS_KEY, JSON.stringify(data));
-  } catch {}
+  } catch { }
 }
 function applyRangeDescriptor(desc) {
   if (!desc) return false;
@@ -62,7 +62,7 @@ function loadFilters() {
   try {
     if (parsed.gran && document.getElementById('gran')) document.getElementById('gran').value = parsed.gran;
     if (parsed.cat && document.getElementById('catFilter')) document.getElementById('catFilter').value = parsed.cat;
-  if (parsed.assignedGroup && document.getElementById('assignedGroupFilter')) document.getElementById('assignedGroupFilter').value = parsed.assignedGroup;
+    if (parsed.assignedGroup && document.getElementById('assignedGroupFilter')) document.getElementById('assignedGroupFilter').value = parsed.assignedGroup;
     if (parsed.start && document.getElementById('start')) document.getElementById('start').value = parsed.start;
     if (parsed.end && document.getElementById('end')) document.getElementById('end').value = parsed.end;
     if (parsed.startMonth && document.getElementById('startMonth')) document.getElementById('startMonth').value = parsed.startMonth;
@@ -70,11 +70,11 @@ function loadFilters() {
     applyRangeDescriptor(parsed.range);
     window._filtersRestored = true;
     toggleDateInputs();
-  } catch {}
+  } catch { }
   return true;
 }
 function resetFilters() {
-  try { localStorage.removeItem(FILTERS_KEY); } catch {}
+  try { localStorage.removeItem(FILTERS_KEY); } catch { }
   if (_originalDefaults) {
     if (document.getElementById('gran')) document.getElementById('gran').value = _originalDefaults.gran || 'Diário';
     if (document.getElementById('catFilter')) document.getElementById('catFilter').value = _originalDefaults.cat || 'todos';
@@ -107,7 +107,7 @@ const Loader = {
 const Toasts = {
   el: null,
   init() { this.el = document.getElementById('toasts'); },
-  push(kind, text, timeout=4000) {
+  push(kind, text, timeout = 4000) {
     if (!this.el) return;
     const d = document.createElement('div');
     d.className = `toast ${kind}`;
@@ -122,19 +122,19 @@ window.addEventListener('DOMContentLoaded', () => { Loader.init(); Toasts.init()
 const WidgetLayout = (() => {
   const STORAGE_KEY = 'glpiDashboardLayout.v2'; // bump version for new coordinate-based schema
   const DEFAULT = [
-  { id: 'cumGap', cols: 8, rows: 8, visible: true },
-  { id: 'backlog', cols: 8, rows: 8, visible: true },
+    { id: 'cumGap', cols: 8, rows: 8, visible: true },
+    { id: 'backlog', cols: 8, rows: 8, visible: true },
     { id: 'backlogStatus', cols: 8, rows: 8, visible: true },
     { id: 'aging', cols: 8, rows: 8, visible: true },
-  { id: 'openToday', cols: 8, rows: 8, visible: true },
-  { id: 'createdToday', cols: 8, rows: 8, visible: true },
-  { id: 'resolvedToday', cols: 8, rows: 8, visible: true },
+    { id: 'openToday', cols: 8, rows: 8, visible: true },
+    { id: 'createdToday', cols: 8, rows: 8, visible: true },
+    { id: 'resolvedToday', cols: 8, rows: 8, visible: true },
     { id: 'category', cols: 8, rows: 8, visible: true },
     { id: 'priority', cols: 8, rows: 8, visible: true },
     { id: 'impact', cols: 8, rows: 8, visible: true }
-  ,{ id: 'load_by_group', cols: 8, rows: 8, visible: true }
-  ,{ id: 'resolutionHours', cols: 8, rows: 8, visible: true }
-  ].map((w,i) => ({...w, order: i}));
+    , { id: 'load_by_group', cols: 8, rows: 8, visible: true }
+    , { id: 'resolutionHours', cols: 8, rows: 8, visible: true }
+  ].map((w, i) => ({ ...w, order: i }));
   // Grid cell size (px) for snap positioning
   const CELL_W = 80; // base logical cell width (will derive snap unit)
   const CELL_H = 80; // base logical cell height
@@ -156,13 +156,13 @@ const WidgetLayout = (() => {
   function save(layout) { localStorage.setItem(STORAGE_KEY, JSON.stringify(layout)); }
   function assignInitialCoords(layout) {
     // Sequential placement with wrapping so we don't overflow viewport on first load
-    let x=0, y=0, rowH=0;
+    let x = 0, y = 0, rowH = 0;
     let COLS = MAX_COLS;
     try {
       // If no stored layout yet, adapt maximum columns to current viewport width
       const hasStored = !!localStorage.getItem(STORAGE_KEY);
       if (!hasStored) {
-        const snapW = CELL_W/2; // width of one logical column in px
+        const snapW = CELL_W / 2; // width of one logical column in px
         const usable = Math.max(320, window.innerWidth - 40); // leave small margin
         const dynCols = Math.floor(usable / snapW);
         if (dynCols >= 3) {
@@ -182,26 +182,26 @@ const WidgetLayout = (() => {
     return layout;
   }
   function ensureAllHaveCoords(layout) {
-    let changed=false;
-    layout.forEach(w => { if (w.x==null||w.y==null) { changed=true; } });
+    let changed = false;
+    layout.forEach(w => { if (w.x == null || w.y == null) { changed = true; } });
     if (changed) assignInitialCoords(layout); // assigns 3x3 only for missing coords/sizes
     // Clamp & sanity
-    layout.forEach(w => { w.cols = Math.max(3, w.cols||3); w.rows = Math.max(3, w.rows||3); });
+    layout.forEach(w => { w.cols = Math.max(3, w.cols || 3); w.rows = Math.max(3, w.rows || 3); });
   }
   function apply(layout) {
     const grid = document.querySelector('.grid');
     const map = new Map(layout.map(w => [w.id, w]));
-    DEFAULT.forEach(def => { if (!map.has(def.id)) { layout.push({...def}); map.set(def.id, def); } });
+    DEFAULT.forEach(def => { if (!map.has(def.id)) { layout.push({ ...def }); map.set(def.id, def); } });
     ensureAllHaveCoords(layout);
-  grid.classList.add('free-layout');
-  if (DEV_SHOW_GRID) { grid.classList.add('dev-grid'); grid.style.setProperty('--cell-w', (CELL_W/2)+'px'); grid.style.setProperty('--cell-h', (CELL_H/2)+'px'); } else { grid.classList.remove('dev-grid'); }
-    const SNAP_W = CELL_W/2; // snap unit
-    const SNAP_H = CELL_H/2;
+    grid.classList.add('free-layout');
+    if (DEV_SHOW_GRID) { grid.classList.add('dev-grid'); grid.style.setProperty('--cell-w', (CELL_W / 2) + 'px'); grid.style.setProperty('--cell-h', (CELL_H / 2) + 'px'); } else { grid.classList.remove('dev-grid'); }
+    const SNAP_W = CELL_W / 2; // snap unit
+    const SNAP_H = CELL_H / 2;
     document.querySelectorAll('.card[data-widget]').forEach(el => {
       const id = el.getAttribute('data-widget');
       const w = map.get(id);
-      if (!w || w.visible===false) { el.style.display='none'; return; } else el.style.display='';
-      el.style.position='absolute';
+      if (!w || w.visible === false) { el.style.display = 'none'; return; } else el.style.display = '';
+      el.style.position = 'absolute';
       // Ajusta larg/alt e posição com espaçamento interno (gap) sem alterar cálculo de maxRight/maxBottom
       const calcW = (w.cols * SNAP_W) - (CARD_GAP * 2);
       const calcH = (w.rows * SNAP_H) - (CARD_GAP * 2);
@@ -210,9 +210,9 @@ const WidgetLayout = (() => {
       el.style.left = (w.x * SNAP_W + CARD_GAP) + 'px';
       el.style.top = (w.y * SNAP_H + CARD_GAP) + 'px';
     });
-  const maxBottom = layout.filter(w=>w.visible!==false).reduce((m,w)=> Math.max(m, (w.y + w.rows) * SNAP_H + CARD_GAP), 0);
-  // Calcula a largura máxima usada (extremo direito dos cards visíveis)
-  const maxRight = layout.filter(w=>w.visible!==false).reduce((m,w)=> Math.max(m, (w.x + w.cols) * SNAP_W + CARD_GAP), 0);
+    const maxBottom = layout.filter(w => w.visible !== false).reduce((m, w) => Math.max(m, (w.y + w.rows) * SNAP_H + CARD_GAP), 0);
+    // Calcula a largura máxima usada (extremo direito dos cards visíveis)
+    const maxRight = layout.filter(w => w.visible !== false).reduce((m, w) => Math.max(m, (w.x + w.cols) * SNAP_W + CARD_GAP), 0);
     grid.style.height = (maxBottom + 40) + 'px';
     // Define explicitamente a largura do grid para garantir que o scrollWidth reflita o conteúdo usado
     grid.style.width = (maxRight + 40) + 'px';
@@ -266,8 +266,8 @@ const WidgetLayout = (() => {
         act.addEventListener('click', (e) => {
           const btn = e.target.closest('button'); if (!btn) return;
           const id = card.getAttribute('data-widget');
-          const item = layout.find(x => x.id===id); if (!item) return;
-          if (btn.dataset.act === 'hide') { item.visible=false; save(layout); apply(layout); Toasts.push('info', 'Widget ocultado: '+id); }
+          const item = layout.find(x => x.id === id); if (!item) return;
+          if (btn.dataset.act === 'hide') { item.visible = false; save(layout); apply(layout); Toasts.push('info', 'Widget ocultado: ' + id); }
         });
       }
       // Multi-edge / corner resize (remove handle; detect edges by proximity)
@@ -276,24 +276,24 @@ const WidgetLayout = (() => {
         card._resizeBound = true;
       }
       // Drag init
-      if (!card.dataset.dragInit) { initDrag(card, layout); card.dataset.dragInit='1'; }
+      if (!card.dataset.dragInit) { initDrag(card, layout); card.dataset.dragInit = '1'; }
     });
   }
-  function initMultiResize(card, layout){
+  function initMultiResize(card, layout) {
     const EDGE = 8; // px detection zone
     const id = card.getAttribute('data-widget');
-    let resizing = false; let region = ''; let startX=0, startY=0; let startW=0, startH=0; let startCols=0, startRows=0; let startGridX=0, startGridY=0;
-    function detectRegion(e){
+    let resizing = false; let region = ''; let startX = 0, startY = 0; let startW = 0, startH = 0; let startCols = 0, startRows = 0; let startGridX = 0, startGridY = 0;
+    function detectRegion(e) {
       const r = card.getBoundingClientRect();
       const x = e.clientX - r.left; const y = e.clientY - r.top;
       const left = x <= EDGE; const right = (r.width - x) <= EDGE; const top = y <= EDGE; const bottom = (r.height - y) <= EDGE;
-      let reg='';
-      if (top && left) reg='nw'; else if (top && right) reg='ne'; else if (bottom && left) reg='sw'; else if (bottom && right) reg='se';
-      else if (top) reg='n'; else if (bottom) reg='s'; else if (left) reg='w'; else if (right) reg='e';
+      let reg = '';
+      if (top && left) reg = 'nw'; else if (top && right) reg = 'ne'; else if (bottom && left) reg = 'sw'; else if (bottom && right) reg = 'se';
+      else if (top) reg = 'n'; else if (bottom) reg = 's'; else if (left) reg = 'w'; else if (right) reg = 'e';
       return reg;
     }
-    function regionCursor(reg){
-      switch(reg){
+    function regionCursor(reg) {
+      switch (reg) {
         case 'n': case 's': return 'ns-resize';
         case 'e': case 'w': return 'ew-resize';
         case 'ne': case 'sw': return 'nesw-resize';
@@ -309,19 +309,19 @@ const WidgetLayout = (() => {
       card.style.cursor = cur || '';
       card.dataset.resizeRegion = reg;
     });
-    card.addEventListener('mouseleave', () => { if(!resizing){ card.style.cursor=''; region=''; }});
+    card.addEventListener('mouseleave', () => { if (!resizing) { card.style.cursor = ''; region = ''; } });
     card.addEventListener('mousedown', e => {
-      if (e.button!==0) return;
+      if (e.button !== 0) return;
       // only start if on edge region (and not inside interactive header buttons)
       if (!region) return;
-      const item = layout.find(x=>x.id===id); if(!item) return;
-      resizing = true; card.dataset.resizing='1'; e.stopPropagation(); e.preventDefault();
+      const item = layout.find(x => x.id === id); if (!item) return;
+      resizing = true; card.dataset.resizing = '1'; e.stopPropagation(); e.preventDefault();
       startX = e.clientX; startY = e.clientY; startW = card.offsetWidth; startH = card.offsetHeight;
       startCols = item.cols; startRows = item.rows; startGridX = item.x; startGridY = item.y;
-      const snapW = CELL_W/2, snapH = CELL_H/2;
-      function move(ev){
+      const snapW = CELL_W / 2, snapH = CELL_H / 2;
+      function move(ev) {
         const dx = ev.clientX - startX; const dy = ev.clientY - startY;
-        let dColsRight=0, dRowsDown=0, dColsLeft=0, dRowsUp=0;
+        let dColsRight = 0, dRowsDown = 0, dColsLeft = 0, dRowsUp = 0;
         if (region.includes('e')) dColsRight = Math.round(dx / snapW);
         if (region.includes('s')) dRowsDown = Math.round(dy / snapH);
         if (region.includes('w')) dColsLeft = Math.round(-dx / snapW); // moving left increases width
@@ -331,56 +331,60 @@ const WidgetLayout = (() => {
         let newX = startGridX - dColsLeft;
         let newY = startGridY - dRowsUp;
         // clamp
-        if (newX < 0){ newCols += newX; newX = 0; }
-        if (newY < 0){ newRows += newY; newY = 0; }
+        if (newX < 0) { newCols += newX; newX = 0; }
+        if (newY < 0) { newRows += newY; newY = 0; }
         newCols = Math.max(3, newCols);
         newRows = Math.max(3, newRows);
         // apply tentative
-        if (newCols !== item.cols || newRows !== item.rows || newX !== item.x || newY !== item.y){
+        if (newCols !== item.cols || newRows !== item.rows || newX !== item.x || newY !== item.y) {
           item.cols = newCols; item.rows = newRows; item.x = newX; item.y = newY;
           apply(layout);
           // keep resizing flag on updated DOM card
           const fresh = document.querySelector(`.card[data-widget="${id}"]`);
-          if (fresh) { fresh.dataset.resizing='1'; fresh.style.cursor = regionCursor(region); }
+          if (fresh) { fresh.dataset.resizing = '1'; fresh.style.cursor = regionCursor(region); }
         }
       }
-      function up(){
+      function up() {
         resizing = false; delete card.dataset.resizing; save(layout);
         document.removeEventListener('mousemove', move);
         document.removeEventListener('mouseup', up);
-        card.style.cursor='';
+        card.style.cursor = '';
       }
       document.addEventListener('mousemove', move);
       document.addEventListener('mouseup', up);
     });
   }
-  function initDrag(card, layout){
-    let startX,startY,origX,origY,previewX,previewY; const id=card.getAttribute('data-widget');
+  function initDrag(card, layout) {
+    let startX, startY, origX, origY, previewX, previewY; const id = card.getAttribute('data-widget');
     const handle = card.querySelector('h2');
     if (handle) {
       handle.classList.add('drag-handle');
       handle.addEventListener('mousedown', (e) => {
         // Apenas botão principal e não clicar no botão de ajuda interno
-        if (e.button!==0) return;
+        if (e.button !== 0) return;
         if (e.target && e.target.closest('button.help')) return; // não arrastar ao clicar help
-        const item=layout.find(w=>w.id===id); if(!item) return;
+        const item = layout.find(w => w.id === id); if (!item) return;
         // se redimensionando ou cursor de resize ativo, não iniciar drag
-        if (card.dataset.resizing==='1' || card.dataset.resizeRegion){ return; }
-        startX=e.clientX; startY=e.clientY; origX=item.x||0; origY=item.y||0; previewX=origX; previewY=origY;
-        card.classList.add('dragging'); document.body.classList.add('drag-mode'); card.style.zIndex=999;
-        function onMove(ev){ const dx=ev.clientX-startX, dy=ev.clientY-startY; const snapW=CELL_W/2, snapH=CELL_H/2; const deltaCols=Math.round(dx/snapW), deltaRows=Math.round(dy/snapH); const newX=Math.max(0, origX+deltaCols), newY=Math.max(0, origY+deltaRows); if(newX!==previewX || newY!==previewY){ previewX=newX; previewY=newY; card.style.left=(previewX*snapW)+'px'; card.style.top=(previewY*snapH)+'px'; } }
-        function onUp(){ const item=layout.find(w=>w.id===id); if(item){ item.x=previewX; item.y=previewY; if(AUTO_RESOLVE) resolveCollisions(item,layout); apply(layout); save(layout); }
-          card.classList.remove('dragging'); document.body.classList.remove('drag-mode'); card.style.zIndex='';
-          document.removeEventListener('mousemove',onMove); document.removeEventListener('mouseup',onUp);
+        if (card.dataset.resizing === '1' || card.dataset.resizeRegion) { return; }
+        startX = e.clientX; startY = e.clientY; origX = item.x || 0; origY = item.y || 0; previewX = origX; previewY = origY;
+        card.classList.add('dragging'); document.body.classList.add('drag-mode'); card.style.zIndex = 999;
+        function onMove(ev) { const dx = ev.clientX - startX, dy = ev.clientY - startY; const snapW = CELL_W / 2, snapH = CELL_H / 2; const deltaCols = Math.round(dx / snapW), deltaRows = Math.round(dy / snapH); const newX = Math.max(0, origX + deltaCols), newY = Math.max(0, origY + deltaRows); if (newX !== previewX || newY !== previewY) { previewX = newX; previewY = newY; card.style.left = (previewX * snapW) + 'px'; card.style.top = (previewY * snapH) + 'px'; } }
+        function onUp() {
+          const item = layout.find(w => w.id === id); if (item) { item.x = previewX; item.y = previewY; if (AUTO_RESOLVE) resolveCollisions(item, layout); apply(layout); save(layout); }
+          card.classList.remove('dragging'); document.body.classList.remove('drag-mode'); card.style.zIndex = '';
+          document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp);
         }
-        document.addEventListener('mousemove',onMove); document.addEventListener('mouseup',onUp);
+        document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
       });
     }
   }
-  function boxesOverlap(a,b){ return !(a.x+a.cols<=b.x || b.x+b.cols<=a.x || a.y+a.rows<=b.y || b.y+b.rows<=a.y); }
-  function resolveCollisions(moved, layout){
-    let changed=true; let guard=0; while(changed && guard<50){ changed=false; guard++; for(const other of layout){ if(other===moved || other.visible===false) continue; if(boxesOverlap(moved, other)){ // push other down
-          other.y = moved.y + moved.rows; changed=true; }
+  function boxesOverlap(a, b) { return !(a.x + a.cols <= b.x || b.x + b.cols <= a.x || a.y + a.rows <= b.y || b.y + b.rows <= a.y); }
+  function resolveCollisions(moved, layout) {
+    let changed = true; let guard = 0; while (changed && guard < 50) {
+      changed = false; guard++; for (const other of layout) {
+        if (other === moved || other.visible === false) continue; if (boxesOverlap(moved, other)) { // push other down
+          other.y = moved.y + moved.rows; changed = true;
+        }
       }
     }
   }
@@ -394,12 +398,12 @@ const WidgetLayout = (() => {
       // Provide explicit X/Y coordinate inputs (grid units) so keyboard-only users can position widgets.
       const curX = (typeof w.x === 'number') ? w.x : (w.x || 0);
       const curY = (typeof w.y === 'number') ? w.y : (w.y || 0);
-      row.innerHTML = `<td>${w.id}</td><td><input type="checkbox" data-f="vis" ${w.visible!==false?'checked':''}></td>
+      row.innerHTML = `<td>${w.id}</td><td><input type="checkbox" data-f="vis" ${w.visible !== false ? 'checked' : ''}></td>
         <td>
           X:<input data-f="x" type="number" min="0" value="${curX}" style="width:60px"> 
           Y:<input data-f="y" type="number" min="0" value="${curY}" style="width:60px"> 
-          L:<input data-f="cols" type="number" min="3" max="${MAX_COLS}" value="${w.cols|| (w.width||1)*3}" style="width:60px"> 
-          H:<input data-f="rows" type="number" min="3" max="60" value="${w.rows|| (w.height||1)*3}" style="width:60px">
+          L:<input data-f="cols" type="number" min="3" max="${MAX_COLS}" value="${w.cols || (w.width || 1) * 3}" style="width:60px"> 
+          H:<input data-f="rows" type="number" min="3" max="60" value="${w.rows || (w.height || 1) * 3}" style="width:60px">
         </td>`;
       row.querySelectorAll('input,select').forEach(inp => {
         inp.addEventListener('change', () => {
@@ -440,15 +444,15 @@ const WidgetLayout = (() => {
       apply(layout);
       save(layout);
       // re-init drag for any newly created cards
-      document.querySelectorAll('.card[data-widget]').forEach(c => { if(!c.dataset.dragInit){ initDrag(c, layout); c.dataset.dragInit='1'; } });
-      Toasts.push('success','Layout redefinido');
+      document.querySelectorAll('.card[data-widget]').forEach(c => { if (!c.dataset.dragInit) { initDrag(c, layout); c.dataset.dragInit = '1'; } });
+      Toasts.push('success', 'Layout redefinido');
       // width recalibration
-  try { const header=document.querySelector('header'); const controls=document.querySelector('.controls'); if(header) header.style.minWidth=''; if(controls) controls.style.minWidth=''; } catch{}
-  // Removido: chamada a adjustHeaderWidth inexistente que causava ReferenceError após redefinir layout.
-  // Se no futuro for reintroduzida uma função global adjustHeaderWidth, esta verificação segura a execução.
-  requestAnimationFrame(()=>requestAnimationFrame(()=>{ try { if (typeof adjustHeaderWidth === 'function') adjustHeaderWidth(); } catch(e) { /* noop */ } }));
-  // Também redefinir filtros para valores originais
-  resetFilters();
+      try { const header = document.querySelector('header'); const controls = document.querySelector('.controls'); if (header) header.style.minWidth = ''; if (controls) controls.style.minWidth = ''; } catch { }
+      // Removido: chamada a adjustHeaderWidth inexistente que causava ReferenceError após redefinir layout.
+      // Se no futuro for reintroduzida uma função global adjustHeaderWidth, esta verificação segura a execução.
+      requestAnimationFrame(() => requestAnimationFrame(() => { try { if (typeof adjustHeaderWidth === 'function') adjustHeaderWidth(); } catch (e) { /* noop */ } }));
+      // Também redefinir filtros para valores originais
+      resetFilters();
     });
     // Export / Import setup handlers
     const exportBtn = document.getElementById('exportSetupBtn');
@@ -460,16 +464,16 @@ const WidgetLayout = (() => {
         const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a'); a.href = url; a.download = 'glpi_dashboard_setup.json'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-        Toasts.push('success','Setup exportado');
-      } catch (e) { Toasts.push('error','Falha ao exportar setup'); }
+        Toasts.push('success', 'Setup exportado');
+      } catch (e) { Toasts.push('error', 'Falha ao exportar setup'); }
     });
     if (importBtn && importFile) importBtn.addEventListener('click', () => importFile.click());
     if (importFile) importFile.addEventListener('change', async (e) => {
       const f = e.target.files && e.target.files[0]; if (!f) return; try {
         const txt = await f.text(); const obj = JSON.parse(txt);
         applyImportedSetup(obj);
-        Toasts.push('success','Setup importado');
-      } catch (err) { Toasts.push('error','Arquivo inválido'); }
+        Toasts.push('success', 'Setup importado');
+      } catch (err) { Toasts.push('error', 'Arquivo inválido'); }
       importFile.value = '';
     });
   }
@@ -501,7 +505,7 @@ function initMonthSelectors() {
   const endMonth = document.getElementById('endMonth');
   if (!startMonth || !endMonth) return;
   const now = new Date();
-  const ym = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   startMonth.value = ym;
   endMonth.value = ym;
   function ensureOrder() {
@@ -548,7 +552,7 @@ function lineChart(canvasId, labels, datasets) {
               const dsLabel = ctx.dataset.label || '';
               return `${dsLabel}: ${ctx.parsed.y}`;
             },
-            footer: function(tooltipItems) {
+            footer: function (tooltipItems) {
               if (!tooltipItems || !tooltipItems.length) return '';
               try {
                 const ds = this.chart.data.datasets[tooltipItems[0].datasetIndex];
@@ -578,7 +582,7 @@ function barChart(canvasId, labels, data, label, help) {
       plugins: {
         tooltip: {
           callbacks: {
-            footer: function(tooltipItems) {
+            footer: function (tooltipItems) {
               if (!tooltipItems || !tooltipItems.length) return '';
               try {
                 const ds = this.chart.data.datasets[tooltipItems[0].datasetIndex];
@@ -601,7 +605,7 @@ function stackedBarChart(canvasId, stackedSeries, help) {
   const datasetsRaw = stackedSeries.datasets || [];
   // Paleta de cores consistente (extendida se necessário)
   const palette = [
-    '#1d4ed8','#059669','#f59e0b','#dc2626','#7c3aed','#0ea5e9','#10b981','#6366f1','#ef4444','#14b8a6'
+    '#1d4ed8', '#059669', '#f59e0b', '#dc2626', '#7c3aed', '#0ea5e9', '#10b981', '#6366f1', '#ef4444', '#14b8a6'
   ];
   const datasets = datasetsRaw.map((d, i) => ({
     label: d.label,
@@ -623,10 +627,10 @@ function stackedBarChart(canvasId, stackedSeries, help) {
       plugins: {
         tooltip: {
           callbacks: {
-            footer: function(items){
+            footer: function (items) {
               // Somatório total daquela barra
               if (!items || !items.length) return '';
-              const total = items.reduce((acc, it) => acc + (it.parsed.y||0), 0);
+              const total = items.reduce((acc, it) => acc + (it.parsed.y || 0), 0);
               return `Total: ${total}` + (help ? `\n${help}` : '');
             }
           }
@@ -639,12 +643,12 @@ function stackedBarChart(canvasId, stackedSeries, help) {
 
 function destroyChart(id) {
   if (charts[id]) {
-    try { charts[id].destroy(); } catch(e) {}
+    try { charts[id].destroy(); } catch (e) { }
     delete charts[id];
   }
   const cv = document.getElementById(id);
   if (cv && cv.getContext) {
-    try { const g = cv.getContext('2d'); g && g.clearRect(0,0,cv.width,cv.height); } catch(e) {}
+    try { const g = cv.getContext('2d'); g && g.clearRect(0, 0, cv.width, cv.height); } catch (e) { }
   }
 }
 
@@ -675,13 +679,13 @@ async function loadData() {
     const gran = document.getElementById('gran').value;
     let startNorm, endNorm;
     if (gran === 'Mensal') {
-  const sm = document.getElementById('startMonth').value; // YYYY-MM
-  const em = document.getElementById('endMonth').value;   // YYYY-MM
-  startNorm = sm + '-01';
-  // Compute last day of end month: new Date(year, monthIndex+1, 0)
-  const [ey, emon] = em.split('-').map(Number);
-  const lastDay = new Date(ey, emon, 0); // because monthIndex is emon (1-based) -> next month day 0
-  endNorm = lastDay.toISOString().slice(0,10);
+      const sm = document.getElementById('startMonth').value; // YYYY-MM
+      const em = document.getElementById('endMonth').value;   // YYYY-MM
+      startNorm = sm + '-01';
+      // Compute last day of end month: new Date(year, monthIndex+1, 0)
+      const [ey, emon] = em.split('-').map(Number);
+      const lastDay = new Date(ey, emon, 0); // because monthIndex is emon (1-based) -> next month day 0
+      endNorm = lastDay.toISOString().slice(0, 10);
     } else {
       const start = document.getElementById('start').value;
       const end = document.getElementById('end').value;
@@ -691,7 +695,7 @@ async function loadData() {
 
     const catSel = document.getElementById('catFilter').value;
     const assignedSel = (document.getElementById('assignedGroupFilter') && document.getElementById('assignedGroupFilter').value) || 'todos';
-  const r = await fetch(`/api/data?gran=${encodeURIComponent(gran)}&start=${startNorm}&end=${endNorm}&cat=${encodeURIComponent(catSel)}&assigned_group=${encodeURIComponent(assignedSel)}`);
+    const r = await fetch(`/api/data?gran=${encodeURIComponent(gran)}&start=${startNorm}&end=${endNorm}&cat=${encodeURIComponent(catSel)}&assigned_group=${encodeURIComponent(assignedSel)}`);
     let js = null;
     try { js = await r.clone().json(); } catch { /* ignore parse errors */ }
     if (r.status === 503) {
@@ -705,8 +709,8 @@ async function loadData() {
     }
     if (js && js.error) throw new Error(js.error);
 
-  setMeta(js.meta || {}, js.count || 0, js.period || {});
-  lastMeta = js.meta || null;
+    setMeta(js.meta || {}, js.count || 0, js.period || {});
+    lastMeta = js.meta || null;
 
     // Big number snapshot (ignora filtro): campo open_today
     if (typeof js.open_today === 'number') {
@@ -722,8 +726,8 @@ async function loadData() {
       if (el3) el3.textContent = js.resolved_today.toLocaleString('pt-BR');
     }
 
-  const s = js.series || {};
-  lastSeries = s;
+    const s = js.series || {};
+    lastSeries = s;
     // Populate assigned group filter if backend provided
     try {
       const sel = document.getElementById('assignedGroupFilter');
@@ -749,90 +753,99 @@ async function loadData() {
       }
     } catch (e) { /* ignore populate errors */ }
     // Line charts
-  if (s.created && s.resolved && s.created.data && s.resolved.data && s.created.data.length && s.resolved.data.length && document.getElementById('chartCumGap')) {
+    if (s.created && s.resolved && s.created.data && s.resolved.data && s.created.data.length && s.resolved.data.length && document.getElementById('chartCumGap')) {
       const cumCreated = []; const cumResolved = []; const gap = [];
-      let accC=0, accR=0;
-      for (let i=0;i<s.created.data.length;i++) {
-        const vC = Number(s.created.data[i]||0);
-        const vR = Number(s.resolved.data[i]||0);
+      let accC = 0, accR = 0;
+      for (let i = 0; i < s.created.data.length; i++) {
+        const vC = Number(s.created.data[i] || 0);
+        const vR = Number(s.resolved.data[i] || 0);
         accC += vC; accR += vR; cumCreated.push(accC); cumResolved.push(accR); gap.push(accC - accR);
       }
       if (charts['chartCumGap']) charts['chartCumGap'].destroy();
       charts['chartCumGap'] = new Chart(document.getElementById('chartCumGap'), {
         type: 'line',
-        data: { labels: s.created.labels, datasets: [
-          { label: 'Criados (Acum.)', data: cumCreated, borderColor: '#1d4ed8', backgroundColor: 'rgba(29,78,216,0.15)', tension:0.15, help: 'Acumulado de tickets criados desde o início do período selecionado.' },
-          { label: 'Resolvidos (Acum.)', data: cumResolved, borderColor: '#059669', backgroundColor: 'rgba(5,150,105,0.15)', tension:0.15, help: 'Acumulado de tickets resolvidos desde o início do período selecionado.' },
-          { label: 'Gap Cumulativo (Criados - Resolvidos)', data: gap, borderColor: '#dc2626', backgroundColor: 'rgba(220,38,38,0.15)', tension:0.15, help: 'Diferença acumulada entre tickets criados e resolvidos; valores positivos indicam aumento do backlog.' }
-        ]},
+        data: {
+          labels: s.created.labels, datasets: [
+            { label: 'Criados (Acum.)', data: cumCreated, borderColor: '#1d4ed8', backgroundColor: 'rgba(29,78,216,0.15)', tension: 0.15, help: 'Acumulado de tickets criados desde o início do período selecionado.' },
+            { label: 'Resolvidos (Acum.)', data: cumResolved, borderColor: '#059669', backgroundColor: 'rgba(5,150,105,0.15)', tension: 0.15, help: 'Acumulado de tickets resolvidos desde o início do período selecionado.' },
+            { label: 'Gap Cumulativo (Criados - Resolvidos)', data: gap, borderColor: '#dc2626', backgroundColor: 'rgba(220,38,38,0.15)', tension: 0.15, help: 'Diferença acumulada entre tickets criados e resolvidos; valores positivos indicam aumento do backlog.' }
+          ]
+        },
         options: {
-          responsive:true, maintainAspectRatio:false, animation:false, resizeDelay:200,
-          interaction:{ mode:'nearest', intersect:false },
-          scales:{ y:{ beginAtZero:true } },
-          plugins:{ tooltip:{ callbacks:{ label: ctx => {
-            const dsLabel = ctx.dataset.label || ''; return `${dsLabel}: ${ctx.parsed.y}`; }, footer: function(items){ try{ const ds = this.chart.data.datasets[items[0].datasetIndex]; return ds && ds.help ? ds.help : ''; }catch(e){ return ''; } } } } }
+          responsive: true, maintainAspectRatio: false, animation: false, resizeDelay: 200,
+          interaction: { mode: 'nearest', intersect: false },
+          scales: { y: { beginAtZero: true } },
+          plugins: {
+            tooltip: {
+              callbacks: {
+                label: ctx => {
+                  const dsLabel = ctx.dataset.label || ''; return `${dsLabel}: ${ctx.parsed.y}`;
+                }, footer: function (items) { try { const ds = this.chart.data.datasets[items[0].datasetIndex]; return ds && ds.help ? ds.help : ''; } catch (e) { return ''; } }
+              }
+            }
+          }
         }
       });
-      attachPointClick('chartCumGap', s.created.labels, ['created','resolved']);
-  } else { destroyChart('chartCumGap'); }
+      attachPointClick('chartCumGap', s.created.labels, ['created', 'resolved']);
+    } else { destroyChart('chartCumGap'); }
     // Unified Backlog widget: combined canvas with toggle between raw backlog and smoothed trend
-  if (s.backlog && s.backlog.data && s.backlog.data.length) {
+    if (s.backlog && s.backlog.data && s.backlog.data.length) {
       const labels = (s.backlog && s.backlog.labels && s.backlog.labels.length) ? s.backlog.labels : (s.backlog_trend.labels || []);
       const rawData = (s.backlog && s.backlog.data) ? s.backlog.data : [];
       const smoothData = (s.backlog_trend && s.backlog_trend.data) ? s.backlog_trend.data : [];
 
       const datasets = [
-        { label: 'Backlog (Tendência)', data: rawData, borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.2)', tension: 0.2, help: 'Número de tickets em aberto por ponto do período (valor bruto).'},
-        { label: 'Backlog (Suavizado)', data: smoothData, borderColor: '#7c3aed', backgroundColor: 'rgba(124,58,237,0.15)', tension:0.25, help: 'Série suavizada para destacar a tendência do backlog ao longo do tempo.' }
+        { label: 'Backlog (Tendência)', data: rawData, borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.2)', tension: 0.2, help: 'Número de tickets em aberto por ponto do período (valor bruto).' },
+        { label: 'Backlog (Suavizado)', data: smoothData, borderColor: '#7c3aed', backgroundColor: 'rgba(124,58,237,0.15)', tension: 0.25, help: 'Série suavizada para destacar a tendência do backlog ao longo do tempo.' }
       ];
 
       lineChart('chartBacklogCombined', labels, datasets);
       attachPointClick('chartBacklogCombined', labels, ['backlog']);
-  } else { destroyChart('chartBacklogCombined'); }
+    } else { destroyChart('chartBacklogCombined'); }
 
     // Bar charts
-  if (s.backlog_status && s.backlog_status.data && s.backlog_status.data.length) { barChart('chartBacklogStatus', s.backlog_status.labels, s.backlog_status.data, 'Status', 'Distribuição atual dos tickets em aberto por status (snapshot — ignora filtro de período).'); attachBarClick('chartBacklogStatus', s.backlog_status.labels, 'backlog_status'); } else if (charts['chartBacklogStatus']) { charts['chartBacklogStatus'].destroy(); }
-  if (s.aging && s.aging.data && s.aging.data.length) { barChart('chartAging', s.aging.labels, s.aging.data, 'Aging', 'Agrupa tickets abertos por faixas de idade para identificar chamados antigos em backlog (ignora filtro de período).'); attachBarClick('chartAging', s.aging.labels, 'aging'); } else if (charts['chartAging']) { charts['chartAging'].destroy(); }
-  // Categoria: se existir série empilhada (category_stacked) usar empilhada; senão fallback simples
-  if (s.category_stacked && s.category_stacked.labels && s.category_stacked.labels.length && s.category_stacked.datasets && s.category_stacked.datasets.length) {
-    stackedBarChart('chartCat', s.category_stacked, 'Distribuição de tickets por categoria subdividida por status (barras empilhadas) no período selecionado.');
-    attachBarClick('chartCat', s.category_stacked.labels, 'category');
-  } else if (s.category && s.category.data && s.category.data.length) {
-    barChart('chartCat', s.category.labels, s.category.data, 'Categoria', 'Distribuição de tickets por categoria no período selecionado. Use para identificar áreas com maior volume.');
-    attachBarClick('chartCat', s.category.labels, 'category');
-  } else if (charts['chartCat']) { charts['chartCat'].destroy(); }
-  if (s.priority && s.priority.data && s.priority.data.length) { barChart('chartPr', s.priority.labels, s.priority.data, 'Prioridade', 'Número de tickets agrupados por nível de prioridade. Útil para visualizar criticidade.'); attachBarClick('chartPr', s.priority.labels, 'priority'); } else if (charts['chartPr']) { charts['chartPr'].destroy(); }
-  if (s.impact && s.impact.data && s.impact.data.length) { barChart('chartImp', s.impact.labels, s.impact.data, 'Impacto', 'Distribuição por impacto dos tickets; ajuda a priorizar correções que afetam mais usuários ou sistemas.'); attachBarClick('chartImp', s.impact.labels, 'impact'); } else if (charts['chartImp']) { charts['chartImp'].destroy(); }
-  if (s.resolution_hours && s.resolution_hours.data && s.resolution_hours.data.length) {
+    if (s.backlog_status && s.backlog_status.data && s.backlog_status.data.length) { barChart('chartBacklogStatus', s.backlog_status.labels, s.backlog_status.data, 'Status', 'Distribuição atual dos tickets em aberto por status (snapshot — ignora filtro de período).'); attachBarClick('chartBacklogStatus', s.backlog_status.labels, 'backlog_status'); } else if (charts['chartBacklogStatus']) { charts['chartBacklogStatus'].destroy(); }
+    if (s.aging && s.aging.data && s.aging.data.length) { barChart('chartAging', s.aging.labels, s.aging.data, 'Aging', 'Agrupa tickets abertos por faixas de idade para identificar chamados antigos em backlog (ignora filtro de período).'); attachBarClick('chartAging', s.aging.labels, 'aging'); } else if (charts['chartAging']) { charts['chartAging'].destroy(); }
+    // Categoria: se existir série empilhada (category_stacked) usar empilhada; senão fallback simples
+    if (s.category_stacked && s.category_stacked.labels && s.category_stacked.labels.length && s.category_stacked.datasets && s.category_stacked.datasets.length) {
+      stackedBarChart('chartCat', s.category_stacked, 'Distribuição de tickets por categoria subdividida por status (barras empilhadas) no período selecionado.');
+      attachBarClick('chartCat', s.category_stacked.labels, 'category');
+    } else if (s.category && s.category.data && s.category.data.length) {
+      barChart('chartCat', s.category.labels, s.category.data, 'Categoria', 'Distribuição de tickets por categoria no período selecionado. Use para identificar áreas com maior volume.');
+      attachBarClick('chartCat', s.category.labels, 'category');
+    } else if (charts['chartCat']) { charts['chartCat'].destroy(); }
+    if (s.priority && s.priority.data && s.priority.data.length) { barChart('chartPr', s.priority.labels, s.priority.data, 'Prioridade', 'Número de tickets agrupados por nível de prioridade. Útil para visualizar criticidade.'); attachBarClick('chartPr', s.priority.labels, 'priority'); } else if (charts['chartPr']) { charts['chartPr'].destroy(); }
+    if (s.impact && s.impact.data && s.impact.data.length) { barChart('chartImp', s.impact.labels, s.impact.data, 'Impacto', 'Distribuição por impacto dos tickets; ajuda a priorizar correções que afetam mais usuários ou sistemas.'); attachBarClick('chartImp', s.impact.labels, 'impact'); } else if (charts['chartImp']) { charts['chartImp'].destroy(); }
+    if (s.resolution_hours && s.resolution_hours.data && s.resolution_hours.data.length) {
       const labels = s.resolution_hours.labels;
       const meanData = s.resolution_hours.data;
       const smoothData = (s.resolution_hours_trend && s.resolution_hours_trend.data) ? s.resolution_hours_trend.data : [];
       const datasets = [
-        { label: 'Horas úteis (média)', data: meanData, borderColor: '#0ea5e9', backgroundColor: 'rgba(14,165,233,0.08)', tension:0.15, help: 'Tempo médio entre abertura e solução em horas úteis; útil para acompanhar SLAs.' },
-        { label: 'Horas úteis (suavizado)', data: smoothData, borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.08)', tension:0.25, help: 'Versão suavizada para destacar tendências de tempo de resolução.' }
+        { label: 'Horas úteis (média)', data: meanData, borderColor: '#0ea5e9', backgroundColor: 'rgba(14,165,233,0.08)', tension: 0.15, help: 'Tempo médio entre abertura e solução em horas úteis; útil para acompanhar SLAs.' },
+        { label: 'Horas úteis (suavizado)', data: smoothData, borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.08)', tension: 0.25, help: 'Versão suavizada para destacar tendências de tempo de resolução.' }
       ];
       lineChart('chartResolutionHours', labels, datasets);
-  } else { destroyChart('chartResolutionHours'); }
-  // refresh hidden state (in case layout toggled visibility before load)
-  document.querySelectorAll('.card[data-widget]').forEach(el => { if (el.style.display==='none') return; /* skip hidden */ });
-  if (s.load_by_user) { barChart('chartUser', s.load_by_user.labels, s.load_by_user.data, 'Usuário', 'Quantidade de tickets abertos por usuário (pode representar solicitante ou responsável conforme configuração).'); attachBarClick('chartUser', s.load_by_user.labels, 'load_by_user'); }
-  if (s.load_by_group) {
-    // Sort groups by descending count so bars show from largest to smallest
-    try {
-      const labels = (s.load_by_group.labels || []).slice();
-      const data = (s.load_by_group.data || []).slice();
-      const pairs = labels.map((lab, i) => ({ lab, val: Number(data[i] || 0) }));
-      pairs.sort((a,b) => b.val - a.val);
-      const sortedLabels = pairs.map(p => p.lab);
-      const sortedData = pairs.map(p => p.val);
-      barChart('chartGroup', sortedLabels, sortedData, 'Grupo', 'Quantidade de tickets por grupo. Útil para identificar equipes com maior carga de chamados.');
-      attachBarClick('chartGroup', sortedLabels, 'load_by_group');
-    } catch (e) {
-      // fallback to unsorted
-      barChart('chartGroup', s.load_by_group.labels, s.load_by_group.data, 'Grupo', 'Quantidade de tickets por grupo. Útil para identificar equipes com maior carga de chamados.');
-      attachBarClick('chartGroup', s.load_by_group.labels, 'load_by_group');
+    } else { destroyChart('chartResolutionHours'); }
+    // refresh hidden state (in case layout toggled visibility before load)
+    document.querySelectorAll('.card[data-widget]').forEach(el => { if (el.style.display === 'none') return; /* skip hidden */ });
+    if (s.load_by_user) { barChart('chartUser', s.load_by_user.labels, s.load_by_user.data, 'Usuário', 'Quantidade de tickets abertos por usuário (pode representar solicitante ou responsável conforme configuração).'); attachBarClick('chartUser', s.load_by_user.labels, 'load_by_user'); }
+    if (s.load_by_group) {
+      // Sort groups by descending count so bars show from largest to smallest
+      try {
+        const labels = (s.load_by_group.labels || []).slice();
+        const data = (s.load_by_group.data || []).slice();
+        const pairs = labels.map((lab, i) => ({ lab, val: Number(data[i] || 0) }));
+        pairs.sort((a, b) => b.val - a.val);
+        const sortedLabels = pairs.map(p => p.lab);
+        const sortedData = pairs.map(p => p.val);
+        barChart('chartGroup', sortedLabels, sortedData, 'Grupo', 'Quantidade de tickets por grupo. Útil para identificar equipes com maior carga de chamados.');
+        attachBarClick('chartGroup', sortedLabels, 'load_by_group');
+      } catch (e) {
+        // fallback to unsorted
+        barChart('chartGroup', s.load_by_group.labels, s.load_by_group.data, 'Grupo', 'Quantidade de tickets por grupo. Útil para identificar equipes com maior carga de chamados.');
+        attachBarClick('chartGroup', s.load_by_group.labels, 'load_by_group');
+      }
     }
-  }
 
   } catch (e) {
     Toasts.push('error', String(e));
@@ -889,21 +902,21 @@ async function exportDashboard() {
         imgHtml = `<img src="${dataUrl}" style="max-width:100%;height:auto;border:1px solid #e5e7eb;border-radius:6px;" />`;
       } catch (e) {
         // fallback: try canvas.toDataURL
-        try { imgHtml = `<img src="${cv.toDataURL()}" style="max-width:100%;height:auto;border:1px solid #e5e7eb;border-radius:6px;" />`; } catch(e2) { imgHtml = '<div style="color:#a00">(Imagem indisponível)</div>'; }
+        try { imgHtml = `<img src="${cv.toDataURL()}" style="max-width:100%;height:auto;border:1px solid #e5e7eb;border-radius:6px;" />`; } catch (e2) { imgHtml = '<div style="color:#a00">(Imagem indisponível)</div>'; }
       }
-  } else {
+    } else {
       // maybe big-number or non-canvas widget
       const big = card.querySelector('.big-number');
       if (big) imgHtml = `<div style="font-size:28px;font-weight:700;color:#0f172a;margin:8px 0">${escapeHtml(big.textContent)}</div>`;
       else imgHtml = '<div style="color:#64748b">(Sem visualização)</div>';
     }
-  // help text from the DOM button title or dataset
-  const helpBtn = card.querySelector('button.help');
-  const helpText = helpBtn ? helpBtn.getAttribute('title') : (charts[cv?.id]?.data?.datasets?.[0]?.help || '');
-  // generate an automated insight where possible
-  const insight = generateInsight(widgetId, lastSeries, lastMeta);
+    // help text from the DOM button title or dataset
+    const helpBtn = card.querySelector('button.help');
+    const helpText = helpBtn ? helpBtn.getAttribute('title') : (charts[cv?.id]?.data?.datasets?.[0]?.help || '');
+    // generate an automated insight where possible
+    const insight = generateInsight(widgetId, lastSeries, lastMeta);
 
-  parts.push(`<section style="margin-bottom:22px;page-break-inside:avoid"><h2 style="font-size:18px;color:#0f172a;margin:0 0 8px">${escapeHtml(heading)}</h2><div style="color:#475569;margin-bottom:8px;font-size:13px">${escapeHtml(helpText || '')}</div>${imgHtml}<div style="margin-top:8px;padding:10px;border-left:3px solid #e2e8f0;background:#fbfdff;border-radius:6px"><strong>Interpretação:</strong><p style="margin:6px 0;color:#0f172a">${escapeHtml(insight || 'Nenhuma observação automática disponível.')}</p></div></section>`);
+    parts.push(`<section style="margin-bottom:22px;page-break-inside:avoid"><h2 style="font-size:18px;color:#0f172a;margin:0 0 8px">${escapeHtml(heading)}</h2><div style="color:#475569;margin-bottom:8px;font-size:13px">${escapeHtml(helpText || '')}</div>${imgHtml}<div style="margin-top:8px;padding:10px;border-left:3px solid #e2e8f0;background:#fbfdff;border-radius:6px"><strong>Interpretação:</strong><p style="margin:6px 0;color:#0f172a">${escapeHtml(insight || 'Nenhuma observação automática disponível.')}</p></div></section>`);
   }
 
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>body{font-family:Inter,system-ui,Arial,sans-serif;padding:18px;color:#0f172a} h1{margin:0 0 6px} h2{margin:8px 0}</style></head><body>${parts.join('\n')}<script>window.onload=function(){ setTimeout(()=>{window.print();},200); };</script></body></html>`;
@@ -922,40 +935,40 @@ function generateInsight(widgetId, series, meta) {
       case 'cumGap': {
         const created = series.created?.data || [];
         const resolved = series.resolved?.data || [];
-        const lastCreated = Number(created[created.length-1]||0);
-        const lastResolved = Number(resolved[resolved.length-1]||0);
-        const trend = (created.length>=2 && (created[created.length-1] - created[0]) > (resolved[resolved.length-1] - (resolved[0]||0))) ? 'O volume de criação cresceu mais que o de resoluções, indicando pressão de backlog.' : 'Criações e resoluções acompanham-se de forma semelhante.';
-        return `${trend} No período apurado (${meta?.period?.start||''} a ${meta?.period?.end||''}), foram criados ${created.reduce((a,b)=>a+Number(b||0),0)} chamados e resolvidos ${resolved.reduce((a,b)=>a+Number(b||0),0)}.`;
+        const lastCreated = Number(created[created.length - 1] || 0);
+        const lastResolved = Number(resolved[resolved.length - 1] || 0);
+        const trend = (created.length >= 2 && (created[created.length - 1] - created[0]) > (resolved[resolved.length - 1] - (resolved[0] || 0))) ? 'O volume de criação cresceu mais que o de resoluções, indicando pressão de backlog.' : 'Criações e resoluções acompanham-se de forma semelhante.';
+        return `${trend} No período apurado (${meta?.period?.start || ''} a ${meta?.period?.end || ''}), foram criados ${created.reduce((a, b) => a + Number(b || 0), 0)} chamados e resolvidos ${resolved.reduce((a, b) => a + Number(b || 0), 0)}.`;
       }
       case 'backlog': {
         const backlog = series.backlog?.data || [];
-        const last = Number(backlog[backlog.length-1]||0);
+        const last = Number(backlog[backlog.length - 1] || 0);
         return `Backlog atual estimado em ${last.toLocaleString('pt-BR')} chamados. Verifique tendência nas últimas semanas para priorizar ações.`;
       }
       case 'backlogStatus': {
         const labels = series.backlog_status?.labels || [];
         const data = series.backlog_status?.data || [];
-        const maxIdx = data.reduce((ix, v, i, arr) => v>arr[ix]?i:ix, 0);
-        return `Status predominante: ${labels[maxIdx] || 'N/A'} com ${Number(data[maxIdx]||0).toLocaleString('pt-BR')} chamados. Esta visão é um snapshot atual.`;
+        const maxIdx = data.reduce((ix, v, i, arr) => v > arr[ix] ? i : ix, 0);
+        return `Status predominante: ${labels[maxIdx] || 'N/A'} com ${Number(data[maxIdx] || 0).toLocaleString('pt-BR')} chamados. Esta visão é um snapshot atual.`;
       }
       case 'aging': {
         const labels = series.aging?.labels || [];
         const data = series.aging?.data || [];
         if (!data.length) return '';
-        const maxIdx = data.reduce((ix, v, i, arr) => v>arr[ix]?i:ix, 0);
-        return `Faixa com maior concentração de tickets: ${labels[maxIdx] || 'N/A'} (${Number(data[maxIdx]||0).toLocaleString('pt-BR')}). Focar em reduzir tickets nas faixas mais antigas.`;
+        const maxIdx = data.reduce((ix, v, i, arr) => v > arr[ix] ? i : ix, 0);
+        return `Faixa com maior concentração de tickets: ${labels[maxIdx] || 'N/A'} (${Number(data[maxIdx] || 0).toLocaleString('pt-BR')}). Focar em reduzir tickets nas faixas mais antigas.`;
       }
       case 'resolutionHours': {
         const d = series.resolution_hours?.data || [];
         if (!d.length) return '';
-        const avg = (d.reduce((a,b)=>a+Number(b||0),0) / d.length).toFixed(1);
+        const avg = (d.reduce((a, b) => a + Number(b || 0), 0) / d.length).toFixed(1);
         return `Tempo médio de resolução (amostra): ${avg} horas úteis. Compare com o SLA alvo para avaliar desempenho.`;
       }
       case 'category': {
         const labels = series.category?.labels || []; const data = series.category?.data || [];
         if (!data.length) return '';
-        const maxIdx = data.reduce((ix, v, i, arr) => v>arr[ix]?i:ix, 0);
-        return `Categoria com maior volume: ${labels[maxIdx] || 'N/A'} — ${Number(data[maxIdx]||0).toLocaleString('pt-BR')} chamados no período.`;
+        const maxIdx = data.reduce((ix, v, i, arr) => v > arr[ix] ? i : ix, 0);
+        return `Categoria com maior volume: ${labels[maxIdx] || 'N/A'} — ${Number(data[maxIdx] || 0).toLocaleString('pt-BR')} chamados no período.`;
       }
       case 'priority': {
         const labels = series.priority?.labels || []; const data = series.priority?.data || [];
@@ -966,7 +979,7 @@ function generateInsight(widgetId, series, meta) {
       }
       case 'load_by_user':
       case 'load_by_group': {
-        return `Carga por ${widgetId==='load_by_user'?'usuário':'grupo'} mostrada; identifique responsáveis com maior volume para balanceamento.`;
+        return `Carga por ${widgetId === 'load_by_user' ? 'usuário' : 'grupo'} mostrada; identifique responsáveis com maior volume para balanceamento.`;
       }
       default: return '';
     }
@@ -1009,9 +1022,9 @@ function attachHelpPopovers() {
 
       // close on outside click or Escape
       function onDocClick(e) {
-        if (!pop.contains(e.target) && e.target !== btn) { pop.remove(); btn.setAttribute('aria-expanded','false'); document.removeEventListener('click', onDocClick); document.removeEventListener('keydown', onEsc); }
+        if (!pop.contains(e.target) && e.target !== btn) { pop.remove(); btn.setAttribute('aria-expanded', 'false'); document.removeEventListener('click', onDocClick); document.removeEventListener('keydown', onEsc); }
       }
-      function onEsc(e) { if (e.key === 'Escape') { pop.remove(); btn.setAttribute('aria-expanded','false'); document.removeEventListener('click', onDocClick); document.removeEventListener('keydown', onEsc); } }
+      function onEsc(e) { if (e.key === 'Escape') { pop.remove(); btn.setAttribute('aria-expanded', 'false'); document.removeEventListener('click', onDocClick); document.removeEventListener('keydown', onEsc); } }
       setTimeout(() => document.addEventListener('click', onDocClick));
       document.addEventListener('keydown', onEsc);
       // focus popover for keyboard users
@@ -1023,7 +1036,7 @@ function attachHelpPopovers() {
 window.addEventListener('DOMContentLoaded', attachHelpPopovers);
 
 // Preset range buttons: set start/end quickly. Default active = 3 months
-function isoDate(d) { return d.toISOString().slice(0,10); }
+function isoDate(d) { return d.toISOString().slice(0, 10); }
 function setRangeDays(days) {
   const end = new Date();
   const start = new Date();
@@ -1043,7 +1056,7 @@ function setRangeMonths(months) {
 }
 
 let _suppressRangeChange = false; // suppress custom activation when programmatically changing inputs
-function initRangeButtons(){
+function initRangeButtons() {
   const btns = Array.from(document.querySelectorAll('.range-btn'));
   const dateInputs = [document.getElementById('start'), document.getElementById('end')].filter(Boolean);
   const monthInputs = [document.getElementById('startMonth'), document.getElementById('endMonth')].filter(Boolean);
@@ -1082,14 +1095,14 @@ function initRangeButtons(){
         }
         // If current granularity is Mensal, also set month inputs
         if (document.getElementById('gran').value === 'Mensal') {
-          const s = document.getElementById('start').value.slice(0,7);
-          const e = document.getElementById('end').value.slice(0,7);
+          const s = document.getElementById('start').value.slice(0, 7);
+          const e = document.getElementById('end').value.slice(0, 7);
           if (document.getElementById('startMonth')) document.getElementById('startMonth').value = s;
           if (document.getElementById('endMonth')) document.getElementById('endMonth').value = e;
         }
       } finally { _suppressRangeChange = false; }
-  loadData();
-  saveFilters();
+      loadData();
+      saveFilters();
     });
   });
 
@@ -1129,7 +1142,7 @@ function setupAutoRefresh() {
       // default 30 minutes
       inp.value = '30';
     }
-  } catch {}
+  } catch { }
   function applyInterval() {
     if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
     const mins = parseInt(inp.value, 10);
@@ -1139,7 +1152,7 @@ function setupAutoRefresh() {
         if (!loading) loadData();
       }, ms);
     }
-    try { localStorage.setItem(STORAGE_KEY, inp.value || ''); } catch {}
+    try { localStorage.setItem(STORAGE_KEY, inp.value || ''); } catch { }
   }
   inp.addEventListener('change', applyInterval);
   applyInterval();
@@ -1150,7 +1163,7 @@ window.addEventListener('DOMContentLoaded', setupAutoRefresh);
 function buildFullSetupSnapshot() {
   const snapshot = { meta: { exported_at: new Date().toISOString(), app: 'dashboard-glpi' }, storage: {} };
   // Keys we manage
-  const keys = [ 'glpiDashboardLayout.v2', FILTERS_KEY, 'glpiAutoRefreshMin' ];
+  const keys = ['glpiDashboardLayout.v2', FILTERS_KEY, 'glpiAutoRefreshMin'];
   keys.forEach(k => {
     try {
       const v = localStorage.getItem(k);
@@ -1162,14 +1175,14 @@ function buildFullSetupSnapshot() {
   });
   // Also include any other key starting with our app prefix
   try {
-    for (let i=0;i<localStorage.length;i++){
+    for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
       if (!k) continue;
       if (k.startsWith('glpiDashboard') && !snapshot.storage[k]) {
         try { snapshot.storage[k] = JSON.parse(localStorage.getItem(k)); } catch { snapshot.storage[k] = localStorage.getItem(k); }
       }
     }
-  } catch (e) {}
+  } catch (e) { }
   return snapshot;
 }
 
@@ -1186,11 +1199,11 @@ function applyImportedSetup(obj) {
     } catch (e) { /* ignore */ }
   });
   // Re-apply changes to the UI: reload filters, layout, auto-refresh
-  try { loadFilters(); } catch (e) {}
-  try { const wl = WidgetLayout && WidgetLayout.init && (function(){ WidgetLayout.init(); return true; })(); } catch(e) {}
-  try { setupAutoRefresh(); } catch(e) {}
+  try { loadFilters(); } catch (e) { }
+  try { const wl = WidgetLayout && WidgetLayout.init && (function () { WidgetLayout.init(); return true; })(); } catch (e) { }
+  try { setupAutoRefresh(); } catch (e) { }
   // Reload data to reflect imported filters/layout
-  try { loadData(); } catch (e) {}
+  try { loadData(); } catch (e) { }
 }
 
 // --- Modal helpers ---
@@ -1248,12 +1261,12 @@ const TicketTable = (() => {
       resizer.addEventListener('mousedown', e => {
         e.preventDefault(); e.stopPropagation();
         startX = e.clientX; startW = th.offsetWidth;
-        function move(ev){
+        function move(ev) {
           const dx = ev.clientX - startX;
           const newW = Math.max(50, startW + dx);
           th.style.width = newW + 'px';
         }
-        function up(){
+        function up() {
           document.removeEventListener('mousemove', move);
           document.removeEventListener('mouseup', up);
         }
@@ -1298,15 +1311,15 @@ const TicketTable = (() => {
     <td>${escapeHtml(r.grupo_atribuido)}</td>
       </tr>`;
     }).join('');
-  tbody.innerHTML = rows || '<tr><td colspan="7">Nenhum chamado</td></tr>';
+    tbody.innerHTML = rows || '<tr><td colspan="7">Nenhum chamado</td></tr>';
     // Update sort indicators
     document.querySelectorAll('#modal-head-row th').forEach(th => {
-      th.classList.remove('sort-asc','sort-desc');
+      th.classList.remove('sort-asc', 'sort-desc');
       if (th.dataset.key === sortState.key) th.classList.add(sortState.dir === 'asc' ? 'sort-asc' : 'sort-desc');
     });
   }
-  function setRows(data){ currentRows = data || []; renderBody(); }
-  function init(){ buildHeader(); }
+  function setRows(data) { currentRows = data || []; renderBody(); }
+  function init() { buildHeader(); }
   return { init, setRows };
 })();
 window.addEventListener('DOMContentLoaded', () => TicketTable.init());
@@ -1324,10 +1337,10 @@ function attachPointClick(canvasId, labels, sources) {
       const idx = points[0].index;
       const label = labels[idx];
       // prefer source based on dataset index if provided
-  const dsIndex = points[0].datasetIndex || 0;
-  // Se clicar em dataset além dos mapeados (ex: linha Gap cumulativo), ignora
-  if (dsIndex >= sources.length) return;
-  const source = sources[dsIndex];
+      const dsIndex = points[0].datasetIndex || 0;
+      // Se clicar em dataset além dos mapeados (ex: linha Gap cumulativo), ignora
+      if (dsIndex >= sources.length) return;
+      const source = sources[dsIndex];
       await openTicketsModal(source, label);
     } catch (err) {
       console.error('attachPointClick error', err);
@@ -1364,7 +1377,7 @@ async function openTicketsModal(source, label) {
     userStart = sm + '-01';
     const [ey, emon] = em.split('-').map(Number);
     const lastDay = new Date(ey, emon, 0); // ultimo dia mês final
-    userEnd = lastDay.toISOString().slice(0,10);
+    userEnd = lastDay.toISOString().slice(0, 10);
   } else {
     userStart = document.getElementById('start').value;
     userEnd = document.getElementById('end').value;
@@ -1400,7 +1413,7 @@ async function openTicketsModal(source, label) {
   Loader.show('Carregando chamados...');
   document.body.style.cursor = 'progress';
   try {
-  const r = await fetch(`/api/tickets?${params.toString()}`);
+    const r = await fetch(`/api/tickets?${params.toString()}`);
     let js = null;
     try { js = await r.clone().json(); } catch { /* ignore */ }
     if (r.status === 503) {
@@ -1415,8 +1428,8 @@ async function openTicketsModal(source, label) {
     }
     if (js && js.error) throw new Error(js.error);
     modal.info.textContent = `Total no filtro: ${js.count} • Mostrando: ${js.returned}`;
-  const rows = js.tickets || [];
-  TicketTable.setRows(rows);
+    const rows = js.tickets || [];
+    TicketTable.setRows(rows);
     Toasts.push('success', `Lista carregada (${rows.length})`);
   } catch (e) {
     modal.info.textContent = String(e);
@@ -1453,7 +1466,7 @@ function initControlsToggle() {
   if (!btn || !controls) return;
   const STORAGE_KEY = 'glpiControlsCollapsed.v1';
   let collapsed = false;
-  try { collapsed = localStorage.getItem(STORAGE_KEY) === '1'; } catch {}
+  try { collapsed = localStorage.getItem(STORAGE_KEY) === '1'; } catch { }
   function applyState() {
     if (collapsed) {
       controls.classList.add('collapsed');
@@ -1470,7 +1483,7 @@ function initControlsToggle() {
   applyState();
   btn.addEventListener('click', () => {
     collapsed = !collapsed;
-    try { localStorage.setItem(STORAGE_KEY, collapsed ? '1' : '0'); } catch {}
+    try { localStorage.setItem(STORAGE_KEY, collapsed ? '1' : '0'); } catch { }
     applyState();
   });
 }
