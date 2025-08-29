@@ -397,6 +397,25 @@ def api_data():
         def filter_assigned_group(df: pd.DataFrame) -> pd.DataFrame:
             if df is None or df.empty or assigned_group_param in (None, '', 'todos'):
                 return df
+            param_lower = str(assigned_group_param).strip().lower()
+            # Valores sintéticos
+            if param_lower in ('holding', 'unimed', 'aguardando aprovação'):
+                # Função para extrair nome textual do grupo
+                def _gname(val):
+                    if isinstance(val, dict):
+                        return (val.get('completename') or val.get('name') or '').strip()
+                    return str(val).strip() if val is not None else ''
+                if param_lower == 'holding':
+                    # Manter apenas "Suporte Holding"
+                    mask = df['assigned_group'].apply(lambda v: _gname(v) == 'Suporte Holding') if 'assigned_group' in df.columns else []
+                    return df[mask].copy()
+                if param_lower == 'aguardando aprovação':
+                    mask = df['assigned_group'].apply(lambda v: _gname(v) == 'Aguardando Aprovação') if 'assigned_group' in df.columns else []
+                    return df[mask].copy()
+                if param_lower == 'unimed':
+                    # Excluir "Suporte Holding" e "Aguardando Aprovação"
+                    mask = df['assigned_group'].apply(lambda v: _gname(v) not in ('Suporte Holding','Aguardando Aprovação')) if 'assigned_group' in df.columns else []
+                    return df[mask].copy()
             try:
                 aid = int(float(assigned_group_param))
                 def match(row):
@@ -797,6 +816,21 @@ def api_tickets():
     def filter_assigned_group(df_in: pd.DataFrame) -> pd.DataFrame:
         if df_in is None or df_in.empty or assigned_group_param in (None, '', 'todos'):
             return df_in
+        param_lower = str(assigned_group_param).strip().lower()
+        if param_lower in ('holding', 'unimed', 'aguardando aprovação'):
+            def _gname(val):
+                if isinstance(val, dict):
+                    return (val.get('completename') or val.get('name') or '').strip()
+                return str(val).strip() if val is not None else ''
+            if param_lower == 'holding':
+                mask = df_in['assigned_group'].apply(lambda v: _gname(v) == 'Suporte Holding') if 'assigned_group' in df_in.columns else []
+                return df_in[mask].copy()
+            if param_lower == 'aguardando aprovação':
+                mask = df_in['assigned_group'].apply(lambda v: _gname(v) == 'Aguardando Aprovação') if 'assigned_group' in df_in.columns else []
+                return df_in[mask].copy()
+            if param_lower == 'unimed':
+                mask = df_in['assigned_group'].apply(lambda v: _gname(v) not in ('Suporte Holding','Aguardando Aprovação')) if 'assigned_group' in df_in.columns else []
+                return df_in[mask].copy()
         try:
             aid = int(float(assigned_group_param))
             def match(row):

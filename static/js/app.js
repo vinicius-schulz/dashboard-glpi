@@ -947,24 +947,31 @@ async function loadData() {
     try {
       const sel = document.getElementById('assignedGroupFilter');
       if (sel && s && typeof js === 'object' && js.assigned_groups) {
-        // preserve current selection
-        const current = sel.value || 'todos';
-        // ensure 'Todos' option exists
-        if (!sel.querySelector('option[value="todos"]')) {
-          const opt = document.createElement('option'); opt.value = 'todos'; opt.textContent = 'Todos'; sel.appendChild(opt);
+        const previous = sel.value || 'todos';
+        // Limpar e reconstruir para garantir ordem solicitada
+        sel.innerHTML = '';
+        function addOpt(value, label) {
+          const o = document.createElement('option');
+            o.value = value; o.textContent = label; sel.appendChild(o);
         }
-        // Add options only if not present (avoid reordering)
-        js.assigned_groups.forEach(g => {
-          const val = g.id === null || g.id === undefined ? String(g.name) : String(g.id);
-          if (!sel.querySelector(`option[value="${val}"]`)) {
-            const o = document.createElement('option');
-            o.value = val;
-            o.textContent = g.name || String(g.id);
-            sel.appendChild(o);
-          }
+        addOpt('todos', 'Todos');
+        addOpt('Holding', 'Holding');
+        addOpt('Unimed', 'Unimed');
+        // Precisamos saber se existe realmente o grupo "Aguardando Aprovação" na base para exibir a opção
+        const rawGroups = js.assigned_groups.map(g => ({ id: g.id, name: (g.name || '').trim() }));
+        const aguardGroup = rawGroups.find(g => g.name.toLowerCase() === 'aguardando aprovação');
+        if (aguardGroup) addOpt('Aguardando Aprovação', 'Aguardando Aprovação');
+        // Restante em ordem alfabética, excluindo itens já tratados e o grupo "Suporte Holding"
+        const exclude = new Set(['suporte holding', 'aguardando aprovação']);
+        const remaining = rawGroups
+          .filter(g => !exclude.has(g.name.toLowerCase()))
+          .sort((a, b) => a.name.localeCompare(b.name));
+        remaining.forEach(g => {
+          // Usar id para filtros originais
+          addOpt(String(g.id), g.name);
         });
-        // restore selection if still available
-        if (sel.querySelector(`option[value="${current}"]`)) sel.value = current;
+        // Restaurar seleção se ainda existir
+        if (sel.querySelector(`option[value="${previous}"]`)) sel.value = previous; else sel.value = 'todos';
       }
     } catch (e) { /* ignore populate errors */ }
     // Line charts
