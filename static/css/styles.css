@@ -570,7 +570,7 @@ body.drag-mode {
 .lp-pane.hidden { display: none; }
 
 /* SLA table refinements */
-.sla-table-wrap { max-height: 360px; overflow:auto; border:1px solid #e2e8f0; border-radius:8px; }
+.sla-table-wrap { overflow:auto; border:1px solid #e2e8f0; border-radius:8px; }
 .sla-table input[type=number] { width:80px; padding:4px 6px; font-size:13px; }
 .sla-table td { vertical-align: middle; }
 .sla-table tbody tr:nth-child(even) { background:#f8fafc; }
@@ -642,7 +642,7 @@ body.drag-mode {
 	display: flex;
 	gap: 10px;
 	justify-content: flex-end;
-	position: absolute; /* fixo em relação ao painel */
+	position: fixed; /* fixo em relação ao painel */
 	left: 0;
 	right: 0;
 	bottom: 0;

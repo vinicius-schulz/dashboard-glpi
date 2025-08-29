@@ -190,18 +190,21 @@
       <button id="lpClose" type="button" title="Fechar">×</button>
     </div>
     <div class="lp-body">
-      {% if enable_auth %}
-      <div class="logout-block">
-        <div><strong>Encerrar sessão</strong><br><span style="font-size:12px;color:#6b7280">Use esta opção para sair do
-            dashboard com segurança.</span></div>
-        <a href="/logout" class="logout-link-modal" title="Sair do dashboard">Sair</a>
-      </div>
-      {% endif %}
-      <div class="lp-tabs">
-        <button class="lp-tab active" data-tab="layout">Layout</button>
-        <button class="lp-tab" data-tab="dados">Dados</button>
-        <button class="lp-tab" data-tab="sla">SLA</button>
-      </div>
+      <div class="modal-top-header">
+        {% if enable_auth %}
+        <div class="logout-block">
+          <div><strong>Encerrar sessão</strong><br><span style="font-size:12px;color:#6b7280">Use esta opção para sair
+              do
+              dashboard com segurança.</span></div>
+          <a href="/logout" class="logout-link-modal" title="Sair do dashboard">Sair</a>
+        </div>
+        {% endif %}
+        <div class="lp-tabs">
+          <button class="lp-tab active" data-tab="layout">Layout</button>
+          <button class="lp-tab" data-tab="dados">Dados</button>
+          <button class="lp-tab" data-tab="sla">SLA</button>
+        </div>
+      </div class="modal-header">
       <div class="lp-tabpanes">
         <div class="lp-pane" data-pane="layout">
           <p>Arraste os cards diretamente na área principal para reordenar. Ajuste visibilidade e tamanho abaixo. As
