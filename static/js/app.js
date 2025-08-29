@@ -428,6 +428,14 @@ const WidgetLayout = (() => {
       });
       tbody.appendChild(row);
     });
+    // Definir tamanho inicial apenas na primeira abertura (se ainda não customizado pelo usuário)
+    if (!panel.dataset.initedSize) {
+      try {
+        panel.style.width = Math.round(window.innerWidth * 0.5) + 'px';
+        panel.style.height = Math.round(window.innerHeight * 0.8) + 'px';
+        panel.dataset.initedSize = '1';
+      } catch { }
+    }
     panel.classList.remove('hidden');
   initLayoutTabs();
   // ao abrir, garantir SLA carregada se já temos baseline_titles em lastMeta (chamado após loadData)
