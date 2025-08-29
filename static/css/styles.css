@@ -573,6 +573,11 @@ body.drag-mode {
 .sla-table input[type=number] { width:80px; padding:4px 6px; font-size:13px; }
 .sla-table td { vertical-align: middle; }
 .sla-table tbody tr:nth-child(even) { background:#f8fafc; }
+.sla-table th { position:relative; user-select:none; cursor:pointer; }
+.sla-table th.sort-asc::after { content:'\25B2'; position:absolute; right:4px; font-size:10px; }
+.sla-table th.sort-desc::after { content:'\25BC'; position:absolute; right:4px; font-size:10px; }
+.sla-table th .col-resizer { position:absolute; top:0; right:0; width:6px; height:100%; cursor:col-resize; }
+.sla-table th .col-resizer:hover { background:rgba(0,0,0,0.12); }
 
 #layoutPanel .logout-block {
 	display: flex;

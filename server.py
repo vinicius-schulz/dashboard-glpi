@@ -447,10 +447,43 @@ def api_data():
             # títulos baseline
             try:
                 baseline_titles = []
+                baseline_titles_detail = []
                 if 'title' in baseline_df.columns:
-                    baseline_titles = sorted({str(t).strip() for t in baseline_df['title'].dropna().astype(str) if str(t).strip()})
+                    # construir mapeamento título -> categoria mais frequente
+                    title_series = baseline_df['title'].dropna().astype(str)
+                    # preparar coluna categoria textual
+                    if 'category' in baseline_df.columns:
+                        cat_col = baseline_df['category']
+                        cat_text = []
+                        for v in cat_col:
+                            name = ''
+                            if isinstance(v, dict):
+                                name = v.get('completename') or v.get('name') or ''
+                            else:
+                                name = str(v) if v is not None else ''
+                            cat_text.append(name)
+                        cats = pd.Series(cat_text, index=baseline_df.index)
+                    else:
+                        cats = pd.Series([''] * len(baseline_df), index=baseline_df.index)
+                    tmp = pd.DataFrame({'title': title_series, 'category_text': cats})
+                    # normalizar categoria vazia
+                    tmp['category_text'] = tmp['category_text'].fillna('').replace({'None': ''})
+                    # obter categoria mais frequente por título
+                    agg = tmp.groupby('title')['category_text'].agg(lambda s: s.value_counts().index[0] if len(s.value_counts()) else '')
+                    for t, cat in agg.items():
+                        title_clean = str(t).strip()
+                        if not title_clean:
+                            continue
+                        baseline_titles.append(title_clean)
+                        baseline_titles_detail.append({'title': title_clean, 'category': (cat or '').strip()})
+                    baseline_titles.sort(key=lambda x: x.lower())
+                    baseline_titles_detail.sort(key=lambda d: d['title'].lower())
+                else:
+                    baseline_titles = []
+                    baseline_titles_detail = []
             except Exception:
                 baseline_titles = []
+                baseline_titles_detail = []
             return jsonify({
                 "meta": {**meta, "baseline_window": {"start": str(baseline_start.date()), "end": str(baseline_end.date()), "used": True},
                           "user_window": {"start": str(user_start.date()), "end": str(user_end.date())},
@@ -477,6 +510,7 @@ def api_data():
                 "created_today": created_today_count,
                 "resolved_today": resolved_today_count,
                 "baseline_titles": baseline_titles,
+                "baseline_titles_detail": baseline_titles_detail,
             })
 
         # Janela estendida
@@ -611,10 +645,35 @@ def api_data():
         # baseline titles (6 meses) para configuração SLA manual por título
         try:
             baseline_titles = []
+            baseline_titles_detail = []
             if 'title' in baseline_df.columns:
-                baseline_titles = sorted({str(t).strip() for t in baseline_df['title'].dropna().astype(str) if str(t).strip()})
+                title_series = baseline_df['title'].dropna().astype(str)
+                if 'category' in baseline_df.columns:
+                    cat_col = baseline_df['category']
+                    cat_text = []
+                    for v in cat_col:
+                        if isinstance(v, dict):
+                            name = v.get('completename') or v.get('name') or ''
+                        else:
+                            name = str(v) if v is not None else ''
+                        cat_text.append(name)
+                    cats = pd.Series(cat_text, index=baseline_df.index)
+                else:
+                    cats = pd.Series([''] * len(baseline_df), index=baseline_df.index)
+                tmp = pd.DataFrame({'title': title_series, 'category_text': cats})
+                tmp['category_text'] = tmp['category_text'].fillna('').replace({'None': ''})
+                agg = tmp.groupby('title')['category_text'].agg(lambda s: s.value_counts().index[0] if len(s.value_counts()) else '')
+                for t, cat in agg.items():
+                    title_clean = str(t).strip()
+                    if not title_clean:
+                        continue
+                    baseline_titles.append(title_clean)
+                    baseline_titles_detail.append({'title': title_clean, 'category': (cat or '').strip()})
+                baseline_titles.sort(key=lambda x: x.lower())
+                baseline_titles_detail.sort(key=lambda d: d['title'].lower())
         except Exception:
             baseline_titles = []
+            baseline_titles_detail = []
 
         payload = {
             "meta": {**meta,
@@ -645,6 +704,7 @@ def api_data():
             "created_today": created_today_count,
             "resolved_today": resolved_today_count,
             "baseline_titles": baseline_titles,
+            "baseline_titles_detail": baseline_titles_detail,
         }
         return jsonify(payload)
     except Exception as exc:

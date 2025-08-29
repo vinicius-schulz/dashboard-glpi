@@ -439,7 +439,7 @@ const WidgetLayout = (() => {
     panel.classList.remove('hidden');
   initLayoutTabs();
   // ao abrir, garantir SLA carregada se já temos baseline_titles em lastMeta (chamado após loadData)
-  if (window._lastBaselineTitles) buildSlaTable(window._lastBaselineTitles);
+  if (window._lastBaselineTitlesDetail) buildSlaTable(window._lastBaselineTitlesDetail);
   }
   function init() {
     const layout = load();
@@ -507,7 +507,7 @@ function initLayoutTabs() {
         if (p.dataset.pane === target) p.classList.remove('hidden'); else p.classList.add('hidden');
       });
       // lazy build SLA table if switching to sla
-      if (target === 'sla' && window._lastBaselineTitles) buildSlaTable(window._lastBaselineTitles);
+  if (target === 'sla' && window._lastBaselineTitlesDetail) buildSlaTable(window._lastBaselineTitlesDetail);
     });
   });
 }
@@ -523,18 +523,32 @@ function loadSlaTitleConfig() {
 function saveSlaTitleConfig() {
   try { localStorage.setItem(SLA_TITLES_KEY, JSON.stringify(_slaTitlesCache || {})); } catch { }
 }
-function buildSlaTable(titles) {
+let _slaSort = { key: 'title', dir: 'asc' };
+function buildSlaTable(detailList) {
   const tb = document.getElementById('slaTitleRows');
+  const table = tb ? tb.closest('table') : null;
   if (!tb) return;
-  if (!Array.isArray(titles)) { tb.innerHTML = '<tr><td colspan="4">Sem dados de baseline.</td></tr>'; return; }
+  if (!Array.isArray(detailList)) { tb.innerHTML = '<tr><td colspan="5">Sem dados de baseline.</td></tr>'; return; }
   const cfg = loadSlaTitleConfig();
-  if (!titles.length) { tb.innerHTML = '<tr><td colspan="4">Nenhum título encontrado nos últimos 6 meses.</td></tr>'; return; }
-  const rowsHtml = titles.map(t => {
-    const rec = cfg[t] || {}; // {normal, moderate, critical}
+  if (!detailList.length) { tb.innerHTML = '<tr><td colspan="5">Nenhum título encontrado nos últimos 6 meses.</td></tr>'; return; }
+  // Ordenar
+  const data = detailList.slice().sort((a, b) => {
+    const k = _slaSort.key; const dir = _slaSort.dir === 'asc' ? 1 : -1;
+    let va = a[k] || ''; let vb = b[k] || '';
+    if (typeof va === 'string') va = va.toLowerCase();
+    if (typeof vb === 'string') vb = vb.toLowerCase();
+    if (va < vb) return -1 * dir; if (va > vb) return 1 * dir; return 0;
+  });
+  const rowsHtml = data.map(obj => {
+    const title = obj.title;
+    const category = obj.category || '';
+    const rec = cfg[title] || {};
     const n = rec.normal != null ? rec.normal : '';
     const m = rec.moderate != null ? rec.moderate : '';
     const c = rec.critical != null ? rec.critical : '';
-    return `<tr data-title="${escapeHtml(t)}"><td style="font-size:12px;">${escapeHtml(t)}</td>
+    return `<tr data-title="${escapeHtml(title)}" data-category="${escapeHtml(category)}">
+      <td style="font-size:12px;">${escapeHtml(category)}</td>
+      <td style="font-size:12px;">${escapeHtml(title)}</td>
       <td><input type="number" min="0" data-f="normal" value="${n}" /></td>
       <td><input type="number" min="0" data-f="moderate" value="${m}" /></td>
       <td><input type="number" min="0" data-f="critical" value="${c}" /></td></tr>`;
@@ -549,11 +563,46 @@ function buildSlaTable(titles) {
       const val = inp.value === '' ? undefined : (isNaN(parseInt(inp.value)) ? undefined : parseInt(inp.value));
       if (!cfg[title]) cfg[title] = {};
       if (val == null) delete cfg[title][field]; else cfg[title][field] = val;
-      // remove object if empty
       if (Object.keys(cfg[title]).length === 0) delete cfg[title];
       _slaTitlesCache = cfg; saveSlaTitleConfig();
     });
   });
+  // Cabeçalho sort + resize
+  if (table && !table._slaHeadEnhanced) {
+    table._slaHeadEnhanced = true;
+    const headCells = table.querySelectorAll('thead th');
+    const mapKeys = ['category','title','normal','moderate','critical'];
+    headCells.forEach((th, idx) => {
+      // adicionar resizer
+      const rz = document.createElement('div'); rz.className = 'col-resizer'; th.appendChild(rz);
+      let startX, startW;
+      rz.addEventListener('mousedown', e => {
+        e.preventDefault(); startX = e.clientX; startW = th.offsetWidth;
+        function move(ev){ const dx = ev.clientX - startX; const nw = Math.max(60, startW + dx); th.style.width = nw + 'px'; }
+        function up(){ document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up);} 
+        document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
+      });
+      // sort (somente categoria e título por enquanto; tempos ordenam numericamente se existirem)
+      th.addEventListener('click', (ev) => {
+        if (ev.target === rz) return; // ignore click on resizer
+        const key = mapKeys[idx]; if (!key) return;
+        if (_slaSort.key === key) { _slaSort.dir = _slaSort.dir === 'asc' ? 'desc' : 'asc'; } else { _slaSort.key = key; _slaSort.dir = 'asc'; }
+        // limpar classes
+        headCells.forEach(h => h.classList.remove('sort-asc','sort-desc'));
+        th.classList.add(_slaSort.dir === 'asc' ? 'sort-asc' : 'sort-desc');
+        // reconstruir tabela usando cache de detalhes
+        if (window._lastBaselineTitlesDetail) buildSlaTable(window._lastBaselineTitlesDetail);
+      });
+    });
+  } else if (table) {
+    // atualizar estado visual do sort
+    const headCells = table.querySelectorAll('thead th');
+    headCells.forEach((th, idx) => {
+      const key = ['category','title','normal','moderate','critical'][idx];
+      th.classList.remove('sort-asc','sort-desc');
+      if (key === _slaSort.key) th.classList.add(_slaSort.dir === 'asc' ? 'sort-asc' : 'sort-desc');
+    });
+  }
 }
 // Click handlers for big counters
 window.addEventListener('DOMContentLoaded', () => {
@@ -785,11 +834,17 @@ async function loadData() {
     if (js && js.error) throw new Error(js.error);
 
     setMeta(js.meta || {}, js.count || 0, js.period || {});
-    if (Array.isArray(js.baseline_titles)) {
-      window._lastBaselineTitles = js.baseline_titles;
-      // se aba SLA já visível, reconstruir
+    if (Array.isArray(js.baseline_titles_detail)) {
+      window._lastBaselineTitlesDetail = js.baseline_titles_detail;
+      window._lastBaselineTitles = js.baseline_titles_detail.map(o => o.title);
       const activeSla = document.querySelector('#layoutPanel .lp-tab.active[data-tab="sla"]');
-      if (activeSla) buildSlaTable(js.baseline_titles);
+      if (activeSla) buildSlaTable(js.baseline_titles_detail);
+    } else if (Array.isArray(js.baseline_titles)) {
+      // fallback (sem detalhe de categoria)
+      window._lastBaselineTitles = js.baseline_titles;
+      window._lastBaselineTitlesDetail = js.baseline_titles.map(t => ({title: t, category: ''}));
+      const activeSla = document.querySelector('#layoutPanel .lp-tab.active[data-tab="sla"]');
+      if (activeSla) buildSlaTable(window._lastBaselineTitlesDetail);
     }
     lastMeta = js.meta || null;
 
