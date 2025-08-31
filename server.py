@@ -34,6 +34,7 @@ from metrics import (
     backlog_trend_series,
     resolution_time_series,
 )
+from business_calendar import previous_business_day, business_days_between
 
 
 load_dotenv()
@@ -479,12 +480,8 @@ def api_data():
                 upd = pd.to_datetime(df_in['updated_at'], errors='coerce')
                 if upd.isna().all():
                     return 0
-                # Determinar o dia útil anterior (Mon-Fri) retrocedendo a partir de (today-1)
-                prev_bd = today_norm - pd.Timedelta(days=1)
-                guard = 0
-                while prev_bd.dayofweek > 4 and guard < 10:  # 5=Sat,6=Sun
-                    prev_bd -= pd.Timedelta(days=1)
-                    guard += 1
+                # Use helper to determine previous business day (handles holidays when configured)
+                prev_bd = previous_business_day(today_norm)
                 # Intervalo de contagem: [prev_bd, today_end)
                 today_end = today_norm + pd.Timedelta(days=1)
                 mask_range = (upd >= prev_bd) & (upd < today_end)
@@ -616,11 +613,7 @@ def api_data():
             upd = pd.to_datetime(df_in['updated_at'], errors='coerce')
             if upd.isna().all():
                 return 0
-            prev_bd = today_norm - pd.Timedelta(days=1)
-            guard = 0
-            while prev_bd.dayofweek > 4 and guard < 10:  # skip weekend
-                prev_bd -= pd.Timedelta(days=1)
-                guard += 1
+            prev_bd = previous_business_day(today_norm)
             today_end = today_norm + pd.Timedelta(days=1)
             return int(((upd >= prev_bd) & (upd < today_end)).sum())
         updated_today_count = _updated_today_count(baseline_df)
@@ -962,11 +955,36 @@ def api_tickets():
                 sel = base[open_mask & ((base["status"] == st) if st is not None else False)]
             elif source == "aging":
                 base = df if baseline_flag else df_strict
-                ages = (now - pd.to_datetime(base["created_at"], errors="coerce")) .dt.total_seconds() / 86400.0
-                bins = [-1, 2, 7, 14, 30, 60, 999999]
-                labels = ["0–2d", "3–7d", "8–14d", "15–30d", "31–60d", ">60d"]
-                cats = pd.cut(ages, bins=bins, labels=labels)
-                sel = base[(base["solved_at"].isna()) & (cats.astype(str) == label)]
+                # Compute business-day age per ticket to match aging_buckets
+                created = pd.to_datetime(base["created_at"], errors="coerce")
+                today_norm_local = pd.Timestamp(now).normalize()
+
+                def _age_bucket_match(row_created):
+                    try:
+                        if pd.isna(row_created):
+                            return False
+                        start = pd.Timestamp(row_created).normalize()
+                        age_bd = business_days_between(start, today_norm_local)
+                    except Exception:
+                        return False
+                    # Map to labels
+                    if age_bd <= 2:
+                        lab = "0–2d"
+                    elif age_bd <= 7:
+                        lab = "3–7d"
+                    elif age_bd <= 14:
+                        lab = "8–14d"
+                    elif age_bd <= 30:
+                        lab = "15–30d"
+                    elif age_bd <= 60:
+                        lab = "31–60d"
+                    else:
+                        lab = ">60d"
+                    return lab == label
+
+                mask_open = base["solved_at"].isna()
+                # Apply per-row created -> bucket mapping
+                sel = base[mask_open & created.apply(_age_bucket_match).astype(bool)].copy()
             elif source == "open_today":
                 base = df
                 sel = base[base["solved_at"].isna()]
@@ -982,11 +1000,7 @@ def api_tickets():
                 base = df
                 if 'updated_at' in base.columns:
                     upd_dt = pd.to_datetime(base['updated_at'], errors='coerce')
-                    prev_bd = today_norm - pd.Timedelta(days=1)
-                    guard = 0
-                    while prev_bd.dayofweek > 4 and guard < 10:
-                        prev_bd -= pd.Timedelta(days=1)
-                        guard += 1
+                    prev_bd = previous_business_day(today_norm)
                     today_end = today_norm + pd.Timedelta(days=1)
                     sel = base[(upd_dt >= prev_bd) & (upd_dt < today_end)]
                 else:

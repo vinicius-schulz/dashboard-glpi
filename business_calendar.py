@@ -1,0 +1,78 @@
+"""Business calendar helpers.
+
+Provides:
+- load_holidays(path) -> set of dates
+- is_business_day(dt) -> bool
+- previous_business_day(dt) -> pd.Timestamp (previous business day < dt)
+- business_days_range_start(dt) -> previous business day (inclusive)
+- business_days_between(start, end) -> number of business days (float, counts partial days not handled here)
+
+Holidays are loaded from `holidays.json` file at repo root (ISO dates).
+"""
+from __future__ import annotations
+
+from typing import Set
+import json
+import os
+import pandas as pd
+
+HOLIDAYS_PATH = os.path.join(os.path.dirname(__file__), 'holidays.json')
+
+def load_holidays(path: str = HOLIDAYS_PATH) -> Set[pd.Timestamp]:
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            raw = json.load(f)
+        dates = set()
+        for k in raw.keys():
+            try:
+                dates.add(pd.Timestamp(k).normalize())
+            except Exception:
+                continue
+        return dates
+    except Exception:
+        return set()
+
+_holidays = load_holidays()
+
+def is_business_day(dt: pd.Timestamp) -> bool:
+    if dt is None or pd.isna(dt):
+        return False
+    d = pd.Timestamp(dt).normalize()
+    # weekday: Monday=0 ... Sunday=6
+    if d.dayofweek >= 5:
+        return False
+    if d in _holidays:
+        return False
+    return True
+
+def previous_business_day(dt: pd.Timestamp) -> pd.Timestamp:
+    """Return the most recent business day strictly before `dt`.
+
+    If `dt` itself is business day, returns the previous business day (not dt).
+    """
+    cur = pd.Timestamp(dt).normalize() - pd.Timedelta(days=1)
+    guard = 0
+    while guard < 365:
+        if is_business_day(cur):
+            return cur
+        cur -= pd.Timedelta(days=1)
+        guard += 1
+    # fallback: return dt-1
+    return pd.Timestamp(dt).normalize() - pd.Timedelta(days=1)
+
+def business_days_between(start: pd.Timestamp, end: pd.Timestamp) -> int:
+    """Count business days between start (inclusive) and end (exclusive).
+
+    Both are normalized to dates. Returns int count.
+    """
+    s = pd.Timestamp(start).normalize()
+    e = pd.Timestamp(end).normalize()
+    if e <= s:
+        return 0
+    cur = s
+    cnt = 0
+    while cur < e:
+        if is_business_day(cur):
+            cnt += 1
+        cur += pd.Timedelta(days=1)
+    return cnt

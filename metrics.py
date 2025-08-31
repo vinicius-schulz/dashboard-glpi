@@ -6,6 +6,7 @@ import numpy as np
 from instrumentation import timed
 import pandas as pd
 import datetime
+from business_calendar import is_business_day, business_days_between
 
 
 @timed
@@ -170,11 +171,24 @@ def aging_buckets(df: pd.DataFrame, now=None):
     """
     now = now or pd.Timestamp.now()
     open_df = df[df["solved_at"].isna()].copy()
-    open_df["age_days"] = (now - pd.to_datetime(open_df["created_at"], errors="coerce")).dt.total_seconds() / 86400.0
-    # Faixas não sobrepostas incluindo separação 31–60d e >60d
+    # Compute age in business days (int) between created date (inclusive) and today (exclusive)
+    created_series = pd.to_datetime(open_df["created_at"], errors="coerce")
+    today_norm = pd.Timestamp(now).normalize()
+
+    def _bd_age(created_ts):
+        if pd.isna(created_ts):
+            return 0
+        try:
+            start = pd.Timestamp(created_ts).normalize()
+            return business_days_between(start, today_norm)
+        except Exception:
+            return 0
+
+    open_df["age_business_days"] = created_series.apply(_bd_age).astype(int)
+    # Faixas não sobrepostas em dias úteis (business days)
     bins = [-1, 2, 7, 14, 30, 60, 999999]
     labels = ["0–2d", "3–7d", "8–14d", "15–30d", "31–60d", ">60d"]
-    cats = pd.cut(open_df["age_days"], bins=bins, labels=labels)
+    cats = pd.cut(open_df["age_business_days"], bins=bins, labels=labels)
     return cats.value_counts().reindex(labels, fill_value=0)
 
 
@@ -199,8 +213,8 @@ def business_hours_between(start: pd.Timestamp, end: pd.Timestamp, start_hour: i
     one_day = pd.Timedelta(days=1)
 
     while cur_date <= last_date:
-        # weekday: Mon=0 .. Sun=6
-        if cur_date.weekday() < 5:
+        # use business_calendar to determine business day (handles holidays)
+        if is_business_day(cur_date):
             day_start = pd.Timestamp(datetime.datetime.combine(cur_date.date(), datetime.time(hour=start_hour)))
             day_end = pd.Timestamp(datetime.datetime.combine(cur_date.date(), datetime.time(hour=end_hour)))
             # overlap between [s,e] and [day_start, day_end)
