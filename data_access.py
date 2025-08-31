@@ -114,6 +114,7 @@ def bulk_search_observer_tickets(
                         "forcedisplay[10]": "7",
                         "forcedisplay[11]": "5",
                         "forcedisplay[12]": "8",
+                        "forcedisplay[13]": "19",
                         "expand_dropdowns": "true",
                         "range": f"{start}-{start+range_chunk-1}",
                     }
@@ -151,6 +152,8 @@ def bulk_search_observer_tickets(
                             "observer_strategy": tag if role == "observer" else None,
                             "observer_field_id": observer_field_id if role == "observer" else None,
                             "match_role": "observer" if role == "observer" else "assigned_group",
+                            # Campo de última atualização (date_mod) — pode vir ausente em alguns registros.
+                            "updated_at": row.get("19"),
                         })
                         if max_tickets is not None and len(rows) >= max_tickets:
                             break

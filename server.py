@@ -452,7 +452,7 @@ def api_data():
                 return jsonify({
                     "meta": {**meta, "baseline_window": {"start": str(baseline_start.date()), "end": str(baseline_end.date()), "used": True},
                               "user_window": {"start": str(user_start.date()), "end": str(user_end.date())},
-                              "ignore_period_widgets": ["aging","backlog_status","open_today","created_today","resolved_today"]},
+                              "ignore_period_widgets": ["aging","backlog_status","open_today","created_today","resolved_today","updated_today"]},
                     "count": 0,
                     "note": "Nenhum ticket no filtro e baseline vazia.",
                     "series": {k: empty_series for k in ["created","resolved","backlog","backlog_trend","category","resolution_hours","resolution_hours_trend","backlog_status","aging","priority","impact","load_by_user","load_by_group"]},
@@ -460,6 +460,7 @@ def api_data():
                     "open_today": 0,
                     "created_today": 0,
                     "resolved_today": 0,
+                    "updated_today": 0,
                     "baseline_titles": [],
                     "tickets_sla": [],
                 })
@@ -471,6 +472,22 @@ def api_data():
             created_today_count = int(created_today_mask.sum())
             solved_today_mask = (pd.to_datetime(baseline_df['solved_at'], errors='coerce') >= today_norm) & (pd.to_datetime(baseline_df['solved_at'], errors='coerce') < today_norm + pd.Timedelta(days=1))
             resolved_today_count = int(solved_today_mask.sum())
+            # Atualizados hoje (date_mod) com carryover de fim de semana (se segunda considerar sáb+dom)
+            def _updated_today_count(df_in: pd.DataFrame) -> int:
+                if df_in is None or df_in.empty or 'updated_at' not in df_in.columns:
+                    return 0
+                upd = pd.to_datetime(df_in['updated_at'], errors='coerce')
+                if upd.isna().all():
+                    return 0
+                mask_today = (upd >= today_norm) & (upd < today_norm + pd.Timedelta(days=1))
+                if today_norm.dayofweek == 0:  # Monday
+                    sat = today_norm - pd.Timedelta(days=2)
+                    sun = today_norm - pd.Timedelta(days=1)
+                    mask_sat = (upd >= sat) & (upd < sat + pd.Timedelta(days=1))
+                    mask_sun = (upd >= sun) & (upd < sun + pd.Timedelta(days=1))
+                    return int((mask_today | mask_sat | mask_sun).sum())
+                return int(mask_today.sum())
+            updated_today_count = _updated_today_count(baseline_df)
             # títulos baseline
             try:
                 baseline_titles = []
@@ -514,7 +531,7 @@ def api_data():
             return jsonify({
                 "meta": {**meta, "baseline_window": {"start": str(baseline_start.date()), "end": str(baseline_end.date()), "used": True},
                           "user_window": {"start": str(user_start.date()), "end": str(user_end.date())},
-                          "ignore_period_widgets": ["aging","backlog_status","open_today","created_today","resolved_today"]},
+                          "ignore_period_widgets": ["aging","backlog_status","open_today","created_today","resolved_today","updated_today"]},
                 "count": 0,
                 "note": "Sem tickets no intervalo filtrado; exibindo métricas de baseline.",
                 "series": {
@@ -536,6 +553,7 @@ def api_data():
                 "open_today": open_today_full,
                 "created_today": created_today_count,
                 "resolved_today": resolved_today_count,
+                "updated_today": updated_today_count,
                 "baseline_titles": baseline_titles,
                 "baseline_titles_detail": baseline_titles_detail,
                 "tickets_sla": [],
@@ -590,6 +608,21 @@ def api_data():
         created_today_count = int(created_today_mask.sum())
         solved_today_mask = (pd.to_datetime(baseline_df['solved_at'], errors='coerce') >= today_norm) & (pd.to_datetime(baseline_df['solved_at'], errors='coerce') < today_norm + pd.Timedelta(days=1))
         resolved_today_count = int(solved_today_mask.sum())
+        def _updated_today_count(df_in: pd.DataFrame) -> int:
+            if df_in is None or df_in.empty or 'updated_at' not in df_in.columns:
+                return 0
+            upd = pd.to_datetime(df_in['updated_at'], errors='coerce')
+            if upd.isna().all():
+                return 0
+            mask_today = (upd >= today_norm) & (upd < today_norm + pd.Timedelta(days=1))
+            if today_norm.dayofweek == 0:
+                sat = today_norm - pd.Timedelta(days=2)
+                sun = today_norm - pd.Timedelta(days=1)
+                mask_sat = (upd >= sat) & (upd < sat + pd.Timedelta(days=1))
+                mask_sun = (upd >= sun) & (upd < sun + pd.Timedelta(days=1))
+                return int((mask_today | mask_sat | mask_sun).sum())
+            return int(mask_today.sum())
+        updated_today_count = _updated_today_count(baseline_df)
         load = load_by_assignee(df_strict)
 
         # Lista de grupos (sempre derivada do baseline SEM filtro de grupo para não "encolher" o dropdown)
@@ -708,7 +741,7 @@ def api_data():
             "meta": {**meta,
                       "baseline_window": {"start": str(baseline_start.date()), "end": str(baseline_end.date()), "used": True},
                       "user_window": {"start": str(user_start.date()), "end": str(user_end.date())},
-                      "ignore_period_widgets": ["aging","backlog_status","open_today","created_today","resolved_today"]},
+                      "ignore_period_widgets": ["aging","backlog_status","open_today","created_today","resolved_today","updated_today"]},
             "count": int(len(df_strict)),
             "period": {"start": start_s, "end": end_s, "gran": gran},
             "assigned_groups": assigned_groups,
@@ -732,6 +765,7 @@ def api_data():
             "open_today": open_today_full,
             "created_today": created_today_count,
             "resolved_today": resolved_today_count,
+            "updated_today": updated_today_count,
             "baseline_titles": baseline_titles,
             "baseline_titles_detail": baseline_titles_detail,
             # lista simplificada para cálculo client-side de buckets SLA customizados por título
@@ -943,6 +977,21 @@ def api_tickets():
                 base = df
                 solved_dt = pd.to_datetime(base["solved_at"], errors="coerce")
                 sel = base[(solved_dt.notna()) & (solved_dt >= today_norm) & (solved_dt < today_norm + pd.Timedelta(days=1))]
+            elif source == "updated_today":
+                base = df
+                if 'updated_at' in base.columns:
+                    upd_dt = pd.to_datetime(base['updated_at'], errors='coerce')
+                    mask_today = (upd_dt >= today_norm) & (upd_dt < today_norm + pd.Timedelta(days=1))
+                    if today_norm.dayofweek == 0:  # Monday carryover Sat/Sun
+                        sat = today_norm - pd.Timedelta(days=2)
+                        sun = today_norm - pd.Timedelta(days=1)
+                        mask_sat = (upd_dt >= sat) & (upd_dt < sat + pd.Timedelta(days=1))
+                        mask_sun = (upd_dt >= sun) & (upd_dt < sun + pd.Timedelta(days=1))
+                        sel = base[mask_today | mask_sat | mask_sun]
+                    else:
+                        sel = base[mask_today]
+                else:
+                    sel = pd.DataFrame()
             elif source in ("category", "priority", "impact"):
                 base = df_strict  # respeitam filtro agora
                 col = {"category": "category", "priority": "priority", "impact": "impact"}[source]

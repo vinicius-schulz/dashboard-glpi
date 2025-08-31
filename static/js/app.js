@@ -129,6 +129,7 @@ const WidgetLayout = (() => {
     { id: 'openToday', cols: 8, rows: 8, visible: true },
     { id: 'createdToday', cols: 8, rows: 8, visible: true },
     { id: 'resolvedToday', cols: 8, rows: 8, visible: true },
+  { id: 'updatedToday', cols: 8, rows: 8, visible: true },
     { id: 'category', cols: 8, rows: 8, visible: true },
     { id: 'priority', cols: 8, rows: 8, visible: true },
     { id: 'impact', cols: 8, rows: 8, visible: true }
@@ -625,6 +626,11 @@ window.addEventListener('DOMContentLoaded', () => {
     rtd.style.cursor = 'pointer';
     rtd.addEventListener('click', () => openTicketsModal('resolved_today', 'Resolvidos Hoje'));
   }
+  const upd = document.getElementById('updatedTodayValue');
+  if (upd) {
+    upd.style.cursor = 'pointer';
+    upd.addEventListener('click', () => openTicketsModal('updated_today', 'Atualizados Hoje'));
+  }
 });
 
 // ---- Month range controls for "Mensal" granularity ----
@@ -939,6 +945,10 @@ async function loadData() {
     if (typeof js.resolved_today === 'number') {
       const el3 = document.getElementById('resolvedTodayValue');
       if (el3) el3.textContent = js.resolved_today.toLocaleString('pt-BR');
+    }
+    if (typeof js.updated_today === 'number') {
+      const el4 = document.getElementById('updatedTodayValue');
+      if (el4) el4.textContent = js.updated_today.toLocaleString('pt-BR');
     }
 
     const s = js.series || {};
