@@ -1123,8 +1123,10 @@ async function loadData() {
     // refresh hidden state (in case layout toggled visibility before load)
     document.querySelectorAll('.card[data-widget]').forEach(el => { if (el.style.display === 'none') return; /* skip hidden */ });
     if (s.load_by_user) { barChart('chartUser', s.load_by_user.labels, s.load_by_user.data, 'Usuário', 'Quantidade de tickets abertos por usuário (pode representar solicitante ou responsável conforme configuração).'); attachBarClick('chartUser', s.load_by_user.labels, 'load_by_user'); }
-    if (s.load_by_group) {
-      // Sort groups by descending count so bars show from largest to smallest
+    if (s.load_by_group_stacked && s.load_by_group_stacked.labels && s.load_by_group_stacked.labels.length && s.load_by_group_stacked.datasets && s.load_by_group_stacked.datasets.length) {
+      stackedBarChart('chartGroup', s.load_by_group_stacked, 'Quantidade de tickets por grupo subdividida por status no período selecionado.');
+      attachBarClick('chartGroup', s.load_by_group_stacked.labels, 'load_by_group');
+    } else if (s.load_by_group) {
       try {
         const labels = (s.load_by_group.labels || []).slice();
         const data = (s.load_by_group.data || []).slice();
@@ -1135,7 +1137,6 @@ async function loadData() {
         barChart('chartGroup', sortedLabels, sortedData, 'Grupo', 'Quantidade de tickets por grupo. Útil para identificar equipes com maior carga de chamados.');
         attachBarClick('chartGroup', sortedLabels, 'load_by_group');
       } catch (e) {
-        // fallback to unsorted
         barChart('chartGroup', s.load_by_group.labels, s.load_by_group.data, 'Grupo', 'Quantidade de tickets por grupo. Útil para identificar equipes com maior carga de chamados.');
         attachBarClick('chartGroup', s.load_by_group.labels, 'load_by_group');
       }

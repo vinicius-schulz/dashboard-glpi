@@ -703,6 +703,37 @@ def api_data():
                     continue
                 category_stacked_payload['datasets'].append({'label': st, 'data': [int(v) for v in vals.values]})
 
+        # --- Group stacked (assigned group x status) similar to category_stacked ---
+        load_by_group_stacked_payload = {"labels": [], "datasets": []}
+        try:
+            if not df_strict.empty and 'assigned_group' in df_strict.columns and 'status' in df_strict.columns:
+                tmp_grp = df_strict[['assigned_group', 'status']].copy()
+                def _gdisplay(v):
+                    if isinstance(v, dict):
+                        return (v.get('completename') or v.get('name') or '').strip()
+                    return str(v).strip() if v is not None else ''
+                tmp_grp['group_name'] = tmp_grp['assigned_group'].apply(_gdisplay).fillna('').replace({'None': ''})
+                tmp_grp['status_name'] = tmp_grp['status'].apply(lambda x: STATUS_MAP.get(int(x), str(x)) if pd.notna(x) else 'Desconhecido')
+                grp_status_pivot = tmp_grp.groupby(['group_name', 'status_name']).size().unstack(fill_value=0)
+                # Remove linha vazia (sem nome) se existir
+                if '' in grp_status_pivot.index and grp_status_pivot.shape[0] > 1:
+                    grp_status_pivot = grp_status_pivot.drop(index=[''])
+                if not grp_status_pivot.empty:
+                    # Ordenar grupos por total desc
+                    totals = grp_status_pivot.sum(axis=1).sort_values(ascending=False)
+                    grp_status_pivot = grp_status_pivot.loc[totals.index]
+                    load_by_group_stacked_payload['labels'] = [str(i) for i in grp_status_pivot.index]
+                    status_order_g = [v for _, v in STATUS_MAP.items() if v in grp_status_pivot.columns]
+                    for extra in [c for c in grp_status_pivot.columns if c not in status_order_g]:
+                        status_order_g.append(extra)
+                    for st in status_order_g:
+                        vals = grp_status_pivot.get(st)
+                        if vals is None:
+                            continue
+                        load_by_group_stacked_payload['datasets'].append({'label': st, 'data': [int(v) for v in vals.values]})
+        except Exception:
+            load_by_group_stacked_payload = {"labels": [], "datasets": []}
+
         # baseline titles (6 meses) para configuração SLA manual por título
         try:
             baseline_titles = []
@@ -760,6 +791,7 @@ def api_data():
                 "impact": _dict_to_labels_data(imp_named),
                 "load_by_user": _series_to_labels_data(load.get('by_user')) if 'by_user' in load else {"labels": [], "data": []},
                 "load_by_group": _series_to_labels_data(load.get('by_group')) if 'by_group' in load else {"labels": [], "data": []},
+                "load_by_group_stacked": load_by_group_stacked_payload,
             },
             "sla": sla,
             "open_today": open_today_full,
