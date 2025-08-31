@@ -1020,41 +1020,6 @@ th.sortable .col-resizer:hover {
 	border-color: #0f172a transparent transparent transparent;
 }
 
-/* Small help button in headings */
-.help {
-	background: transparent;
-	border: none;
-	font-size: 14px;
-	margin-left: 8px;
-	cursor: help;
-	padding: 2px 6px;
-	border-radius: 6px;
-}
-
-.help:hover {
-	background: rgba(15, 23, 42, 0.06);
-}
-
-/* Popover shown when user clicks the small help button */
-.help {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 22px;
-	height: 22px;
-	border-radius: 50%;
-	border: 1px solid #e6eef8;
-	background: #f8fafc;
-	color: #0f172a;
-	font-weight: 600;
-	line-height: 1;
-	padding: 0;
-}
-
-.help:focus {
-	outline: 2px solid rgba(14, 165, 233, 0.25);
-}
-
 .help-popover {
 	position: absolute;
 	z-index: 2600;
