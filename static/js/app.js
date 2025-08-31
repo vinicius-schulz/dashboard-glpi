@@ -2,41 +2,37 @@ let charts = {};
 const UI_BASE = document.body.getAttribute('data-ui-base') || '';
 // ---- Tooltip custom para badge-period (ignora filtro de período) ----
 function initBadgePeriodTooltips() {
-  function ensureTip() {
-    let tip = document.getElementById('badgePeriodTooltip');
-    if (!tip) {
-      tip = document.createElement('div');
-      tip.id = 'badgePeriodTooltip';
-      tip.className = 'badge-period-tooltip';
-      tip.setAttribute('role', 'tooltip');
-      tip.textContent = 'Este widget ignora o filtro de período atual e usa uma janela própria de baseline.';
-      document.body.appendChild(tip);
-    }
-    return tip;
-  }
-  function show(e) {
-    const el = e.currentTarget;
-    const tip = ensureTip();
+  // Use the same popover implementation as help buttons (createHelpPopover)
+  function showPopoverFor(el) {
+    // close any other help popovers
+    document.querySelectorAll('.help-popover').forEach(p => p.remove());
+    const helpText = el.getAttribute('title') || 'Ignora filtro de período';
+    const pop = createHelpPopover(helpText);
+    document.body.appendChild(pop);
     const r = el.getBoundingClientRect();
-    tip.style.left = (r.left + r.width / 2 + window.scrollX) + 'px';
-    tip.style.top = (r.top + window.scrollY - 8) + 'px';
-    tip.dataset.show = '1';
-  }
-  function hide() {
-    const tip = document.getElementById('badgePeriodTooltip');
-    if (tip) { delete tip.dataset.show; }
+    // position similar to help buttons (below-right if possible)
+    const left = Math.min(window.innerWidth - 16 - 360, r.left + window.scrollX + 6);
+    const top = r.bottom + window.scrollY + 8;
+    pop.style.left = `${left}px`;
+    pop.style.top = `${top}px`;
+    // aria state
+    el.setAttribute('aria-expanded', 'true');
+    function onDocClick(e) {
+      if (!pop.contains(e.target) && e.target !== el) { pop.remove(); el.setAttribute('aria-expanded', 'false'); document.removeEventListener('click', onDocClick); document.removeEventListener('keydown', onEsc); }
+    }
+    function onEsc(e) { if (e.key === 'Escape') { pop.remove(); el.setAttribute('aria-expanded', 'false'); document.removeEventListener('click', onDocClick); document.removeEventListener('keydown', onEsc); } }
+    setTimeout(() => document.addEventListener('click', onDocClick));
+    document.addEventListener('keydown', onEsc);
+    pop.focus();
   }
   function bind(el) {
     if (el._bpBound) return; el._bpBound = true;
     el.setAttribute('tabindex', '0');
-    el.addEventListener('mouseenter', show);
-    el.addEventListener('mouseleave', hide);
-    el.addEventListener('focus', show);
-    el.addEventListener('blur', hide);
-    el.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') hide(); });
+    el.setAttribute('role', 'button');
+    el.addEventListener('click', (e) => { e.stopPropagation(); showPopoverFor(el); });
+    el.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); showPopoverFor(el); } });
   }
   document.querySelectorAll('.badge-period').forEach(bind);
-  // Rebind after dynamic meta injection
   const obs = new MutationObserver(() => { document.querySelectorAll('.badge-period').forEach(bind); });
   obs.observe(document.body, { childList: true, subtree: true });
 }
