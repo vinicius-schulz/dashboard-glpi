@@ -374,6 +374,8 @@ def api_data():
         baseline_end = today_norm
 
         baseline_df, baseline_meta = _fetch_data(baseline_start, baseline_end, mode=mode)
+        # Guardar baseline bruto antes de QUALQUER filtro (usado para lista de títulos SLA estável)
+        baseline_df_raw = baseline_df.copy() if (baseline_df is not None and not baseline_df.empty) else baseline_df
         user_df, user_meta = _fetch_data(user_start, user_end, mode=mode)
         meta = {**baseline_meta, "tids_baseline": baseline_meta.get("tids"), "tids_user": user_meta.get("tids")}
 
@@ -436,8 +438,9 @@ def api_data():
                     s = df['assigned_group'].astype(str).fillna('')
                     return df[s == assigned_group_param].copy()
                 return df
+
         # Primeiro aplicamos somente o filtro de categoria; guardamos baseline sem filtro de grupo
-        baseline_df_cat = filter_category(baseline_df)
+        baseline_df_cat = filter_category(baseline_df)  # baseline filtrado por categoria para métricas que ignoram período
         user_df_cat = filter_category(user_df)
 
         # Guardar baseline não filtrado por grupo para montar lista completa de grupos atribuídos
@@ -496,27 +499,23 @@ def api_data():
             try:
                 baseline_titles = []
                 baseline_titles_detail = []
-                if 'title' in baseline_df.columns:
-                    # construir mapeamento título -> categoria mais frequente
-                    title_series = baseline_df['title'].dropna().astype(str)
-                    # preparar coluna categoria textual
-                    if 'category' in baseline_df.columns:
-                        cat_col = baseline_df['category']
+                src_titles_df = baseline_df_raw  # usar baseline bruto para estabilidade
+                if src_titles_df is not None and not src_titles_df.empty and 'title' in src_titles_df.columns:
+                    title_series = src_titles_df['title'].dropna().astype(str)
+                    if 'category' in src_titles_df.columns:
+                        cat_col = src_titles_df['category']
                         cat_text = []
                         for v in cat_col:
-                            name = ''
                             if isinstance(v, dict):
                                 name = v.get('completename') or v.get('name') or ''
                             else:
                                 name = str(v) if v is not None else ''
                             cat_text.append(name)
-                        cats = pd.Series(cat_text, index=baseline_df.index)
+                        cats = pd.Series(cat_text, index=src_titles_df.index)
                     else:
-                        cats = pd.Series([''] * len(baseline_df), index=baseline_df.index)
+                        cats = pd.Series([''] * len(src_titles_df), index=src_titles_df.index)
                     tmp = pd.DataFrame({'title': title_series, 'category_text': cats})
-                    # normalizar categoria vazia
                     tmp['category_text'] = tmp['category_text'].fillna('').replace({'None': ''})
-                    # obter categoria mais frequente por título
                     agg = tmp.groupby('title')['category_text'].agg(lambda s: s.value_counts().index[0] if len(s.value_counts()) else '')
                     for t, cat in agg.items():
                         title_clean = str(t).strip()
@@ -526,9 +525,6 @@ def api_data():
                         baseline_titles_detail.append({'title': title_clean, 'category': (cat or '').strip()})
                     baseline_titles.sort(key=lambda x: x.lower())
                     baseline_titles_detail.sort(key=lambda d: d['title'].lower())
-                else:
-                    baseline_titles = []
-                    baseline_titles_detail = []
             except Exception:
                 baseline_titles = []
                 baseline_titles_detail = []
@@ -711,10 +707,11 @@ def api_data():
         try:
             baseline_titles = []
             baseline_titles_detail = []
-            if 'title' in baseline_df.columns:
-                title_series = baseline_df['title'].dropna().astype(str)
-                if 'category' in baseline_df.columns:
-                    cat_col = baseline_df['category']
+            src_titles_df = baseline_df_raw
+            if src_titles_df is not None and not src_titles_df.empty and 'title' in src_titles_df.columns:
+                title_series = src_titles_df['title'].dropna().astype(str)
+                if 'category' in src_titles_df.columns:
+                    cat_col = src_titles_df['category']
                     cat_text = []
                     for v in cat_col:
                         if isinstance(v, dict):
@@ -722,9 +719,9 @@ def api_data():
                         else:
                             name = str(v) if v is not None else ''
                         cat_text.append(name)
-                    cats = pd.Series(cat_text, index=baseline_df.index)
+                    cats = pd.Series(cat_text, index=src_titles_df.index)
                 else:
-                    cats = pd.Series([''] * len(baseline_df), index=baseline_df.index)
+                    cats = pd.Series([''] * len(src_titles_df), index=src_titles_df.index)
                 tmp = pd.DataFrame({'title': title_series, 'category_text': cats})
                 tmp['category_text'] = tmp['category_text'].fillna('').replace({'None': ''})
                 agg = tmp.groupby('title')['category_text'].agg(lambda s: s.value_counts().index[0] if len(s.value_counts()) else '')
@@ -771,8 +768,6 @@ def api_data():
             "updated_today": updated_today_count,
             "baseline_titles": baseline_titles,
             "baseline_titles_detail": baseline_titles_detail,
-            # lista simplificada para cálculo client-side de buckets SLA customizados por título
-            # Apenas tickets ainda não resolvidos (backlog) para distribuição SLA
             "tickets_sla": (lambda _df: [
                 {
                     "id": int(r.ticket_id),
@@ -801,26 +796,12 @@ def favicon():
 
 @app.get("/api/tickets")
 def api_tickets():
-    """Return ticket list for a clicked chart point/bar.
-
-    Query params:
-    - start, end: janela efetiva usada para coleta (baseline ou user)
-    - ustart, uend: janela original solicitada pelo usuário (para filtrar séries que respeitam filtro)
-    - source: created|resolved|backlog|backlog_status|aging|category|priority|impact|load_by_user|load_by_group|open_today|created_today|resolved_today
-    - label: label ou id clicado
-    - baseline=1 indica que start/end representam a janela baseline de 6 meses
-    """
-    ok_glpi, msg_glpi = is_glpi_operational(timeout=10)
+    """Lista de tickets correspondente a um ponto / barra clicado."""
+    ok_glpi, _ = is_glpi_operational(timeout=10)
     if not ok_glpi:
         return jsonify({"mensagem": "O GLPI está temporariamente indisponível. Tente novamente em alguns instantes."}), 503
+
     gran = request.args.get("gran", "Diário")
-    try:
-        _tz = zoneinfo.ZoneInfo(os.getenv("APP_TZ", "America/Sao_Paulo"))
-    except Exception:
-        _tz = None
-    _now_dt = datetime.now(_tz) if _tz else datetime.now()
-    now_local = _now_dt
-    today_norm = pd.Timestamp(_now_dt.date())
     mode = request.args.get("mode", "bulk").lower()
     start_s = request.args.get("start")
     end_s = request.args.get("end")
@@ -830,34 +811,40 @@ def api_tickets():
     label = request.args.get("label", "")
     baseline_flag = request.args.get("baseline", "0") == "1"
     cat_filter = request.args.get("cat", "todos").lower()
-    ids_param = request.args.get("ids")  # lista opcional de IDs ("1,2,3")
+    assigned_group_param = request.args.get('assigned_group', 'todos')
+    ids_param = request.args.get("ids")
+
+    try:
+        _tz = zoneinfo.ZoneInfo(os.getenv("APP_TZ", "America/Sao_Paulo"))
+    except Exception:
+        _tz = None
+    now_dt = datetime.now(_tz) if _tz else datetime.now()
+    today_norm = pd.Timestamp(now_dt.date())
 
     if not start_s or not end_s:
-        today = today_norm
-        start_s = (today - pd.Timedelta(days=30)).date().isoformat()
-        end_s = today.date().isoformat()
-    df, meta = _fetch_data(pd.Timestamp(start_s), pd.Timestamp(end_s), mode=mode)
-        # Aplicar filtro de categoria igual ao /api/data
-    if df is not None and not df.empty and cat_filter not in ("todos", ""):
-            name_cols = [c for c in ["category_fullname", "category_name", "category_label"] if c in df.columns]
-            if name_cols:
-                col = name_cols[0]
-                s = df[col].astype(str).fillna("")
-            else:
-                if df["category"].dtype == object:
-                    s = df["category"].astype(str).fillna("")
-                else:
-                    s = None
-            if s is not None:
-                mask_h = s.str.startswith("Holding", na=False)
-                if cat_filter == "holding":
-                    df = df[mask_h].copy()
-                elif cat_filter == "unimed":
-                    df = df[~mask_h].copy()
-                meta["cat_filter"] = cat_filter
-        # Apply assigned_group filter (same semantics as /api/data)
-    assigned_group_param = request.args.get('assigned_group', 'todos')
+        start_s = (today_norm - pd.Timedelta(days=30)).date().isoformat()
+        end_s = today_norm.date().isoformat()
 
+    df, meta = _fetch_data(pd.Timestamp(start_s), pd.Timestamp(end_s), mode=mode)
+    if df is None or df.empty:
+        return jsonify({"meta": meta, "count": 0, "tickets": []})
+
+    # Categoria
+    if cat_filter not in ("todos", ""):
+        name_cols = [c for c in ["category_fullname", "category_name", "category_label"] if c in df.columns]
+        if name_cols:
+            s = df[name_cols[0]].astype(str).fillna("")
+        else:
+            s = df['category'].astype(str).fillna("") if 'category' in df.columns and df['category'].dtype == object else None
+        if s is not None:
+            mask_h = s.str.startswith("Holding", na=False)
+            if cat_filter == "holding":
+                df = df[mask_h].copy()
+            elif cat_filter == "unimed":
+                df = df[~mask_h].copy()
+            meta['cat_filter'] = cat_filter
+
+    # Grupo atribuído
     def filter_assigned_group(df_in: pd.DataFrame) -> pd.DataFrame:
         if df_in is None or df_in.empty or assigned_group_param in (None, '', 'todos'):
             return df_in
@@ -900,30 +887,19 @@ def api_tickets():
     if df is None or df.empty:
         return jsonify({"meta": meta, "count": 0, "tickets": []})
 
-        # Converter campos de data
-    df_created = pd.to_datetime(df["created_at"], errors="coerce")
-    df_solved = pd.to_datetime(df["solved_at"], errors="coerce")
+    # Subconjuntos (strict/extended)
+    df_created = pd.to_datetime(df['created_at'], errors='coerce')
+    df_solved = pd.to_datetime(df['solved_at'], errors='coerce')
     user_start = pd.Timestamp(user_start_s).normalize()
     user_end = pd.Timestamp(user_end_s).normalize()
     end_boundary = user_end + pd.Timedelta(days=1)
-
-        # Determinar subset que respeita filtro (created dentro da janela do usuário)
     mask_strict = (df_created >= user_start) & (df_created < end_boundary)
-    df_strict = df[mask_strict].copy() 
-
-        # Para backlog precisamos incluir tickets criados antes mas abertos ou resolvidos dentro
-    spans_window = (
-        (df_created < user_start) & ((df_solved.isna()) | (df_solved >= user_start))
-    ) | (
-        (df_solved.notna()) & (df_solved >= user_start) & (df_solved < end_boundary)
-    )
+    df_strict = df[mask_strict].copy()
+    spans_window = ((df_created < user_start) & ((df_solved.isna()) | (df_solved >= user_start))) | ((df_solved.notna()) & (df_solved >= user_start) & (df_solved < end_boundary))
     df_extended = df[mask_strict | spans_window].copy()
 
-    now = pd.Timestamp.now()
-
-        # Seleção baseada em lista explícita de IDs (se fornecida) ou na fonte
-    sel = pd.DataFrame()
-    used_ids = False
+    # Seleção inicial vazia
+    sel = pd.DataFrame(); used_ids = False
     if ids_param:
         try:
             wanted_ids = {int(x) for x in ids_param.split(',') if x.strip().isdigit()}
@@ -931,262 +907,203 @@ def api_tickets():
             wanted_ids = set()
         if wanted_ids:
             sel = df[df['ticket_id'].isin(wanted_ids)].copy()
-            source = 'ids'  # identifica seleção direta
             used_ids = True
-        # Caso não tenha ids (ou lista vazia) segue lógica tradicional de source
+
+    gran_lower = gran.lower()
     if not used_ids:
-            if source in ("created", "resolved"):
-                # label => período
-                ps, pe = _period_bounds_from_label(label, gran)
-                if source == "created":
-                    base = df_strict  # created respeita filtro
-                    created_dt = pd.to_datetime(base["created_at"], errors="coerce")
-                    sel = base[(created_dt >= ps) & (created_dt <= pe)]
-                else:  # resolved
-                    base = df_strict
-                    solved_dt = pd.to_datetime(base["solved_at"], errors="coerce")
-                    sel = base[(solved_dt.notna()) & (solved_dt >= ps) & (solved_dt <= pe)]
-            elif source == "resolution_hours":
-                # Clicking the resolution-hours chart should list tickets resolved in that period
-                ps, pe = _period_bounds_from_label(label, gran)
-                base = df_strict  # resolution hours respects the user filter
-                solved_dt = pd.to_datetime(base["solved_at"], errors="coerce")
-                sel = base[(solved_dt.notna()) & (solved_dt >= ps) & (solved_dt <= pe)]
-            elif source == "backlog":
-                ps, pe = _period_bounds_from_label(label, gran)
-                base = df_extended  # backlog precisa considerar anteriores
-                created_dt = pd.to_datetime(base["created_at"], errors="coerce")
-                solved_dt = pd.to_datetime(base["solved_at"], errors="coerce")
-                sel = base[(created_dt <= pe) & ((solved_dt.isna()) | (solved_dt > pe))]
-            elif source == "backlog_status":
-                st = None
-                try:
-                    st = int(float(label))
-                except Exception:
-                    inv = {v.lower(): k for k, v in STATUS_MAP.items()}
-                    st = inv.get(str(label).lower())
-                base = df if baseline_flag else df_strict
-                open_mask = base["solved_at"].isna()
-                sel = base[open_mask & ((base["status"] == st) if st is not None else False)]
-            elif source == "aging":
-                base = df if baseline_flag else df_strict
-                # Compute business-day age per ticket to match aging_buckets
-                created = pd.to_datetime(base["created_at"], errors="coerce")
-                today_norm_local = pd.Timestamp(now).normalize()
-
-                def _age_bucket_match(row_created):
-                    try:
-                        if pd.isna(row_created):
-                            return False
-                        start = pd.Timestamp(row_created).normalize()
-                        age_bd = business_days_between(start, today_norm_local)
-                    except Exception:
-                        return False
-                    # Map to labels
-                    if age_bd <= 2:
-                        lab = "0–2d"
-                    elif age_bd <= 7:
-                        lab = "3–7d"
-                    elif age_bd <= 14:
-                        lab = "8–14d"
-                    elif age_bd <= 30:
-                        lab = "15–30d"
-                    elif age_bd <= 60:
-                        lab = "31–60d"
-                    else:
-                        lab = ">60d"
-                    return lab == label
-
-                mask_open = base["solved_at"].isna()
-                # Apply per-row created -> bucket mapping
-                sel = base[mask_open & created.apply(_age_bucket_match).astype(bool)].copy()
-            elif source == "open_today":
-                base = df
-                sel = base[base["solved_at"].isna()]
-            elif source == "created_today":
-                base = df
-                created_dt = pd.to_datetime(base["created_at"], errors="coerce")
-                prev_bd = consecutive_non_business_start(today_norm)
-                today_end = today_norm + pd.Timedelta(days=1)
-                sel = base[(created_dt >= prev_bd) & (created_dt < today_end)]
-            elif source == "resolved_today":
-                base = df
-                solved_dt = pd.to_datetime(base["solved_at"], errors="coerce")
-                # Use same consecutive non-business-day window as 'created_today'
-                prev_bd = consecutive_non_business_start(today_norm)
-                today_end = today_norm + pd.Timedelta(days=1)
-                sel = base[(solved_dt.notna()) & (solved_dt >= prev_bd) & (solved_dt < today_end)]
-            elif source == "updated_today":
-                base = df
-                if 'updated_at' in base.columns:
-                    upd_dt = pd.to_datetime(base['updated_at'], errors='coerce')
-                    prev_bd = previous_business_day(today_norm)
-                    today_end = today_norm + pd.Timedelta(days=1)
-                    sel = base[(upd_dt >= prev_bd) & (upd_dt < today_end)]
-                else:
-                    sel = pd.DataFrame()
-            elif source in ("category", "priority", "impact"):
-                base = df_strict  # respeitam filtro agora
-                col = {"category": "category", "priority": "priority", "impact": "impact"}[source]
-                if source in ("priority", "impact"):
-                    try:
-                        v = int(float(label))
-                        sel = base[base[col] == v]
-                    except Exception:
-                        inv = {v.lower(): k for k, v in LEVEL_MAP.items()}
-                        mapped = inv.get(str(label).lower())
-                        if mapped is None:
-                            sel = base[base[col].astype(str) == str(label)]
-                        else:
-                            sel = base[base[col] == mapped]
-                else:
-                    sel = base[base[col].astype(str) == str(label)]
-            elif source in ("load_by_user", "load_by_group"):
-                base = df_strict
-                col = "assigned_user" if source == "load_by_user" else "assigned_group"
-                sel = pd.DataFrame()
-                # First try numeric id matching (handles raw ids stored as int/float or dict with 'id')
-                try:
-                    aid = int(float(label))
-                    def match_id(row):
-                        val = row.get(col)
-                        if isinstance(val, dict):
-                            try:
-                                return int(val.get('id')) == aid
-                            except Exception:
-                                return False
-                        try:
-                            return int(float(val)) == aid
-                        except Exception:
-                            return False
-                    sel = base[base.apply(match_id, axis=1)].copy()
-                except Exception:
-                    # Fallback: try textual/name matching (handles dicts with 'completename'/'name' or plain text)
-                    if col in base.columns and base[col].dtype == object:
-                        def match_name(row):
-                            val = row.get(col)
-                            if isinstance(val, dict):
-                                name = val.get('completename') or val.get('name') or ""
-                                return str(name) == str(label)
-                            else:
-                                return str(val) == str(label)
-                        sel = base[base.apply(match_name, axis=1)].copy()
-                    else:
-                        # As a last resort compare stringified values
-                        try:
-                            sel = base[base[col].astype(str) == str(label)].copy()
-                        except Exception:
-                            sel = pd.DataFrame()
+        if source in ('created','resolved'):
+            ps, pe = _period_bounds_from_label(label, gran)
+            base = df_strict
+            if source == 'created':
+                dt = pd.to_datetime(base['created_at'], errors='coerce')
             else:
-                sel = df_strict
+                dt = pd.to_datetime(base['solved_at'], errors='coerce')
+            sel = base[(dt.notna() if source=='resolved' else pd.Series([True]*len(dt), index=dt.index)) & (dt >= ps) & (dt <= pe)]
+        elif source == 'resolution_hours':
+            ps, pe = _period_bounds_from_label(label, gran)
+            base = df_strict
+            dt = pd.to_datetime(base['solved_at'], errors='coerce')
+            sel = base[(dt.notna()) & (dt >= ps) & (dt <= pe)]
+        elif source == 'backlog':
+            ps, pe = _period_bounds_from_label(label, gran)
+            base = df_extended
+            created_dt = pd.to_datetime(base['created_at'], errors='coerce')
+            solved_dt = pd.to_datetime(base['solved_at'], errors='coerce')
+            sel = base[(created_dt <= pe) & ((solved_dt.isna()) | (solved_dt > pe))]
+        elif source == 'backlog_status':
+            try:
+                st = int(float(label))
+            except Exception:
+                inv = {v.lower(): k for k, v in STATUS_MAP.items()}
+                st = inv.get(label.lower())
+            base = df if baseline_flag else df_strict
+            open_mask = base['solved_at'].isna()
+            sel = base[open_mask & ((base['status'] == st) if st is not None else False)]
+        elif source == 'aging':
+            base = df if baseline_flag else df_strict
+            created_dt = pd.to_datetime(base['created_at'], errors='coerce')
+            today_local = today_norm
+            def _bucket_match(cdt):
+                try:
+                    if pd.isna(cdt): return False
+                    age_bd = business_days_between(pd.Timestamp(cdt).normalize(), today_local)
+                except Exception:
+                    return False
+                if age_bd <= 2: b = '0–2d'
+                elif age_bd <=7: b = '3–7d'
+                elif age_bd <=14: b = '8–14d'
+                elif age_bd <=30: b = '15–30d'
+                elif age_bd <=60: b = '31–60d'
+                else: b = '>60d'
+                return b == label
+            mask_open = base['solved_at'].isna()
+            sel = base[mask_open & created_dt.apply(_bucket_match).astype(bool)].copy()
+        elif source == 'open_today':
+            sel = df[df['solved_at'].isna()]
+        elif source == 'created_today':
+            created_dt = pd.to_datetime(df['created_at'], errors='coerce')
+            prev_bd = consecutive_non_business_start(today_norm)
+            end_today = today_norm + pd.Timedelta(days=1)
+            sel = df[(created_dt >= prev_bd) & (created_dt < end_today)]
+        elif source == 'resolved_today':
+            solved_dt = pd.to_datetime(df['solved_at'], errors='coerce')
+            prev_bd = consecutive_non_business_start(today_norm)
+            end_today = today_norm + pd.Timedelta(days=1)
+            sel = df[(solved_dt.notna()) & (solved_dt >= prev_bd) & (solved_dt < end_today)]
+        elif source == 'updated_today':
+            if 'updated_at' in df.columns:
+                upd_dt = pd.to_datetime(df['updated_at'], errors='coerce')
+                prev_bd = previous_business_day(today_norm)
+                end_today = today_norm + pd.Timedelta(days=1)
+                sel = df[(upd_dt >= prev_bd) & (upd_dt < end_today)]
+            else:
+                sel = pd.DataFrame()
+        elif source in ('category','priority','impact'):
+            base = df_strict
+            col = source
+            if source in ('priority','impact'):
+                try:
+                    v = int(float(label)); sel = base[base[col]==v]
+                except Exception:
+                    inv = {v.lower(): k for k,v in LEVEL_MAP.items()}
+                    mapped = inv.get(label.lower())
+                    sel = base[base[col]==mapped] if mapped is not None else base[base[col].astype(str)==str(label)]
+            else:
+                sel = base[base[col].astype(str)==str(label)]
+        elif source in ('load_by_user','load_by_group'):
+            base = df_strict
+            col = 'assigned_user' if source=='load_by_user' else 'assigned_group'
+            try:
+                aid = int(float(label))
+                def match_id(row):
+                    val = row.get(col)
+                    if isinstance(val, dict):
+                        try: return int(val.get('id'))==aid
+                        except Exception: return False
+                    try: return int(float(val))==aid
+                    except Exception: return False
+                sel = base[base.apply(match_id, axis=1)].copy()
+            except Exception:
+                if col in base.columns and base[col].dtype==object:
+                    def match_name(row):
+                        val=row.get(col)
+                        if isinstance(val, dict):
+                            nm = val.get('completename') or val.get('name') or ''
+                            return nm==label
+                        return str(val)==str(label)
+                    sel = base[base.apply(match_name, axis=1)].copy()
+                else:
+                    try: sel = base[base[col].astype(str)==str(label)].copy()
+                    except Exception: sel = pd.DataFrame()
+        else:
+            sel = df_strict
 
-        # Build detailed rows with names
     client = GLPIClient(GLPI_URL, GLPI_USER_TOKEN)
     client.init_session(get_full=False)
     try:
-            user_cache: Dict[int, str] = {}
-            group_cache: Dict[int, str] = {}
-            cat_cache: Dict[int, str] = {}
-            rows = []
-            for _, r in sel.head(1000).iterrows():  # safety cap
-                tid = int(r.get("ticket_id"))
+        rows = []
+        for _, r in sel.head(1000).iterrows():
+            tid = int(r.get('ticket_id'))
+            try:
+                t = client.get_item('Ticket', tid)
+            except Exception:
+                t = {}
+            title = t.get('name') or t.get('title') or ''
+            created = t.get('date') or r.get('created_at')
+            updated = t.get('date_mod') or t.get('date_modification') or None
+            status_val = t.get('status') if t.get('status') is not None else r.get('status')
+            status_name = STATUS_MAP.get(int(status_val)) if status_val is not None else ''
+            raw_assigned_group = r.get('assigned_group')
+            assigned_gid = t.get('groups_id_assign') or (raw_assigned_group.get('id') if isinstance(raw_assigned_group, dict) else raw_assigned_group)
+            raw_cat_val = r.get('category')
+            cat_name = ''
+            if raw_cat_val is not None:
                 try:
-                    t = client.get_item("Ticket", tid)
-                except Exception:
-                    t = {}
-                title = t.get("name") or t.get("title") or ""
-                created = t.get("date") or r.get("created_at")
-                updated = t.get("date_mod") or t.get("date_modification") or None
-                status_val = t.get("status") if t.get("status") is not None else r.get("status")
-                status_name = STATUS_MAP.get(int(status_val)) if status_val is not None else ""
-                req_id = t.get("users_id_recipient")
-                if not req_id:
-                    # fallback via Ticket_User type=1
-                    try:
-                        tus = client.get_subitems("Ticket", tid, "Ticket_User", params={"range": "0-99"})
-                        for tu in tus or []:
-                            if int(str(tu.get("type") or 0)) == 1:
-                                req_id = tu.get("users_id")
-                                break
-                    except Exception:
-                        pass
-                assigned_uid = t.get("users_id_assign") or r.get("assigned_user")
-                # Grupo técnico pode vir expandido como dict (completename/name) ou texto; tratar antes de resolver
-                raw_assigned_group = r.get("assigned_group")
-                assigned_gid = t.get("groups_id_assign") or (raw_assigned_group.get("id") if isinstance(raw_assigned_group, dict) else raw_assigned_group)
-                # Categoria: tentar primeiro aproveitar valor textual vindo do bulk (já expand_dropdowns)
-                raw_cat_val = r.get("category")
-                cat_name = ""
-                if raw_cat_val is not None:
-                    try:
-                        if isinstance(raw_cat_val, dict):
-                            cat_name_candidate = raw_cat_val.get("completename") or raw_cat_val.get("name") or ""
-                        else:
-                            cat_name_candidate = str(raw_cat_val)
-                        # Se contém letra (evita puro número) consideramos já descritivo
-                        if any(ch.isalpha() for ch in cat_name_candidate):
-                            cat_name = cat_name_candidate
-                    except Exception:
-                        pass
-                # Se ainda não temos nome, usar ID do ticket e resolver via API de categoria
-                cat_id = t.get("itilcategories_id") or (raw_cat_val if (isinstance(raw_cat_val, int) or (isinstance(raw_cat_val, str) and raw_cat_val.isdigit())) else None)
-                if not cat_name and cat_id:
-                    cat_name = _resolve_category_name(client, cat_id, cat_cache)
-                # Como último recurso, se veio algo mas segue só número, mantém vazio para não confundir
-                if cat_name.isdigit():
-                    # tenta novamente resolver (pode ter falhado antes) mas sem quebrar
-                    try:
-                        cat_name_res = _resolve_category_name(client, cat_name, cat_cache)
-                        if cat_name_res and not cat_name_res.isdigit():
-                            cat_name = cat_name_res
-                        else:
-                            cat_name = ""
-                    except Exception:
-                        cat_name = ""
-
-                # Removido: resolução de nomes de requerente e técnico (permissões retornam apenas ID)
-                requester_name = ""
-                assigned_user_name = ""
-                # Extrair nome textual direto se presente
-                assigned_group_name = ""
-                if raw_assigned_group is not None:
-                    if isinstance(raw_assigned_group, dict):
-                        assigned_group_name = raw_assigned_group.get("completename") or raw_assigned_group.get("name") or ""
+                    if isinstance(raw_cat_val, dict):
+                        cand = raw_cat_val.get('completename') or raw_cat_val.get('name') or ''
                     else:
-                        try:
-                            sgrp = str(raw_assigned_group)
-                            if any(ch.isalpha() for ch in sgrp):
-                                assigned_group_name = sgrp
-                        except Exception:
-                            pass
-                if not assigned_group_name and assigned_gid:
-                    assigned_group_name = _resolve_group_name(client, assigned_gid, group_cache)
-                # Fallback enrichment: if requester empty but ticket has requesters in Ticket_User
-                # (Desativado porque não exibiremos estas colunas)
-
-                rows.append({
-                    "id": tid,
-                    "titulo": title,
-                    "status": status_name,
-                    "categoria": cat_name,
-                    "abertura": created,
-                    "ultima_atualizacao": updated,
-                    "grupo_atribuido": assigned_group_name,
-                })
+                        cand = str(raw_cat_val)
+                    if any(ch.isalpha() for ch in cand):
+                        cat_name = cand
+                except Exception:
+                    pass
+            cat_id = t.get('itilcategories_id') or (raw_cat_val if (isinstance(raw_cat_val, int) or (isinstance(raw_cat_val, str) and raw_cat_val.isdigit())) else None)
+            if not cat_name and cat_id:
+                try:
+                    cat_name = _resolve_category_name(client, cat_id, {})
+                except Exception:
+                    cat_name = ''
+            if cat_name.isdigit():
+                try:
+                    resolved_name = _resolve_category_name(client, cat_name, {})
+                    if resolved_name and not resolved_name.isdigit():
+                        cat_name = resolved_name
+                    else:
+                        cat_name = ''
+                except Exception:
+                    cat_name = ''
+            assigned_group_name = ''
+            if raw_assigned_group is not None:
+                if isinstance(raw_assigned_group, dict):
+                    assigned_group_name = raw_assigned_group.get('completename') or raw_assigned_group.get('name') or ''
+                else:
+                    try:
+                        sgrp = str(raw_assigned_group)
+                        if any(ch.isalpha() for ch in sgrp):
+                            assigned_group_name = sgrp
+                    except Exception:
+                        pass
+            if not assigned_group_name and assigned_gid:
+                try:
+                    assigned_group_name = _resolve_group_name(client, assigned_gid, {})
+                except Exception:
+                    assigned_group_name = ''
+            rows.append({
+                'id': tid,
+                'titulo': title,
+                'status': status_name,
+                'categoria': cat_name,
+                'abertura': created,
+                'ultima_atualizacao': updated,
+                'grupo_atribuido': assigned_group_name,
+            })
     finally:
-        client.kill_session()
+        try:
+            client.kill_session()
+        except Exception:
+            pass
 
     return jsonify({
-            "meta": meta,
-            "count": len(sel),
-            "returned": len(rows),
-            "tickets": rows,
-            "source": source,
-            "label": label,
-            "baseline": baseline_flag,
-            "user_window": {"start": user_start_s, "end": user_end_s},
-            "fetch_window": {"start": start_s, "end": end_s},
-        })
+        'meta': meta,
+        'count': len(sel),
+        'returned': len(rows),
+        'tickets': rows,
+        'source': source,
+        'label': label,
+        'baseline': baseline_flag,
+        'user_window': {'start': user_start_s, 'end': user_end_s},
+        'fetch_window': {'start': start_s, 'end': end_s},
+    })
     # (Erros serão propagados e retornados pelo handler global se houver)
 
 
