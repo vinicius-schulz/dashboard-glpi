@@ -1,5 +1,46 @@
 let charts = {};
 const UI_BASE = document.body.getAttribute('data-ui-base') || '';
+// ---- Tooltip custom para badge-period (ignora filtro de período) ----
+function initBadgePeriodTooltips(){
+  function ensureTip(){
+    let tip = document.getElementById('badgePeriodTooltip');
+    if(!tip){
+      tip = document.createElement('div');
+      tip.id='badgePeriodTooltip';
+      tip.className='badge-period-tooltip';
+      tip.setAttribute('role','tooltip');
+      tip.textContent='Este widget ignora o filtro de período atual e usa uma janela própria de baseline.';
+      document.body.appendChild(tip);
+    }
+    return tip;
+  }
+  function show(e){
+    const el = e.currentTarget;
+    const tip = ensureTip();
+    const r = el.getBoundingClientRect();
+    tip.style.left = (r.left + r.width/2 + window.scrollX)+'px';
+    tip.style.top = (r.top + window.scrollY - 8)+'px';
+    tip.dataset.show='1';
+  }
+  function hide(){
+    const tip = document.getElementById('badgePeriodTooltip');
+    if(tip){ delete tip.dataset.show; }
+  }
+  function bind(el){
+    if(el._bpBound) return; el._bpBound=true;
+    el.setAttribute('tabindex','0');
+    el.addEventListener('mouseenter', show);
+    el.addEventListener('mouseleave', hide);
+    el.addEventListener('focus', show);
+    el.addEventListener('blur', hide);
+    el.addEventListener('keydown', (ev)=>{ if(ev.key==='Escape') hide(); });
+  }
+  document.querySelectorAll('.badge-period').forEach(bind);
+  // Rebind after dynamic meta injection
+  const obs = new MutationObserver(()=>{ document.querySelectorAll('.badge-period').forEach(bind); });
+  obs.observe(document.body,{childList:true,subtree:true});
+}
+window.addEventListener('DOMContentLoaded', initBadgePeriodTooltips);
 // ---- Persistência de filtros (granularidade, categoria, datas, meses, range preset) ----
 const FILTERS_KEY = 'glpiDashboardFilters.v1';
 let _originalDefaults = null; // guarda valores iniciais vindos do backend (primeiro load)
@@ -264,7 +305,7 @@ const WidgetLayout = (() => {
       if (!card.querySelector('.widget-actions')) {
         const act = document.createElement('div');
         act.className = 'widget-actions';
-        act.innerHTML = '<button data-act="hide" title="Ocultar">Ocultar</button>';
+  act.innerHTML = '<button data-act="hide" title="Ocultar" aria-label="Ocultar" style="font-weight:700;line-height:1">×</button>';
         card.appendChild(act);
         act.addEventListener('click', (e) => {
           const btn = e.target.closest('button'); if (!btn) return;

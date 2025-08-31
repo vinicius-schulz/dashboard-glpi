@@ -12,6 +12,13 @@ body {
 	overflow-x: auto;
 }
 
+/* Theme variables (added so components using var(--*) render correctly) */
+:root {
+	--accent: #f59e0b; /* primary accent for indicators */
+	--accent2: #0ea5e9; /* secondary accent (focus outline) */
+	--bg: #ffffff; /* card/background reference for inner shadows */
+}
+
 /* Utility */
 .hidden {
 	display: none !important;
@@ -380,25 +387,34 @@ body.drag-mode {
 	right: 4px;
 	display: flex;
 	gap: 4px;
-	opacity: 0;
-	transition: opacity .15s;
-}
-
-.card:hover .widget-actions {
 	opacity: 1;
+	transition: none;
 }
 
 .widget-actions button {
-	background: #f1f5f9;
-	border: 1px solid #cbd5e1;
-	padding: 2px 6px;
-	border-radius: 4px;
+	background: transparent;
+	border: none;
+	width: 22px;
+	height: 22px;
+	padding: 0;
 	cursor: pointer;
-	font-size: 12px;
+	font-size: 18px;
+	line-height: 1;
+	color: #64748b;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-weight: 400;
+	transition: color .15s, transform .15s;
 }
 
 .widget-actions button:hover {
-	background: #e2e8f0;
+	color: #dc2626;
+	transform: scale(1.15);
+}
+.widget-actions button:focus-visible {
+	outline: 2px solid #0ea5e9;
+	outline-offset: 2px;
 }
 
 .card.resizable {
@@ -928,12 +944,60 @@ th.sortable .col-resizer:hover {
 
 /* Badge para widgets que ignoram o filtro de período */
 .badge-period {
+	display: inline-block;
+	width: 10px;
+	height: 10px;
+	background: linear-gradient(135deg, var(--accent) 0%, #ffb347 100%);
+	border-radius: 50%;
+	margin-left: 6px;
+	position: relative;
+	top: -1px;
+	box-shadow: 0 0 0 2px var(--bg), 0 0 3px rgba(0, 0, 0, 0.3);
+	cursor: help;
+}
+.badge-period::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	border-radius: 50%;
+	box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6) inset;
+	pointer-events: none;
+}
+.badge-period:focus-visible {
+	outline: 2px solid var(--accent2);
+	outline-offset: 2px;
+}
+
+/* Tooltip para badge-period */
+.badge-period-tooltip {
+	position: absolute;
+	background: #0f172a;
+	color: #fff;
 	font-size: 11px;
-	color: #b45309;
-	background: #fef3c7;
-	border: 1px solid #fcd34d;
-	padding: 2px 4px;
-	border-radius: 4px;
+	line-height: 1.2;
+	padding: 4px 6px 5px;
+	border-radius: 5px;
+	box-shadow: 0 4px 14px -2px rgba(0,0,0,0.35);
+	max-width: 200px;
+	pointer-events: none;
+	z-index: 3000;
+	opacity: 0;
+	transform: translate(-50%, -6px) scale(.9);
+	transition: opacity .14s ease, transform .14s ease;
+}
+.badge-period-tooltip[data-show="1"] {
+	opacity: 1;
+	transform: translate(-50%, -10px) scale(1);
+}
+.badge-period-tooltip::after {
+	content: '';
+	position: absolute;
+	left: 50%;
+	bottom: -5px;
+	transform: translateX(-50%);
+	border-width: 6px 6px 0 6px;
+	border-style: solid;
+	border-color: #0f172a transparent transparent transparent;
 }
 
 /* Small help button in headings */

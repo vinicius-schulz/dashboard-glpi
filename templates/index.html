@@ -72,17 +72,16 @@
     </div>
     <div class="card" data-widget="backlog">
       <div class="card-inner">
-        <h2>Backlog no tempo — contagem e tendência
+        <h2>Evolução do backlog no tempo
           <button class="help"
             title="Exibe o número de tickets em aberto por ponto do período (backlog) e uma série suavizada para destacar a tendência. Útil para identificar aumento ou redução contínua do volume de chamados em aberto.">❔</button>
         </h2>
         <canvas id="chartBacklogCombined"></canvas>
       </div>
     </div>
-    <div class="card" data-widget="backlogStatus">
+  <div class="card" data-widget="backlogStatus">
       <div class="card-inner">
-        <h2>Backlog por Status <span class="badge-period" title="Ignora filtro de período">(Ignora filtro de
-            período)</span>
+    <h2>Backlog por status <span class="badge-period" title="Ignora filtro de período" aria-label="Ignora filtro de período"></span>
           <button class="help"
             title="Distribuição atual dos tickets em aberto por status (ex.: Novo, Atribuído, Pendente, Resolvido). Este gráfico ignora o filtro de período e mostra o snapshot do backlog por status.">❔</button>
         </h2>
@@ -91,8 +90,7 @@
     </div>
     <div class="card" data-widget="aging">
       <div class="card-inner">
-        <h2>Aging dos tickets abertos — faixas de tempo <span class="badge-period"
-            title="Ignora filtro de período">(Ignora filtro de período)</span>
+    <h2>Idade dos tickets abertos<span class="badge-period" title="Ignora filtro de período" aria-label="Ignora filtro de período"></span>
           <button class="help"
             title="Agrupa os tickets abertos por faixas de idade (ex.: 0-7 dias, 8-30 dias, >30 dias) para identificar quanto tempo o backlog permanece sem resolução. Útil para priorização e detecção de chamados antigos.">❔</button>
         </h2>
@@ -101,8 +99,7 @@
     </div>
     <div class="card" data-widget="openToday">
       <div class="card-inner">
-        <h2>Chamados Abertos Agora (Snapshot) <span class="badge-period" title="Ignora filtro de período">(Ignora filtro
-            de período)</span>
+    <h2>Backlog <span class="badge-period" title="Ignora filtro de período" aria-label="Ignora filtro de período"></span>
           <button class="help"
             title="Contagem instantânea de tickets que se encontram em estado aberto no momento. É um snapshot do backlog atual e não respeita o filtro de período aplicado aos outros gráficos.">❔</button>
         </h2>
@@ -112,8 +109,7 @@
     </div>
     <div class="card" data-widget="createdToday">
       <div class="card-inner">
-        <h2>Chamados Criados Hoje <span class="badge-period" title="Ignora filtro de período">(Ignora filtro de
-            período)</span>
+    <h2>Chamados criados hoje <span class="badge-period" title="Ignora filtro de período" aria-label="Ignora filtro de período"></span>
           <button class="help"
             title="Total de tickets criados no dia corrente. Útil para monitorar picos diários de demanda. Este valor ignora o filtro de período.">❔</button>
         </h2>
@@ -123,8 +119,7 @@
     </div>
     <div class="card" data-widget="resolvedToday">
       <div class="card-inner">
-        <h2>Chamados Resolvidos Hoje <span class="badge-period" title="Ignora filtro de período">(Ignora filtro de
-            período)</span>
+    <h2>Chamados Resolvidos Hoje <span class="badge-period" title="Ignora filtro de período" aria-label="Ignora filtro de período"></span>
           <button class="help"
             title="Total de tickets resolvidos (marcados como solucionados) no dia corrente. Este valor ignora o filtro de período.">❔</button>
         </h2>
@@ -133,8 +128,7 @@
     </div>
     <div class="card" data-widget="updatedToday">
       <div class="card-inner">
-        <h2>Chamados atualizados (desde último dia útil) <span class="badge-period" title="Ignora filtro de período">(Ignora filtro de
-            período)</span>
+    <h2>Ultima interação (desde último dia útil) <span class="badge-period" title="Ignora filtro de período" aria-label="Ignora filtro de período"></span>
           <button class="help"
             title="Contagem de chamados que receberam alguma atualização (campo date_mod) desde o último dia útil até hoje. Inclui dias não úteis intermediários — ex.: se hoje for segunda, soma atualizações de sexta, sábado, domingo e segunda.">❔</button>
         </h2>
@@ -143,7 +137,7 @@
     </div>
     <div class="card" data-widget="category">
       <div class="card-inner">
-        <h2>Composição por Categoria — participação de tickets por categoria
+        <h2>Quantidade de tickets por Categoria
           <button class="help"
             title="Mostra a distribuição de tickets por categoria no período selecionado. Use para identificar quais áreas ou serviços geram mais chamados.">❔</button>
         </h2><canvas id="chartCat"></canvas>
@@ -151,7 +145,7 @@
     </div>
     <div class="card" data-widget="load_by_group">
       <div class="card-inner">
-        <h2>Chamados por Grupo Atribuído
+        <h2>Quantidade de tickets por grupo atribuido
           <button class="help"
             title="Quantidade de chamados por grupo atribuído no período selecionado. Ordenado do maior para o menor.">❔</button>
         </h2>
@@ -160,7 +154,7 @@
     </div>
     <div class="card" data-widget="priority">
       <div class="card-inner">
-        <h2>Distribuição por Prioridade — urgência dos tickets
+        <h2>Quantidade de tickets por prioridade
           <button class="help"
             title="Exibe quantos tickets pertencem a cada nível de prioridade. Ajuda a visualizar a criticidade atual do backlog.">❔</button>
         </h2><canvas id="chartPr"></canvas>
@@ -168,7 +162,7 @@
     </div>
     <div class="card" data-widget="impact">
       <div class="card-inner">
-        <h2>Distribuição por Impacto — impacto dos tickets
+        <h2>Quantidade de tickets por impacto
           <button class="help"
             title="Agrupa tickets por nível de impacto (ex.: operação, usuário, sistema). Útil para priorizar correções que afetam maior número de usuários/serviços.">❔</button>
         </h2><canvas id="chartImp"></canvas>
@@ -176,16 +170,15 @@
     </div>
     <div class="card" data-widget="resolutionHours">
       <div class="card-inner">
-        <h2>Tempo médio de resolução (horas úteis) — desempenho de atendimento
+        <h2>Tempo médio de resolução (horas úteis)
           <button class="help"
             title="Mede o tempo médio entre abertura e solução dos tickets em horas úteis por ponto do período. Útil para acompanhar SLAs e eficiência da equipe.">❔</button>
         </h2><canvas id="chartResolutionHours"></canvas>
       </div>
     </div>
-    <div class="card" data-widget="slaBuckets">
+  <div class="card" data-widget="slaBuckets">
       <div class="card-inner">
-        <h2>Distribuição por Expectativa <span class="badge-period" title="Ignora filtro de período">(Ignora filtro de
-            período)</span>
+    <h2>Distribuição por expectativa <span class="badge-period" title="Ignora filtro de período" aria-label="Ignora filtro de período"></span>
           <button class="help"
             title="Classifica tickets conforme limites configurados por título na aba SLA: Normal, Moderado, Crítico. Tickets acima do crítico entram em 'Crítico'.">❔</button>
         </h2>
