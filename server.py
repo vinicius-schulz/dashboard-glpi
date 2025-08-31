@@ -474,7 +474,9 @@ def api_data():
             today_end = today_norm + pd.Timedelta(days=1)
             created_today_mask = (pd.to_datetime(baseline_df['created_at']) >= prev_bd) & (pd.to_datetime(baseline_df['created_at']) < today_end)
             created_today_count = int(created_today_mask.sum())
-            solved_today_mask = (pd.to_datetime(baseline_df['solved_at'], errors='coerce') >= today_norm) & (pd.to_datetime(baseline_df['solved_at'], errors='coerce') < today_norm + pd.Timedelta(days=1))
+            # Resolved today: include today plus any immediately preceding non-business days
+            today_end = today_norm + pd.Timedelta(days=1)
+            solved_today_mask = (pd.to_datetime(baseline_df['solved_at'], errors='coerce') >= prev_bd) & (pd.to_datetime(baseline_df['solved_at'], errors='coerce') < today_end)
             resolved_today_count = int(solved_today_mask.sum())
             # Atualizados hoje (date_mod): incluir sempre HOJE + o dia útil anterior e quaisquer dias não úteis intermediários.
             def _updated_today_count(df_in: pd.DataFrame) -> int:
@@ -606,12 +608,13 @@ def api_data():
         age_full = aging_buckets(baseline_df)
         sla = sla_solution(baseline_df)
         open_today_full = int(baseline_df[baseline_df['solved_at'].isna()].shape[0])
-    # Created today (include today and immediately preceding non-business days)
+        # Created today (include today and immediately preceding non-business days)
         prev_bd = consecutive_non_business_start(today_norm)
         today_end = today_norm + pd.Timedelta(days=1)
         created_today_mask = (pd.to_datetime(baseline_df['created_at']) >= prev_bd) & (pd.to_datetime(baseline_df['created_at']) < today_end)
         created_today_count = int(created_today_mask.sum())
-        solved_today_mask = (pd.to_datetime(baseline_df['solved_at'], errors='coerce') >= today_norm) & (pd.to_datetime(baseline_df['solved_at'], errors='coerce') < today_norm + pd.Timedelta(days=1))
+        # Resolved today: include today plus any immediately preceding non-business days (same rule as created_today)
+        solved_today_mask = (pd.to_datetime(baseline_df['solved_at'], errors='coerce') >= prev_bd) & (pd.to_datetime(baseline_df['solved_at'], errors='coerce') < today_end)
         resolved_today_count = int(solved_today_mask.sum())
         def _updated_today_count(df_in: pd.DataFrame) -> int:
             if df_in is None or df_in.empty or 'updated_at' not in df_in.columns:
@@ -620,8 +623,8 @@ def api_data():
             if upd.isna().all():
                 return 0
             prev_bd = previous_business_day(today_norm)
-            today_end = today_norm + pd.Timedelta(days=1)
-            return int(((upd >= prev_bd) & (upd < today_end)).sum())
+            today_end_inner = today_norm + pd.Timedelta(days=1)
+            return int(((upd >= prev_bd) & (upd < today_end_inner)).sum())
         updated_today_count = _updated_today_count(baseline_df)
         load = load_by_assignee(df_strict)
 
@@ -1003,7 +1006,10 @@ def api_tickets():
             elif source == "resolved_today":
                 base = df
                 solved_dt = pd.to_datetime(base["solved_at"], errors="coerce")
-                sel = base[(solved_dt.notna()) & (solved_dt >= today_norm) & (solved_dt < today_norm + pd.Timedelta(days=1))]
+                # Use same consecutive non-business-day window as 'created_today'
+                prev_bd = consecutive_non_business_start(today_norm)
+                today_end = today_norm + pd.Timedelta(days=1)
+                sel = base[(solved_dt.notna()) & (solved_dt >= prev_bd) & (solved_dt < today_end)]
             elif source == "updated_today":
                 base = df
                 if 'updated_at' in base.columns:
