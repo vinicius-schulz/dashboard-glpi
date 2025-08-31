@@ -609,6 +609,21 @@ body.drag-mode {
 	position: relative;
 }
 
+/* Keep the top header inside the layout panel fixed while only the body content scrolls */
+#layoutPanel .modal-top-header {
+	position: sticky;
+	top: 0; /* keep in same place relative to the lp-body's scroll */
+	z-index: 10;
+    background: var(--bg);
+    padding-top: 10px;
+    padding-left: 10px;
+    padding-right: 10px;
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+}
+
+/* No additional rules required for lp-tabpanes; lp-body controls scrolling. */
+
 /* Tabs dentro do painel de layout */
 .lp-tabs {
 	display: flex;
