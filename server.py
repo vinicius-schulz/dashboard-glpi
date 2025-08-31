@@ -946,6 +946,12 @@ def api_tickets():
                     base = df_strict
                     solved_dt = pd.to_datetime(base["solved_at"], errors="coerce")
                     sel = base[(solved_dt.notna()) & (solved_dt >= ps) & (solved_dt <= pe)]
+            elif source == "resolution_hours":
+                # Clicking the resolution-hours chart should list tickets resolved in that period
+                ps, pe = _period_bounds_from_label(label, gran)
+                base = df_strict  # resolution hours respects the user filter
+                solved_dt = pd.to_datetime(base["solved_at"], errors="coerce")
+                sel = base[(solved_dt.notna()) & (solved_dt >= ps) & (solved_dt <= pe)]
             elif source == "backlog":
                 ps, pe = _period_bounds_from_label(label, gran)
                 base = df_extended  # backlog precisa considerar anteriores

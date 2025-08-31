@@ -1057,6 +1057,8 @@ async function loadData() {
         { label: 'Horas úteis (suavizado)', data: smoothData, borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.08)', tension: 0.25, help: 'Versão suavizada para destacar tendências de tempo de resolução.' }
       ];
       lineChart('chartResolutionHours', labels, datasets);
+  // Enable clicking a point to open the modal with tickets resolved in that period
+  attachPointClick('chartResolutionHours', labels, ['resolution_hours', 'resolution_hours']);
     } else { destroyChart('chartResolutionHours'); }
     // refresh hidden state (in case layout toggled visibility before load)
     document.querySelectorAll('.card[data-widget]').forEach(el => { if (el.style.display === 'none') return; /* skip hidden */ });
