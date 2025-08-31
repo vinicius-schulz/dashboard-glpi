@@ -967,7 +967,7 @@ async function loadData() {
       const labelsSla = ['Normal', 'Moderado', 'Crítico'];
       const dataSla = [buckets.normal.length, buckets.moderado.length, buckets.critico.length];
       if (labelsSla.some((_, i) => dataSla[i] > 0)) {
-        barChart('chartSlaBuckets', labelsSla, dataSla, 'Buckets SLA', 'Tickets em aberto (não resolvidos) por faixa de SLA (dias úteis; ignora filtro de período) conforme limites configurados por título nos últimos 6 meses.');
+        barChart('chartSlaBuckets', labelsSla, dataSla, 'Expectativa', 'Tickets em aberto (não resolvidos) por faixa de SLA (dias úteis; ignora filtro de período) conforme limites configurados por título nos últimos 6 meses.');
         // clique -> modal local com tickets (sem nova chamada API)
         const canvas = document.getElementById('chartSlaBuckets');
         if (canvas) {
