@@ -383,13 +383,30 @@ body.drag-mode {
 
 .card .widget-actions {
 	position: absolute;
-	top: 4px;
-	right: 4px;
+	top: 0;
+	left: 0;
+	right: 0;
 	display: flex;
-	gap: 4px;
-	opacity: 1;
-	transition: none;
+	justify-content: space-between;
+	align-items: center;
+	gap: 8px;
+	padding: 4px 8px 2px 8px;
+	box-sizing: border-box;
+	pointer-events: auto;
 }
+.card .widget-actions::after {
+	content: '';
+	position: absolute;
+	left: 8px;
+	right: 8px;
+	bottom: 0;
+	height: 1px;
+	background: #e5e7eb;
+	opacity: .7;
+}
+.card .actions-left { display:flex; align-items:center; gap:6px; }
+.card-inner { padding-top: 44px; }
+.widget-actions .badge-period { margin-left:0; top:0; box-shadow:0 0 0 1px #fff, 0 0 2px rgba(0,0,0,.25); }
 
 .widget-actions button {
 	background: transparent;
@@ -428,6 +445,9 @@ body.drag-mode {
 /* legacy fixed heights removed in free layout mode (kept only if old classes present) */
 .card.h-1 canvas,
 .card.h-1 pre {
+.widget-actions button.help:hover {
+	color: #0ea5e9;
+}
 	min-height: 280px;
 }
 

@@ -1,44 +1,44 @@
 let charts = {};
 const UI_BASE = document.body.getAttribute('data-ui-base') || '';
 // ---- Tooltip custom para badge-period (ignora filtro de período) ----
-function initBadgePeriodTooltips(){
-  function ensureTip(){
+function initBadgePeriodTooltips() {
+  function ensureTip() {
     let tip = document.getElementById('badgePeriodTooltip');
-    if(!tip){
+    if (!tip) {
       tip = document.createElement('div');
-      tip.id='badgePeriodTooltip';
-      tip.className='badge-period-tooltip';
-      tip.setAttribute('role','tooltip');
-      tip.textContent='Este widget ignora o filtro de período atual e usa uma janela própria de baseline.';
+      tip.id = 'badgePeriodTooltip';
+      tip.className = 'badge-period-tooltip';
+      tip.setAttribute('role', 'tooltip');
+      tip.textContent = 'Este widget ignora o filtro de período atual e usa uma janela própria de baseline.';
       document.body.appendChild(tip);
     }
     return tip;
   }
-  function show(e){
+  function show(e) {
     const el = e.currentTarget;
     const tip = ensureTip();
     const r = el.getBoundingClientRect();
-    tip.style.left = (r.left + r.width/2 + window.scrollX)+'px';
-    tip.style.top = (r.top + window.scrollY - 8)+'px';
-    tip.dataset.show='1';
+    tip.style.left = (r.left + r.width / 2 + window.scrollX) + 'px';
+    tip.style.top = (r.top + window.scrollY - 8) + 'px';
+    tip.dataset.show = '1';
   }
-  function hide(){
+  function hide() {
     const tip = document.getElementById('badgePeriodTooltip');
-    if(tip){ delete tip.dataset.show; }
+    if (tip) { delete tip.dataset.show; }
   }
-  function bind(el){
-    if(el._bpBound) return; el._bpBound=true;
-    el.setAttribute('tabindex','0');
+  function bind(el) {
+    if (el._bpBound) return; el._bpBound = true;
+    el.setAttribute('tabindex', '0');
     el.addEventListener('mouseenter', show);
     el.addEventListener('mouseleave', hide);
     el.addEventListener('focus', show);
     el.addEventListener('blur', hide);
-    el.addEventListener('keydown', (ev)=>{ if(ev.key==='Escape') hide(); });
+    el.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') hide(); });
   }
   document.querySelectorAll('.badge-period').forEach(bind);
   // Rebind after dynamic meta injection
-  const obs = new MutationObserver(()=>{ document.querySelectorAll('.badge-period').forEach(bind); });
-  obs.observe(document.body,{childList:true,subtree:true});
+  const obs = new MutationObserver(() => { document.querySelectorAll('.badge-period').forEach(bind); });
+  obs.observe(document.body, { childList: true, subtree: true });
 }
 window.addEventListener('DOMContentLoaded', initBadgePeriodTooltips);
 // ---- Persistência de filtros (granularidade, categoria, datas, meses, range preset) ----
@@ -170,14 +170,14 @@ const WidgetLayout = (() => {
     { id: 'openToday', cols: 8, rows: 8, visible: true },
     { id: 'createdToday', cols: 8, rows: 8, visible: true },
     { id: 'resolvedToday', cols: 8, rows: 8, visible: true },
-  { id: 'updatedToday', cols: 8, rows: 8, visible: true },
+    { id: 'updatedToday', cols: 8, rows: 8, visible: true },
     { id: 'category', cols: 8, rows: 8, visible: true },
     { id: 'priority', cols: 8, rows: 8, visible: true },
     { id: 'impact', cols: 8, rows: 8, visible: true }
     , { id: 'load_by_group', cols: 8, rows: 8, visible: true }
     , { id: 'resolutionHours', cols: 8, rows: 8, visible: true }
     , { id: 'slaBuckets', cols: 8, rows: 8, visible: true }
-    
+
   ].map((w, i) => ({ ...w, order: i }));
   // Grid cell size (px) for snap positioning
   const CELL_W = 80; // base logical cell width (will derive snap unit)
@@ -305,7 +305,41 @@ const WidgetLayout = (() => {
       if (!card.querySelector('.widget-actions')) {
         const act = document.createElement('div');
         act.className = 'widget-actions';
-  act.innerHTML = '<button data-act="hide" title="Ocultar" aria-label="Ocultar" style="font-weight:700;line-height:1">×</button>';
+        // Captura e remove botão de ajuda existente no header (para reposicionar)
+        let oldHelp = card.querySelector('h2 button.help');
+        let helpTitle = oldHelp ? (oldHelp.getAttribute('title') || 'Ajuda') : 'Ajuda';
+        if (oldHelp) oldHelp.remove();
+        // Captura badge-period se estiver no h2 e move para a barra
+        let badge = card.querySelector('h2 .badge-period');
+        if (badge) { badge.remove(); }
+        const leftBox = document.createElement('div');
+        leftBox.className = 'actions-left';
+        if (badge) leftBox.appendChild(badge); else {
+          // se widget é um dos que ignoram período mas span não existe (caso dinâmico) cria
+          if ((lastMeta && Array.isArray(lastMeta.ignore_period_widgets) && lastMeta.ignore_period_widgets.includes(card.getAttribute('data-widget')))) {
+            const b = document.createElement('span'); b.className = 'badge-period'; b.title = 'Ignora filtro de período'; leftBox.appendChild(b);
+          }
+        }
+        const helpBtn = document.createElement('button');
+        helpBtn.className = 'help';
+        helpBtn.type = 'button';
+        helpBtn.setAttribute('title', helpTitle);
+        helpBtn.setAttribute('aria-label', 'Ajuda');
+        helpBtn.textContent = '?';
+        const closeBtn = document.createElement('button');
+        closeBtn.dataset.act = 'hide';
+        closeBtn.title = 'Ocultar';
+        closeBtn.setAttribute('aria-label', 'Ocultar');
+        closeBtn.style.fontWeight = '700';
+        closeBtn.style.lineHeight = '1';
+        closeBtn.textContent = '×';
+        act.appendChild(leftBox);
+        const rightBox = document.createElement('div');
+        rightBox.style.display = 'flex';
+        rightBox.style.gap = '6px';
+        rightBox.appendChild(helpBtn);
+        rightBox.appendChild(closeBtn);
+        act.appendChild(rightBox);
         card.appendChild(act);
         act.addEventListener('click', (e) => {
           const btn = e.target.closest('button'); if (!btn) return;
@@ -313,6 +347,8 @@ const WidgetLayout = (() => {
           const item = layout.find(x => x.id === id); if (!item) return;
           if (btn.dataset.act === 'hide') { item.visible = false; save(layout); apply(layout); Toasts.push('info', 'Widget ocultado: ' + id); }
         });
+        // Reaplica comportamento de popover de ajuda no novo botão
+        try { attachHelpPopovers && attachHelpPopovers(); } catch { }
       }
       // Multi-edge / corner resize (remove handle; detect edges by proximity)
       if (!card._resizeBound) {
@@ -481,9 +517,9 @@ const WidgetLayout = (() => {
       } catch { }
     }
     panel.classList.remove('hidden');
-  initLayoutTabs();
-  // ao abrir, garantir SLA carregada se já temos baseline_titles em lastMeta (chamado após loadData)
-  if (window._lastBaselineTitlesDetail) buildSlaTable(window._lastBaselineTitlesDetail);
+    initLayoutTabs();
+    // ao abrir, garantir SLA carregada se já temos baseline_titles em lastMeta (chamado após loadData)
+    if (window._lastBaselineTitlesDetail) buildSlaTable(window._lastBaselineTitlesDetail);
   }
   function init() {
     const layout = load();
@@ -551,7 +587,7 @@ function initLayoutTabs() {
         if (p.dataset.pane === target) p.classList.remove('hidden'); else p.classList.add('hidden');
       });
       // lazy build SLA table if switching to sla
-  if (target === 'sla' && window._lastBaselineTitlesDetail) buildSlaTable(window._lastBaselineTitlesDetail);
+      if (target === 'sla' && window._lastBaselineTitlesDetail) buildSlaTable(window._lastBaselineTitlesDetail);
     });
   });
 }
@@ -615,15 +651,15 @@ function buildSlaTable(detailList) {
   if (table && !table._slaHeadEnhanced) {
     table._slaHeadEnhanced = true;
     const headCells = table.querySelectorAll('thead th');
-    const mapKeys = ['category','title','normal','moderate','critical'];
+    const mapKeys = ['category', 'title', 'normal', 'moderate', 'critical'];
     headCells.forEach((th, idx) => {
       // adicionar resizer
       const rz = document.createElement('div'); rz.className = 'col-resizer'; th.appendChild(rz);
       let startX, startW;
       rz.addEventListener('mousedown', e => {
         e.preventDefault(); startX = e.clientX; startW = th.offsetWidth;
-        function move(ev){ const dx = ev.clientX - startX; const nw = Math.max(60, startW + dx); th.style.width = nw + 'px'; }
-        function up(){ document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up);} 
+        function move(ev) { const dx = ev.clientX - startX; const nw = Math.max(60, startW + dx); th.style.width = nw + 'px'; }
+        function up() { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); }
         document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
       });
       // sort (somente categoria e título por enquanto; tempos ordenam numericamente se existirem)
@@ -632,7 +668,7 @@ function buildSlaTable(detailList) {
         const key = mapKeys[idx]; if (!key) return;
         if (_slaSort.key === key) { _slaSort.dir = _slaSort.dir === 'asc' ? 'desc' : 'asc'; } else { _slaSort.key = key; _slaSort.dir = 'asc'; }
         // limpar classes
-        headCells.forEach(h => h.classList.remove('sort-asc','sort-desc'));
+        headCells.forEach(h => h.classList.remove('sort-asc', 'sort-desc'));
         th.classList.add(_slaSort.dir === 'asc' ? 'sort-asc' : 'sort-desc');
         // reconstruir tabela usando cache de detalhes
         if (window._lastBaselineTitlesDetail) buildSlaTable(window._lastBaselineTitlesDetail);
@@ -642,8 +678,8 @@ function buildSlaTable(detailList) {
     // atualizar estado visual do sort
     const headCells = table.querySelectorAll('thead th');
     headCells.forEach((th, idx) => {
-      const key = ['category','title','normal','moderate','critical'][idx];
-      th.classList.remove('sort-asc','sort-desc');
+      const key = ['category', 'title', 'normal', 'moderate', 'critical'][idx];
+      th.classList.remove('sort-asc', 'sort-desc');
       if (key === _slaSort.key) th.classList.add(_slaSort.dir === 'asc' ? 'sort-asc' : 'sort-desc');
     });
   }
@@ -827,21 +863,6 @@ function destroyChart(id) {
   }
 }
 
-function setMeta(meta, count, period) {
-  const ignore = meta?.ignore_period_widgets || [];
-  ignore.forEach(id => {
-    const card = document.querySelector(`.card[data-widget="${id}"] h2`);
-    if (card && !card.querySelector('.badge-period')) {
-      const span = document.createElement('span');
-      span.className = 'badge-period';
-      span.textContent = '(Ignora filtro de período)';
-      span.title = 'Ignora filtro de período';
-      card.appendChild(document.createTextNode(' '));
-      card.appendChild(span);
-    }
-  });
-}
-
 let loading = false;
 let lastMeta = null; // guarda metadados da última chamada /api/data
 let lastSeries = null; // guarda as últimas séries retornadas (/api/data)
@@ -884,7 +905,6 @@ async function loadData() {
     }
     if (js && js.error) throw new Error(js.error);
 
-    setMeta(js.meta || {}, js.count || 0, js.period || {});
     if (Array.isArray(js.baseline_titles_detail)) {
       window._lastBaselineTitlesDetail = js.baseline_titles_detail;
       window._lastBaselineTitles = js.baseline_titles_detail.map(o => o.title);
@@ -893,12 +913,12 @@ async function loadData() {
     } else if (Array.isArray(js.baseline_titles)) {
       // fallback (sem detalhe de categoria)
       window._lastBaselineTitles = js.baseline_titles;
-      window._lastBaselineTitlesDetail = js.baseline_titles.map(t => ({title: t, category: ''}));
+      window._lastBaselineTitlesDetail = js.baseline_titles.map(t => ({ title: t, category: '' }));
       const activeSla = document.querySelector('#layoutPanel .lp-tab.active[data-tab="sla"]');
       if (activeSla) buildSlaTable(window._lastBaselineTitlesDetail);
     }
 
-  // SLA Buckets (3 níveis) usando thresholds configurados localmente
+    // SLA Buckets (3 níveis) usando thresholds configurados localmente
     try {
       const tickets = Array.isArray(js.tickets_sla) ? js.tickets_sla : [];
       // Função para calcular diferença em dias úteis (pode retornar fração, descontando fins de semana)
@@ -909,7 +929,7 @@ async function loadData() {
         let totalMs = 0;
         while (cur < end) {
           const next = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + 1);
-            const segEnd = next < end ? next : end;
+          const segEnd = next < end ? next : end;
           const dow = cur.getDay();
           if (dow !== 0 && dow !== 6) { // Mon-Fri
             totalMs += (segEnd - cur);
@@ -921,34 +941,34 @@ async function loadData() {
       window._ticketsSlaRaw = tickets; // cache
       const cfg = loadSlaTitleConfig();
       const nowIso = new Date();
-  const buckets = { normal: [], moderado: [], critico: [] };
+      const buckets = { normal: [], moderado: [], critico: [] };
       tickets.forEach(t => {
         const title = t.title || ''; if (!title) return;
         const conf = cfg[title] || {}; // {normal, moderate, critical}
         // thresholds (dias) convertidos para números
-        const thNorm = Number.isFinite(conf.normal) ? conf.normal : (conf.normal!=null?parseInt(conf.normal):undefined);
-        const thMod = Number.isFinite(conf.moderate) ? conf.moderate : (conf.moderate!=null?parseInt(conf.moderate):undefined);
-        const thCrit = Number.isFinite(conf.critical) ? conf.critical : (conf.critical!=null?parseInt(conf.critical):undefined);
+        const thNorm = Number.isFinite(conf.normal) ? conf.normal : (conf.normal != null ? parseInt(conf.normal) : undefined);
+        const thMod = Number.isFinite(conf.moderate) ? conf.moderate : (conf.moderate != null ? parseInt(conf.moderate) : undefined);
+        const thCrit = Number.isFinite(conf.critical) ? conf.critical : (conf.critical != null ? parseInt(conf.critical) : undefined);
         // calcular idade em dias (se resolvido usar solved_at, senão now)
         const created = t.created_at ? new Date(t.created_at) : null;
         if (!created || isNaN(created.getTime())) return;
         const solved = t.solved_at ? new Date(t.solved_at) : null;
         const effectiveEnd = solved && !isNaN(solved.getTime()) ? solved : nowIso;
-  const ageDays = businessDaysDiff(created, effectiveEnd); // dias úteis (fração)
+        const ageDays = businessDaysDiff(created, effectiveEnd); // dias úteis (fração)
         // classificação
         if (thNorm != null && ageDays <= thNorm) { buckets.normal.push(t); return; }
         if (thMod != null && ageDays <= thMod) { buckets.moderado.push(t); return; }
-  // Critico: acima dos limites anteriores e com threshold crítico definido
-  if (thCrit != null) { buckets.critico.push(t); return; }
-  if (thNorm==null && thMod==null && thCrit==null) return; // sem config => ignora
-  // Caso sem crítico definido mas passou moderado => classifica como crítico lógico
-  buckets.critico.push(t);
+        // Critico: acima dos limites anteriores e com threshold crítico definido
+        if (thCrit != null) { buckets.critico.push(t); return; }
+        if (thNorm == null && thMod == null && thCrit == null) return; // sem config => ignora
+        // Caso sem crítico definido mas passou moderado => classifica como crítico lógico
+        buckets.critico.push(t);
       });
       // montar gráfico
-  const labelsSla = ['Normal','Moderado','Crítico'];
-  const dataSla = [buckets.normal.length, buckets.moderado.length, buckets.critico.length];
-      if (labelsSla.some((_,i)=>dataSla[i]>0)) {
-  barChart('chartSlaBuckets', labelsSla, dataSla, 'Buckets SLA', 'Tickets em aberto (não resolvidos) por faixa de SLA (dias úteis; ignora filtro de período) conforme limites configurados por título nos últimos 6 meses.');
+      const labelsSla = ['Normal', 'Moderado', 'Crítico'];
+      const dataSla = [buckets.normal.length, buckets.moderado.length, buckets.critico.length];
+      if (labelsSla.some((_, i) => dataSla[i] > 0)) {
+        barChart('chartSlaBuckets', labelsSla, dataSla, 'Buckets SLA', 'Tickets em aberto (não resolvidos) por faixa de SLA (dias úteis; ignora filtro de período) conforme limites configurados por título nos últimos 6 meses.');
         // clique -> modal local com tickets (sem nova chamada API)
         const canvas = document.getElementById('chartSlaBuckets');
         if (canvas) {
@@ -958,7 +978,7 @@ async function loadData() {
             const points = chart.getElementsAtEventForMode(evt, 'nearest', { intersect: true }, true);
             if (!points.length) return;
             const idx = points[0].index;
-            const key = ['normal','moderado','critico'][idx];
+            const key = ['normal', 'moderado', 'critico'][idx];
             const arr = buckets[key] || [];
             const human = key === 'normal' ? 'Normal' : key === 'moderado' ? 'Moderado' : 'Crítico';
             const ids = arr.map(t => t.id).filter(x => x != null);
@@ -971,7 +991,7 @@ async function loadData() {
       } else {
         destroyChart('chartSlaBuckets');
       }
-    } catch(e) { console.warn('SLA buckets error', e); }
+    } catch (e) { console.warn('SLA buckets error', e); }
     lastMeta = js.meta || null;
 
     // Big number snapshot (ignora filtro): campo open_today
@@ -1003,7 +1023,7 @@ async function loadData() {
         sel.innerHTML = '';
         function addOpt(value, label) {
           const o = document.createElement('option');
-            o.value = value; o.textContent = label; sel.appendChild(o);
+          o.value = value; o.textContent = label; sel.appendChild(o);
         }
         addOpt('todos', 'Todos');
         addOpt('Holding', 'Holding');
@@ -1057,7 +1077,7 @@ async function loadData() {
               }
             }
           }
-  }
+        }
       });
       attachPointClick('chartCumGap', s.created.labels, ['created', 'resolved']);
     } else { destroyChart('chartCumGap'); }
@@ -1098,8 +1118,8 @@ async function loadData() {
         { label: 'Horas úteis (suavizado)', data: smoothData, borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.08)', tension: 0.25, help: 'Versão suavizada para destacar tendências de tempo de resolução.' }
       ];
       lineChart('chartResolutionHours', labels, datasets);
-  // Enable clicking a point to open the modal with tickets resolved in that period
-  attachPointClick('chartResolutionHours', labels, ['resolution_hours', 'resolution_hours']);
+      // Enable clicking a point to open the modal with tickets resolved in that period
+      attachPointClick('chartResolutionHours', labels, ['resolution_hours', 'resolution_hours']);
     } else { destroyChart('chartResolutionHours'); }
     // refresh hidden state (in case layout toggled visibility before load)
     document.querySelectorAll('.card[data-widget]').forEach(el => { if (el.style.display === 'none') return; /* skip hidden */ });
@@ -1689,7 +1709,7 @@ async function openTicketsModal(source, label, idsList) {
   Loader.show('Carregando chamados...');
   document.body.style.cursor = 'progress';
   try {
-  const r = await fetch(`/api/tickets?${params.toString()}`);
+    const r = await fetch(`/api/tickets?${params.toString()}`);
     let js = null;
     try { js = await r.clone().json(); } catch { /* ignore */ }
     if (r.status === 503) {

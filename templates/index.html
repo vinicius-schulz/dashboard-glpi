@@ -65,7 +65,7 @@
       <div class="card-inner">
         <h2>Gap Cumulativo — evolução de Criados vs Resolvidos
           <button class="help"
-            title="Mostra o acumulado de tickets criados e de tickets resolvidos ao longo do período selecionado. A linha de 'Gap' (Criados - Resolvidos) evidencia se o volume de resolução acompanha a criação, apontando tendência de crescimento ou queda do backlog.">❔</button>
+            title="Mostra o acumulado de tickets criados e de tickets resolvidos ao longo do período selecionado. A linha de 'Gap' (Criados - Resolvidos) evidencia se o volume de resolução acompanha a criação, apontando tendência de crescimento ou queda do backlog.">?</button>
         </h2>
         <canvas id="chartCumGap"></canvas>
       </div>
@@ -74,34 +74,37 @@
       <div class="card-inner">
         <h2>Evolução do backlog no tempo
           <button class="help"
-            title="Exibe o número de tickets em aberto por ponto do período (backlog) e uma série suavizada para destacar a tendência. Útil para identificar aumento ou redução contínua do volume de chamados em aberto.">❔</button>
+            title="Exibe o número de tickets em aberto por ponto do período (backlog) e uma série suavizada para destacar a tendência. Útil para identificar aumento ou redução contínua do volume de chamados em aberto.">?</button>
         </h2>
         <canvas id="chartBacklogCombined"></canvas>
       </div>
     </div>
-  <div class="card" data-widget="backlogStatus">
+    <div class="card" data-widget="backlogStatus">
       <div class="card-inner">
-    <h2>Backlog por status <span class="badge-period" title="Ignora filtro de período" aria-label="Ignora filtro de período"></span>
+        <h2>Backlog por status <span class="badge-period" title="Ignora filtro de período"
+            aria-label="Ignora filtro de período"></span>
           <button class="help"
-            title="Distribuição atual dos tickets em aberto por status (ex.: Novo, Atribuído, Pendente, Resolvido). Este gráfico ignora o filtro de período e mostra o snapshot do backlog por status.">❔</button>
+            title="Distribuição atual dos tickets em aberto por status (ex.: Novo, Atribuído, Pendente, Resolvido). Este gráfico ignora o filtro de período e mostra o snapshot do backlog por status.">?</button>
         </h2>
         <canvas id="chartBacklogStatus"></canvas>
       </div>
     </div>
     <div class="card" data-widget="aging">
       <div class="card-inner">
-    <h2>Idade dos tickets abertos<span class="badge-period" title="Ignora filtro de período" aria-label="Ignora filtro de período"></span>
+        <h2>Idade dos tickets abertos<span class="badge-period" title="Ignora filtro de período"
+            aria-label="Ignora filtro de período"></span>
           <button class="help"
-            title="Agrupa os tickets abertos por faixas de idade (ex.: 0-7 dias, 8-30 dias, >30 dias) para identificar quanto tempo o backlog permanece sem resolução. Útil para priorização e detecção de chamados antigos.">❔</button>
+            title="Agrupa os tickets abertos por faixas de idade (ex.: 0-7 dias, 8-30 dias, >30 dias) para identificar quanto tempo o backlog permanece sem resolução. Útil para priorização e detecção de chamados antigos.">?</button>
         </h2>
         <canvas id="chartAging"></canvas>
       </div>
     </div>
     <div class="card" data-widget="openToday">
       <div class="card-inner">
-    <h2>Backlog <span class="badge-period" title="Ignora filtro de período" aria-label="Ignora filtro de período"></span>
+        <h2>Backlog <span class="badge-period" title="Ignora filtro de período"
+            aria-label="Ignora filtro de período"></span>
           <button class="help"
-            title="Contagem instantânea de tickets que se encontram em estado aberto no momento. É um snapshot do backlog atual e não respeita o filtro de período aplicado aos outros gráficos.">❔</button>
+            title="Contagem instantânea de tickets que se encontram em estado aberto no momento. É um snapshot do backlog atual e não respeita o filtro de período aplicado aos outros gráficos.">?</button>
         </h2>
         <div id="openTodayValue" class="big-number"
           title="Contagem de tickets abertos agora (ignora filtro de período)">--</div>
@@ -109,9 +112,10 @@
     </div>
     <div class="card" data-widget="createdToday">
       <div class="card-inner">
-    <h2>Chamados criados hoje <span class="badge-period" title="Ignora filtro de período" aria-label="Ignora filtro de período"></span>
+        <h2>Chamados criados hoje <span class="badge-period" title="Ignora filtro de período"
+            aria-label="Ignora filtro de período"></span>
           <button class="help"
-            title="Total de tickets criados no dia corrente. Útil para monitorar picos diários de demanda. Este valor ignora o filtro de período.">❔</button>
+            title="Total de tickets criados no dia corrente. Útil para monitorar picos diários de demanda. Este valor ignora o filtro de período.">?</button>
         </h2>
         <div id="createdTodayValue" class="big-number"
           title="Tickets criados no dia corrente (ignora filtro de período)">--</div>
@@ -119,27 +123,30 @@
     </div>
     <div class="card" data-widget="resolvedToday">
       <div class="card-inner">
-    <h2>Chamados Resolvidos Hoje <span class="badge-period" title="Ignora filtro de período" aria-label="Ignora filtro de período"></span>
+        <h2>Chamados Resolvidos Hoje <span class="badge-period" title="Ignora filtro de período"
+            aria-label="Ignora filtro de período"></span>
           <button class="help"
-            title="Total de tickets resolvidos (marcados como solucionados) no dia corrente. Este valor ignora o filtro de período.">❔</button>
+            title="Total de tickets resolvidos (marcados como solucionados) no dia corrente. Este valor ignora o filtro de período.">?</button>
         </h2>
         <div id="resolvedTodayValue" class="big-number" title="Tickets resolvidos no dia corrente">--</div>
       </div>
     </div>
     <div class="card" data-widget="updatedToday">
       <div class="card-inner">
-    <h2>Ultima interação (desde último dia útil) <span class="badge-period" title="Ignora filtro de período" aria-label="Ignora filtro de período"></span>
+        <h2>Ultima interação (desde último dia útil) <span class="badge-period" title="Ignora filtro de período"
+            aria-label="Ignora filtro de período"></span>
           <button class="help"
-            title="Contagem de chamados que receberam alguma atualização (campo date_mod) desde o último dia útil até hoje. Inclui dias não úteis intermediários — ex.: se hoje for segunda, soma atualizações de sexta, sábado, domingo e segunda.">❔</button>
+            title="Contagem de chamados que receberam alguma atualização (campo date_mod) desde o último dia útil até hoje. Inclui dias não úteis intermediários — ex.: se hoje for segunda, soma atualizações de sexta, sábado, domingo e segunda.">?</button>
         </h2>
-        <div id="updatedTodayValue" class="big-number" title="Contagem de chamados atualizados desde o último dia útil">--</div>
+        <div id="updatedTodayValue" class="big-number" title="Contagem de chamados atualizados desde o último dia útil">
+          --</div>
       </div>
     </div>
     <div class="card" data-widget="category">
       <div class="card-inner">
         <h2>Quantidade de tickets por Categoria
           <button class="help"
-            title="Mostra a distribuição de tickets por categoria no período selecionado. Use para identificar quais áreas ou serviços geram mais chamados.">❔</button>
+            title="Mostra a distribuição de tickets por categoria no período selecionado. Use para identificar quais áreas ou serviços geram mais chamados.">?</button>
         </h2><canvas id="chartCat"></canvas>
       </div>
     </div>
@@ -147,7 +154,7 @@
       <div class="card-inner">
         <h2>Quantidade de tickets por grupo atribuido
           <button class="help"
-            title="Quantidade de chamados por grupo atribuído no período selecionado. Ordenado do maior para o menor.">❔</button>
+            title="Quantidade de chamados por grupo atribuído no período selecionado. Ordenado do maior para o menor.">?</button>
         </h2>
         <canvas id="chartGroup"></canvas>
       </div>
@@ -156,7 +163,7 @@
       <div class="card-inner">
         <h2>Quantidade de tickets por prioridade
           <button class="help"
-            title="Exibe quantos tickets pertencem a cada nível de prioridade. Ajuda a visualizar a criticidade atual do backlog.">❔</button>
+            title="Exibe quantos tickets pertencem a cada nível de prioridade. Ajuda a visualizar a criticidade atual do backlog.">?</button>
         </h2><canvas id="chartPr"></canvas>
       </div>
     </div>
@@ -164,7 +171,7 @@
       <div class="card-inner">
         <h2>Quantidade de tickets por impacto
           <button class="help"
-            title="Agrupa tickets por nível de impacto (ex.: operação, usuário, sistema). Útil para priorizar correções que afetam maior número de usuários/serviços.">❔</button>
+            title="Agrupa tickets por nível de impacto (ex.: operação, usuário, sistema). Útil para priorizar correções que afetam maior número de usuários/serviços.">?</button>
         </h2><canvas id="chartImp"></canvas>
       </div>
     </div>
@@ -172,15 +179,16 @@
       <div class="card-inner">
         <h2>Tempo médio de resolução (horas úteis)
           <button class="help"
-            title="Mede o tempo médio entre abertura e solução dos tickets em horas úteis por ponto do período. Útil para acompanhar SLAs e eficiência da equipe.">❔</button>
+            title="Mede o tempo médio entre abertura e solução dos tickets em horas úteis por ponto do período. Útil para acompanhar SLAs e eficiência da equipe.">?</button>
         </h2><canvas id="chartResolutionHours"></canvas>
       </div>
     </div>
-  <div class="card" data-widget="slaBuckets">
+    <div class="card" data-widget="slaBuckets">
       <div class="card-inner">
-    <h2>Distribuição por expectativa <span class="badge-period" title="Ignora filtro de período" aria-label="Ignora filtro de período"></span>
+        <h2>Distribuição por expectativa <span class="badge-period" title="Ignora filtro de período"
+            aria-label="Ignora filtro de período"></span>
           <button class="help"
-            title="Classifica tickets conforme limites configurados por título na aba SLA: Normal, Moderado, Crítico. Tickets acima do crítico entram em 'Crítico'.">❔</button>
+            title="Classifica tickets conforme limites configurados por título na aba SLA: Normal, Moderado, Crítico. Tickets acima do crítico entram em 'Crítico'.">?</button>
         </h2>
         <canvas id="chartSlaBuckets"></canvas>
       </div>
