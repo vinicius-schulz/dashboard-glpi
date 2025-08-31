@@ -34,7 +34,7 @@ from metrics import (
     backlog_trend_series,
     resolution_time_series,
 )
-from business_calendar import previous_business_day, business_days_between
+from business_calendar import previous_business_day, business_days_between, consecutive_non_business_start
 
 
 load_dotenv()
@@ -469,7 +469,10 @@ def api_data():
             age_full = aging_buckets(baseline_df)
             sla = sla_solution(baseline_df)
             open_today_full = int(baseline_df[baseline_df['solved_at'].isna()].shape[0])
-            created_today_mask = (pd.to_datetime(baseline_df['created_at']) >= today_norm) & (pd.to_datetime(baseline_df['created_at']) < today_norm + pd.Timedelta(days=1))
+            # Created today: include today plus any immediately preceding non-business days
+            prev_bd = consecutive_non_business_start(today_norm)
+            today_end = today_norm + pd.Timedelta(days=1)
+            created_today_mask = (pd.to_datetime(baseline_df['created_at']) >= prev_bd) & (pd.to_datetime(baseline_df['created_at']) < today_end)
             created_today_count = int(created_today_mask.sum())
             solved_today_mask = (pd.to_datetime(baseline_df['solved_at'], errors='coerce') >= today_norm) & (pd.to_datetime(baseline_df['solved_at'], errors='coerce') < today_norm + pd.Timedelta(days=1))
             resolved_today_count = int(solved_today_mask.sum())
@@ -603,7 +606,10 @@ def api_data():
         age_full = aging_buckets(baseline_df)
         sla = sla_solution(baseline_df)
         open_today_full = int(baseline_df[baseline_df['solved_at'].isna()].shape[0])
-        created_today_mask = (pd.to_datetime(baseline_df['created_at']) >= today_norm) & (pd.to_datetime(baseline_df['created_at']) < today_norm + pd.Timedelta(days=1))
+    # Created today (include today and immediately preceding non-business days)
+        prev_bd = consecutive_non_business_start(today_norm)
+        today_end = today_norm + pd.Timedelta(days=1)
+        created_today_mask = (pd.to_datetime(baseline_df['created_at']) >= prev_bd) & (pd.to_datetime(baseline_df['created_at']) < today_end)
         created_today_count = int(created_today_mask.sum())
         solved_today_mask = (pd.to_datetime(baseline_df['solved_at'], errors='coerce') >= today_norm) & (pd.to_datetime(baseline_df['solved_at'], errors='coerce') < today_norm + pd.Timedelta(days=1))
         resolved_today_count = int(solved_today_mask.sum())
@@ -991,7 +997,9 @@ def api_tickets():
             elif source == "created_today":
                 base = df
                 created_dt = pd.to_datetime(base["created_at"], errors="coerce")
-                sel = base[(created_dt >= today_norm) & (created_dt < today_norm + pd.Timedelta(days=1))]
+                prev_bd = consecutive_non_business_start(today_norm)
+                today_end = today_norm + pd.Timedelta(days=1)
+                sel = base[(created_dt >= prev_bd) & (created_dt < today_end)]
             elif source == "resolved_today":
                 base = df
                 solved_dt = pd.to_datetime(base["solved_at"], errors="coerce")

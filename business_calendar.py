@@ -76,3 +76,26 @@ def business_days_between(start: pd.Timestamp, end: pd.Timestamp) -> int:
             cnt += 1
         cur += pd.Timedelta(days=1)
     return cnt
+
+
+def consecutive_non_business_start(dt: pd.Timestamp) -> pd.Timestamp:
+    """Return the start date of the consecutive non-business-day block that ends at `dt`.
+
+    If `dt` is a business day, returns dt.normalize().
+    If dt and the days immediately before it are non-business (weekend/holiday),
+    returns the earliest date in that consecutive non-business run.
+    """
+    cur = pd.Timestamp(dt).normalize()
+    # If today is business day, nothing to include
+    if is_business_day(cur):
+        return cur
+    # Walk backwards until we hit a business day (exclusive)
+    guard = 0
+    while guard < 365:
+        prev = cur - pd.Timedelta(days=1)
+        if is_business_day(prev):
+            # previous day is business -> current cur is start of non-business block
+            return cur
+        cur = prev
+        guard += 1
+    return cur
