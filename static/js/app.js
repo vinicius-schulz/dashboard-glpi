@@ -350,13 +350,13 @@ const WidgetLayout = (() => {
         // Reaplica comportamento de popover de ajuda no novo botão
         try { attachHelpPopovers && attachHelpPopovers(); } catch { }
       }
-      // Multi-edge / corner resize (remove handle; detect edges by proximity)
+  // Multi-edge / corner resize (remove handle; detect edges by proximity)
       if (!card._resizeBound) {
         initMultiResize(card, layout);
         card._resizeBound = true;
       }
-      // Drag init
-      if (!card.dataset.dragInit) { initDrag(card, layout); card.dataset.dragInit = '1'; }
+  // Drag init only if not yet bound to widget-actions
+  if (card.dataset.dragHandle !== 'widget-actions') { initDrag(card, layout); }
     });
   }
   function initMultiResize(card, layout) {
@@ -436,27 +436,30 @@ const WidgetLayout = (() => {
   }
   function initDrag(card, layout) {
     let startX, startY, origX, origY, previewX, previewY; const id = card.getAttribute('data-widget');
-    const handle = card.querySelector('h2');
-    if (handle) {
-      handle.classList.add('drag-handle');
-      handle.addEventListener('mousedown', (e) => {
-        // Apenas botão principal e não clicar no botão de ajuda interno
-        if (e.button !== 0) return;
-        if (e.target && e.target.closest('button.help')) return; // não arrastar ao clicar help
-        const item = layout.find(w => w.id === id); if (!item) return;
-        // se redimensionando ou cursor de resize ativo, não iniciar drag
-        if (card.dataset.resizing === '1' || card.dataset.resizeRegion) { return; }
-        startX = e.clientX; startY = e.clientY; origX = item.x || 0; origY = item.y || 0; previewX = origX; previewY = origY;
-        card.classList.add('dragging'); document.body.classList.add('drag-mode'); card.style.zIndex = 999;
-        function onMove(ev) { const dx = ev.clientX - startX, dy = ev.clientY - startY; const snapW = CELL_W / 2, snapH = CELL_H / 2; const deltaCols = Math.round(dx / snapW), deltaRows = Math.round(dy / snapH); const newX = Math.max(0, origX + deltaCols), newY = Math.max(0, origY + deltaRows); if (newX !== previewX || newY !== previewY) { previewX = newX; previewY = newY; card.style.left = (previewX * snapW) + 'px'; card.style.top = (previewY * snapH) + 'px'; } }
-        function onUp() {
-          const item = layout.find(w => w.id === id); if (item) { item.x = previewX; item.y = previewY; if (AUTO_RESOLVE) resolveCollisions(item, layout); apply(layout); save(layout); }
-          card.classList.remove('dragging'); document.body.classList.remove('drag-mode'); card.style.zIndex = '';
-          document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp);
-        }
-        document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
-      });
-    }
+    const handle = card.querySelector('.widget-actions');
+    if (!handle) return;
+    handle.classList.add('drag-handle');
+    card.dataset.dragHandle = 'widget-actions';
+    handle.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      if (e.target && e.target.closest('button')) return; // não arrastar ao clicar ícones
+      const item = layout.find(w => w.id === id); if (!item) return;
+      if (card.dataset.resizing === '1' || card.dataset.resizeRegion) return;
+      startX = e.clientX; startY = e.clientY; origX = item.x || 0; origY = item.y || 0; previewX = origX; previewY = origY;
+      card.classList.add('dragging'); document.body.classList.add('drag-mode'); card.style.zIndex = 999;
+      function onMove(ev) {
+        const dx = ev.clientX - startX, dy = ev.clientY - startY; const snapW = CELL_W / 2, snapH = CELL_H / 2;
+        const deltaCols = Math.round(dx / snapW), deltaRows = Math.round(dy / snapH);
+        const newX = Math.max(0, origX + deltaCols), newY = Math.max(0, origY + deltaRows);
+        if (newX !== previewX || newY !== previewY) { previewX = newX; previewY = newY; card.style.left = (previewX * snapW) + 'px'; card.style.top = (previewY * snapH) + 'px'; }
+      }
+      function onUp() {
+        const item2 = layout.find(w => w.id === id); if (item2) { item2.x = previewX; item2.y = previewY; if (AUTO_RESOLVE) resolveCollisions(item2, layout); apply(layout); save(layout); }
+        card.classList.remove('dragging'); document.body.classList.remove('drag-mode'); card.style.zIndex = '';
+        document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp);
+      }
+      document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
+    });
   }
   function boxesOverlap(a, b) { return !(a.x + a.cols <= b.x || b.x + b.cols <= a.x || a.y + a.rows <= b.y || b.y + b.rows <= a.y); }
   function resolveCollisions(moved, layout) {

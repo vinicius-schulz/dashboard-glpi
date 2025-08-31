@@ -397,6 +397,7 @@ body.drag-mode {
 	padding: 4px 8px 2px 8px;
 	box-sizing: border-box;
 	pointer-events: auto;
+	cursor: move;
 }
 
 .card .widget-actions::after {
