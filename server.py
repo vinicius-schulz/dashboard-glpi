@@ -472,21 +472,23 @@ def api_data():
             created_today_count = int(created_today_mask.sum())
             solved_today_mask = (pd.to_datetime(baseline_df['solved_at'], errors='coerce') >= today_norm) & (pd.to_datetime(baseline_df['solved_at'], errors='coerce') < today_norm + pd.Timedelta(days=1))
             resolved_today_count = int(solved_today_mask.sum())
-            # Atualizados hoje (date_mod) com carryover de fim de semana (se segunda considerar sáb+dom)
+            # Atualizados hoje (date_mod): incluir sempre HOJE + o dia útil anterior e quaisquer dias não úteis intermediários.
             def _updated_today_count(df_in: pd.DataFrame) -> int:
                 if df_in is None or df_in.empty or 'updated_at' not in df_in.columns:
                     return 0
                 upd = pd.to_datetime(df_in['updated_at'], errors='coerce')
                 if upd.isna().all():
                     return 0
-                mask_today = (upd >= today_norm) & (upd < today_norm + pd.Timedelta(days=1))
-                if today_norm.dayofweek == 0:  # Monday
-                    sat = today_norm - pd.Timedelta(days=2)
-                    sun = today_norm - pd.Timedelta(days=1)
-                    mask_sat = (upd >= sat) & (upd < sat + pd.Timedelta(days=1))
-                    mask_sun = (upd >= sun) & (upd < sun + pd.Timedelta(days=1))
-                    return int((mask_today | mask_sat | mask_sun).sum())
-                return int(mask_today.sum())
+                # Determinar o dia útil anterior (Mon-Fri) retrocedendo a partir de (today-1)
+                prev_bd = today_norm - pd.Timedelta(days=1)
+                guard = 0
+                while prev_bd.dayofweek > 4 and guard < 10:  # 5=Sat,6=Sun
+                    prev_bd -= pd.Timedelta(days=1)
+                    guard += 1
+                # Intervalo de contagem: [prev_bd, today_end)
+                today_end = today_norm + pd.Timedelta(days=1)
+                mask_range = (upd >= prev_bd) & (upd < today_end)
+                return int(mask_range.sum())
             updated_today_count = _updated_today_count(baseline_df)
             # títulos baseline
             try:
@@ -614,14 +616,13 @@ def api_data():
             upd = pd.to_datetime(df_in['updated_at'], errors='coerce')
             if upd.isna().all():
                 return 0
-            mask_today = (upd >= today_norm) & (upd < today_norm + pd.Timedelta(days=1))
-            if today_norm.dayofweek == 0:
-                sat = today_norm - pd.Timedelta(days=2)
-                sun = today_norm - pd.Timedelta(days=1)
-                mask_sat = (upd >= sat) & (upd < sat + pd.Timedelta(days=1))
-                mask_sun = (upd >= sun) & (upd < sun + pd.Timedelta(days=1))
-                return int((mask_today | mask_sat | mask_sun).sum())
-            return int(mask_today.sum())
+            prev_bd = today_norm - pd.Timedelta(days=1)
+            guard = 0
+            while prev_bd.dayofweek > 4 and guard < 10:  # skip weekend
+                prev_bd -= pd.Timedelta(days=1)
+                guard += 1
+            today_end = today_norm + pd.Timedelta(days=1)
+            return int(((upd >= prev_bd) & (upd < today_end)).sum())
         updated_today_count = _updated_today_count(baseline_df)
         load = load_by_assignee(df_strict)
 
@@ -981,15 +982,13 @@ def api_tickets():
                 base = df
                 if 'updated_at' in base.columns:
                     upd_dt = pd.to_datetime(base['updated_at'], errors='coerce')
-                    mask_today = (upd_dt >= today_norm) & (upd_dt < today_norm + pd.Timedelta(days=1))
-                    if today_norm.dayofweek == 0:  # Monday carryover Sat/Sun
-                        sat = today_norm - pd.Timedelta(days=2)
-                        sun = today_norm - pd.Timedelta(days=1)
-                        mask_sat = (upd_dt >= sat) & (upd_dt < sat + pd.Timedelta(days=1))
-                        mask_sun = (upd_dt >= sun) & (upd_dt < sun + pd.Timedelta(days=1))
-                        sel = base[mask_today | mask_sat | mask_sun]
-                    else:
-                        sel = base[mask_today]
+                    prev_bd = today_norm - pd.Timedelta(days=1)
+                    guard = 0
+                    while prev_bd.dayofweek > 4 and guard < 10:
+                        prev_bd -= pd.Timedelta(days=1)
+                        guard += 1
+                    today_end = today_norm + pd.Timedelta(days=1)
+                    sel = base[(upd_dt >= prev_bd) & (upd_dt < today_end)]
                 else:
                     sel = pd.DataFrame()
             elif source in ("category", "priority", "impact"):

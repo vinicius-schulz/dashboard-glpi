@@ -133,12 +133,12 @@
     </div>
     <div class="card" data-widget="updatedToday">
       <div class="card-inner">
-        <h2>Chamados Atualizados Hoje <span class="badge-period" title="Ignora filtro de período">(Ignora filtro de
+        <h2>Chamados atualizados (desde último dia útil) <span class="badge-period" title="Ignora filtro de período">(Ignora filtro de
             período)</span>
           <button class="help"
-            title="Quantidade de tickets que tiveram alguma atualização (date_mod) hoje. Se hoje for segunda-feira, inclui também atualizações realizadas no sábado e domingo anteriores.">❔</button>
+            title="Contagem de chamados que receberam alguma atualização (campo date_mod) desde o último dia útil até hoje. Inclui dias não úteis intermediários — ex.: se hoje for segunda, soma atualizações de sexta, sábado, domingo e segunda.">❔</button>
         </h2>
-        <div id="updatedTodayValue" class="big-number" title="Tickets atualizados hoje (inclui fim de semana se seg)">--</div>
+        <div id="updatedTodayValue" class="big-number" title="Contagem de chamados atualizados desde o último dia útil">--</div>
       </div>
     </div>
     <div class="card" data-widget="category">
@@ -247,7 +247,7 @@
         <div class="lp-pane hidden" data-pane="sla">
           <h4 style="margin:4px 0 12px">Baseline de Títulos (últimos 6 meses)</h4>
           <p style="font-size:12px;color:#475569;margin-top:0;margin-bottom:10px">Defina limites em dias para cada
-            título de ticket. Campos podem ficar em branco. Os valores são salvos automaticamente neste navegador
+            tipo de ticket. Campos podem ficar em branco. Os valores são salvos automaticamente neste navegador
             (<code>glpiDashboardSlaTitles.v1</code>).</p>
           <div class="sla-table-wrap">
             <table class="lp-table sla-table">
