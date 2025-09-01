@@ -141,9 +141,8 @@ def bulk_search_observer_tickets(
                             "solved_at": row.get("17"),
                             "closed_at": row.get("16"),
                             "status": row.get("12"),
-                            "priority": row.get("3"),
                             "urgency": row.get("10"),
-                            "impact": row.get("11"),
+                            # impact removido
                             "ttr_deadline": row.get("18"),
                             "category": row.get("7"),
                             "assigned_user": row.get("5"),

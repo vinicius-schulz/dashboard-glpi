@@ -3,7 +3,7 @@ Dashboard analítico conectado ao GLPI (API REST) para visualizar e explorar cha
 
 ## Principais Recursos
 * Série temporal: criados, resolvidos, backlog e gap cumulativo.
-* Snapshot e distribuição: backlog por status, aging (faixas de idade), prioridade, impacto, categoria.
+* Snapshot e distribuição: backlog por status, aging (faixas de idade), categoria.
 * Tempo médio de resolução (horas úteis) com linha suavizada (tendência).
 * Exportar / imprimir: gera documento com imagens dos gráficos + descrição + interpretação automática.
 * Layout livre: arraste, redimensione, oculte widgets, salvos em `localStorage` por navegador.
@@ -115,7 +115,7 @@ docker push SEU_USUARIO/dashboard-glpi:1.0.0
 ### Baseline de 6 Meses
 O backend busca sempre (em paralelo) uma janela baseline de 6 meses para alimentar widgets que ignoram o filtro temporal:
 * Ignoram o período: aging, backlog_status, open_today, created_today (marcados com badge / texto).
-* Respeitam o período filtrado: created/resolved/gap, backlog, categoria, prioridade, impacto, tempo de resolução.
+* Respeitam o período filtrado: created/resolved/gap, backlog, categoria, tempo de resolução.
 Se o usuário pedir um intervalo fora dos últimos 6 meses, o backend adapta a coleta.
 
 ### Personalização de Layout

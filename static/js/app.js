@@ -167,9 +167,7 @@ const WidgetLayout = (() => {
     { id: 'createdToday', cols: 8, rows: 8, visible: true },
     { id: 'resolvedToday', cols: 8, rows: 8, visible: true },
     { id: 'updatedToday', cols: 8, rows: 8, visible: true },
-    { id: 'category', cols: 8, rows: 8, visible: true },
-    { id: 'priority', cols: 8, rows: 8, visible: true },
-    { id: 'impact', cols: 8, rows: 8, visible: true }
+  { id: 'category', cols: 8, rows: 8, visible: true }
     , { id: 'load_by_group', cols: 8, rows: 8, visible: true }
     , { id: 'resolutionHours', cols: 8, rows: 8, visible: true }
     , { id: 'slaBuckets', cols: 8, rows: 8, visible: true }
@@ -186,6 +184,14 @@ const WidgetLayout = (() => {
     try {
       const raw = JSON.parse(localStorage.getItem(STORAGE_KEY));
       if (!raw) return DEFAULT.slice();
+  // Migração: remover widgets obsoletos 'priority' e 'impact'
+      try {
+        if (Array.isArray(raw)) {
+          for (let i = raw.length - 1; i >= 0; i--) {
+    if (raw[i] && (raw[i].id === 'priority' || raw[i].id === 'impact')) raw.splice(i, 1);
+          }
+        }
+      } catch { /* noop */ }
       // migrate v1 (no x,y) if needed
       if (raw.length && raw[0] && raw[0].x == null && raw[0].y == null) {
         return assignInitialCoords(raw);
@@ -1106,8 +1112,8 @@ async function loadData() {
       barChart('chartCat', s.category.labels, s.category.data, 'Categoria', 'Distribuição de tickets por categoria no período selecionado. Use para identificar áreas com maior volume.');
       attachBarClick('chartCat', s.category.labels, 'category');
     } else if (charts['chartCat']) { charts['chartCat'].destroy(); }
-    if (s.priority && s.priority.data && s.priority.data.length) { barChart('chartPr', s.priority.labels, s.priority.data, 'Prioridade', 'Número de tickets agrupados por nível de prioridade. Útil para visualizar criticidade.'); attachBarClick('chartPr', s.priority.labels, 'priority'); } else if (charts['chartPr']) { charts['chartPr'].destroy(); }
-    if (s.impact && s.impact.data && s.impact.data.length) { barChart('chartImp', s.impact.labels, s.impact.data, 'Impacto', 'Distribuição por impacto dos tickets; ajuda a priorizar correções que afetam mais usuários ou sistemas.'); attachBarClick('chartImp', s.impact.labels, 'impact'); } else if (charts['chartImp']) { charts['chartImp'].destroy(); }
+  // (widget 'priority' removido)
+  // (widget 'impact' removido)
     if (s.resolution_hours && s.resolution_hours.data && s.resolution_hours.data.length) {
       const labels = s.resolution_hours.labels;
       const meanData = s.resolution_hours.data;
@@ -1265,13 +1271,8 @@ function generateInsight(widgetId, series, meta) {
         const maxIdx = data.reduce((ix, v, i, arr) => v > arr[ix] ? i : ix, 0);
         return `Categoria com maior volume: ${labels[maxIdx] || 'N/A'} — ${Number(data[maxIdx] || 0).toLocaleString('pt-BR')} chamados no período.`;
       }
-      case 'priority': {
-        const labels = series.priority?.labels || []; const data = series.priority?.data || [];
-        return `Distribuição por prioridade apresentada; analise picos em prioridades altas para alocar recursos.`;
-      }
-      case 'impact': {
-        return `Distribuição por impacto apresentada; priorize correções com maior impacto operacional.`;
-      }
+  // priority widget removido
+  // impact widget removido
       case 'load_by_user':
       case 'load_by_group': {
         return `Carga por ${widgetId === 'load_by_user' ? 'usuário' : 'grupo'} mostrada; identifique responsáveis com maior volume para balanceamento.`;

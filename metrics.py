@@ -139,13 +139,11 @@ def sla_solution(df: pd.DataFrame, now=None) -> Dict[str, Any]:
 
 @timed
 def composition(df: pd.DataFrame):
-    """Composição por categoria, prioridade e impacto."""
+    """Composição por categoria (impacto removido do dashboard)."""
     cat = (
         df.groupby("category", dropna=True)["ticket_id"].count().sort_values(ascending=False).head(15)
     )
-    pr = df.groupby("priority", dropna=True)["ticket_id"].count().sort_values(ascending=False)
-    imp = df.groupby("impact", dropna=True)["ticket_id"].count().sort_values(ascending=False)
-    return cat, pr, imp
+    return cat, None, None
 
 
 @timed

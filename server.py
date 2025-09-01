@@ -459,7 +459,7 @@ def api_data():
                               "ignore_period_widgets": ["aging","backlog_status","open_today","created_today","resolved_today","updated_today"]},
                     "count": 0,
                     "note": "Nenhum ticket no filtro e baseline vazia.",
-                    "series": {k: empty_series for k in ["created","resolved","backlog","backlog_trend","category","resolution_hours","resolution_hours_trend","backlog_status","aging","priority","impact","load_by_user","load_by_group"]},
+                    "series": {k: empty_series for k in ["created","resolved","backlog","backlog_trend","category","resolution_hours","resolution_hours_trend","backlog_status","aging","load_by_user","load_by_group"]},
                     "sla": {},
                     "open_today": 0,
                     "created_today": 0,
@@ -544,8 +544,6 @@ def api_data():
                     "resolution_hours_trend": empty_series,
                     "backlog_status": _dict_to_labels_data(bs_full),
                     "aging": _dict_to_labels_data(age_full),
-                    "priority": empty_series,
-                    "impact": empty_series,
                     "load_by_user": empty_series,
                     "load_by_group": empty_series,
                 },
@@ -581,7 +579,7 @@ def api_data():
             created, resolved, _discard = created_resolved(df_strict, freq=freq)
             _c_ext, _r_ext, backlog_ext = created_resolved(df_extended, freq=freq)
             backlog_trend = backlog_trend_series(backlog_ext)
-            cat_filtered, pr_filtered, imp_filtered = composition(df_strict)
+            cat_filtered, _pr_filtered_unused, imp_filtered = composition(df_strict)
             try:
                 tmp_cat = df_strict[['category', 'status']].copy()
                 tmp_cat['status_name'] = tmp_cat['status'].apply(lambda x: STATUS_MAP.get(int(x), str(x)) if pd.notna(x) else 'Desconhecido')
@@ -686,7 +684,7 @@ def api_data():
             return out.groupby(level=0).sum()
 
         bs_named = map_series_labels(bs_full, STATUS_MAP)
-        pr_named = map_series_labels(pr_filtered, LEVEL_MAP)
+    # prioridade removida; ignorar pr_filtered
         imp_named = map_series_labels(imp_filtered, LEVEL_MAP)
 
         category_stacked_payload = {"labels": [], "datasets": []}
@@ -787,8 +785,6 @@ def api_data():
                 "resolution_hours_trend": _series_to_labels_data(resolution_hours_trend) if resolution_hours_trend is not None else {"labels": [], "data": []},
                 "backlog_status": _dict_to_labels_data(bs_named),
                 "aging": _dict_to_labels_data(age_full),
-                "priority": _dict_to_labels_data(pr_named),
-                "impact": _dict_to_labels_data(imp_named),
                 "load_by_user": _series_to_labels_data(load.get('by_user')) if 'by_user' in load else {"labels": [], "data": []},
                 "load_by_group": _series_to_labels_data(load.get('by_group')) if 'by_group' in load else {"labels": [], "data": []},
                 "load_by_group_stacked": load_by_group_stacked_payload,
@@ -1010,18 +1006,10 @@ def api_tickets():
                 sel = df[(upd_dt >= prev_bd) & (upd_dt < end_today)]
             else:
                 sel = pd.DataFrame()
-        elif source in ('category','priority','impact'):
+        elif source in ('category'):
             base = df_strict
             col = source
-            if source in ('priority','impact'):
-                try:
-                    v = int(float(label)); sel = base[base[col]==v]
-                except Exception:
-                    inv = {v.lower(): k for k,v in LEVEL_MAP.items()}
-                    mapped = inv.get(label.lower())
-                    sel = base[base[col]==mapped] if mapped is not None else base[base[col].astype(str)==str(label)]
-            else:
-                sel = base[base[col].astype(str)==str(label)]
+            sel = base[base[col].astype(str) == str(label)]
         elif source in ('load_by_user','load_by_group'):
             base = df_strict
             col = 'assigned_user' if source=='load_by_user' else 'assigned_group'
