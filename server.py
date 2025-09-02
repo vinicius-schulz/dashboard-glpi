@@ -483,17 +483,26 @@ def api_data():
             resolved_today_count = int(solved_today_mask.sum())
             # Atualizados hoje (date_mod): incluir sempre HOJE + o dia útil anterior e quaisquer dias não úteis intermediários.
             def _updated_today_count(df_in: pd.DataFrame) -> int:
+                """Conta tickets ATIVOS (não resolvidos/fechados) atualizados desde o último dia útil.
+
+                Exclui tickets com solved_at preenchido (considerados concluídos). Fecha a janela em today_end e
+                inicia em previous_business_day(today_norm), incluindo dias não úteis intermediários.
+                """
                 if df_in is None or df_in.empty or 'updated_at' not in df_in.columns:
                     return 0
                 upd = pd.to_datetime(df_in['updated_at'], errors='coerce')
                 if upd.isna().all():
                     return 0
-                # Use helper to determine previous business day (handles holidays when configured)
-                prev_bd = previous_business_day(today_norm)
-                # Intervalo de contagem: [prev_bd, today_end)
-                today_end = today_norm + pd.Timedelta(days=1)
-                mask_range = (upd >= prev_bd) & (upd < today_end)
-                return int(mask_range.sum())
+                prev_bd_loc = previous_business_day(today_norm)
+                today_end_loc = today_norm + pd.Timedelta(days=1)
+                mask_range = (upd >= prev_bd_loc) & (upd < today_end_loc)
+                # Apenas tickets ainda não resolvidos / não fechados
+                open_mask = pd.Series([True] * len(df_in), index=df_in.index)
+                if 'solved_at' in df_in.columns:
+                    open_mask &= pd.to_datetime(df_in['solved_at'], errors='coerce').isna()
+                if 'closed_at' in df_in.columns:
+                    open_mask &= pd.to_datetime(df_in['closed_at'], errors='coerce').isna()
+                return int((mask_range & open_mask).sum())
             updated_today_count = _updated_today_count(baseline_df)
             # títulos baseline
             try:
@@ -611,14 +620,21 @@ def api_data():
         solved_today_mask = (pd.to_datetime(baseline_df['solved_at'], errors='coerce') >= prev_bd) & (pd.to_datetime(baseline_df['solved_at'], errors='coerce') < today_end)
         resolved_today_count = int(solved_today_mask.sum())
         def _updated_today_count(df_in: pd.DataFrame) -> int:
+            """Conta apenas tickets ainda em aberto atualizados desde o último dia útil (exclui resolvidos/fechados)."""
             if df_in is None or df_in.empty or 'updated_at' not in df_in.columns:
                 return 0
             upd = pd.to_datetime(df_in['updated_at'], errors='coerce')
             if upd.isna().all():
                 return 0
-            prev_bd = previous_business_day(today_norm)
-            today_end_inner = today_norm + pd.Timedelta(days=1)
-            return int(((upd >= prev_bd) & (upd < today_end_inner)).sum())
+            prev_bd_loc = previous_business_day(today_norm)
+            today_end_loc = today_norm + pd.Timedelta(days=1)
+            mask_range = (upd >= prev_bd_loc) & (upd < today_end_loc)
+            open_mask = pd.Series([True] * len(df_in), index=df_in.index)
+            if 'solved_at' in df_in.columns:
+                open_mask &= pd.to_datetime(df_in['solved_at'], errors='coerce').isna()
+            if 'closed_at' in df_in.columns:
+                open_mask &= pd.to_datetime(df_in['closed_at'], errors='coerce').isna()
+            return int((mask_range & open_mask).sum())
         updated_today_count = _updated_today_count(baseline_df)
         load = load_by_assignee(df_strict)
 
@@ -1003,7 +1019,11 @@ def api_tickets():
                 upd_dt = pd.to_datetime(df['updated_at'], errors='coerce')
                 prev_bd = previous_business_day(today_norm)
                 end_today = today_norm + pd.Timedelta(days=1)
-                sel = df[(upd_dt >= prev_bd) & (upd_dt < end_today)]
+                # Apenas tickets ainda abertos (sem solved_at / closed_at) e atualizados no intervalo
+                solved_dt_all = pd.to_datetime(df['solved_at'], errors='coerce') if 'solved_at' in df.columns else pd.Series([pd.NaT]*len(df), index=df.index)
+                closed_dt_all = pd.to_datetime(df['closed_at'], errors='coerce') if 'closed_at' in df.columns else pd.Series([pd.NaT]*len(df), index=df.index)
+                open_mask_modal = solved_dt_all.isna() & closed_dt_all.isna()
+                sel = df[open_mask_modal & (upd_dt >= prev_bd) & (upd_dt < end_today)]
             else:
                 sel = pd.DataFrame()
         elif source in ('category'):
