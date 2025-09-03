@@ -885,8 +885,8 @@ async function loadData() {
       startNorm = sm + '-01';
       // Compute last day of end month: new Date(year, monthIndex+1, 0)
       const [ey, emon] = em.split('-').map(Number);
-      const lastDay = new Date(ey, emon, 0); // because monthIndex is emon (1-based) -> next month day 0
-      endNorm = lastDay.toISOString().slice(0, 10);
+  const lastDay = new Date(ey, emon, 0); // (ano, mês final, dia 0) => último dia do mês final
+  endNorm = isoDate(lastDay);
     } else {
       const start = document.getElementById('start').value;
       const end = document.getElementById('end').value;
@@ -1332,7 +1332,13 @@ function attachHelpPopovers() {
 window.addEventListener('DOMContentLoaded', attachHelpPopovers);
 
 // Preset range buttons: set start/end quickly. Default active = 3 months
-function isoDate(d) { return d.toISOString().slice(0, 10); }
+// Usa componentes locais para evitar avanço de dia em fusos atrás de UTC
+function isoDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
 function setRangeDays(days) {
   const end = new Date();
   const start = new Date();
@@ -1672,8 +1678,8 @@ async function openTicketsModal(source, label, idsList) {
     const em = document.getElementById('endMonth').value;   // YYYY-MM
     userStart = sm + '-01';
     const [ey, emon] = em.split('-').map(Number);
-    const lastDay = new Date(ey, emon, 0); // ultimo dia mês final
-    userEnd = lastDay.toISOString().slice(0, 10);
+  const lastDay = new Date(ey, emon, 0); // último dia do mês final
+  userEnd = isoDate(lastDay);
   } else {
     userStart = document.getElementById('start').value;
     userEnd = document.getElementById('end').value;

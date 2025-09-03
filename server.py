@@ -179,6 +179,29 @@ def _fetch_data(dini: pd.Timestamp, dfim: pd.Timestamp, mode: str = "bulk") -> T
     finally:
         client.kill_session()
 
+
+def _window_filter(df: pd.DataFrame, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
+    """Filtra um DataFrame já carregado para a janela [start, end] usando
+    a mesma lógica de inclusão aplicada em `bulk_search_observer_tickets`:
+    - Tickets criados dentro da janela
+    - Tickets resolvidos dentro da janela
+    - Tickets abertos antes do início mas ainda em aberto ou resolvidos dentro/ após o início
+
+    O parâmetro `end` é inclusivo (dia final). Retorna novo DataFrame filtrado.
+    """
+    if df is None or df.empty:
+        return df
+    c = pd.to_datetime(df['created_at'], errors='coerce')
+    s = pd.to_datetime(df['solved_at'], errors='coerce')
+    # end_boundary exclusivo (mesma convenção usada em bulk_search)
+    end_boundary = pd.to_datetime(end) + pd.Timedelta(days=1)
+    mask = (
+        (c >= start) & (c < end_boundary) |
+        (s.notna() & (s >= start) & (s < end_boundary)) |
+        ((c < start) & ((s.isna()) | (s >= start)))
+    )
+    return df[mask].copy()
+
 # --- Helpers for names/mappings ---
 STATUS_MAP = {1: "Novo", 2: "Atribuído", 3: "Planejado", 4: "Pendente", 5: "Resolvido", 6: "Fechado"}
 LEVEL_MAP = {1: "Muito baixo", 2: "Baixo", 3: "Médio", 4: "Alto", 5: "Muito alto"}
@@ -374,9 +397,24 @@ def api_data():
         baseline_end = today_norm
 
         baseline_df, baseline_meta = _fetch_data(baseline_start, baseline_end, mode=mode)
-        # Guardar baseline bruto antes de QUALQUER filtro (usado para lista de títulos SLA estável)
+        # Guardar baseline bruto (antes de filtros de categoria / grupo) para títulos SLA estáveis
         baseline_df_raw = baseline_df.copy() if (baseline_df is not None and not baseline_df.empty) else baseline_df
-        user_df, user_meta = _fetch_data(user_start, user_end, mode=mode)
+
+        # Otimização: se a janela solicitada pelo usuário está totalmente contida dentro da baseline
+        # evitamos nova ida à API reutilizando o baseline já obtido.
+        if (
+            baseline_df is not None and not baseline_df.empty and
+            user_start >= baseline_start and user_end <= baseline_end
+        ):
+            user_df = _window_filter(baseline_df, user_start, user_end)
+            user_meta = {
+                **baseline_meta,
+                # manter grupos / modo, apenas ajustar contagem específica da janela
+                'tids': len(user_df) if user_df is not None else 0
+            }
+        else:
+            # Fora da baseline -> ainda precisamos buscar diretamente
+            user_df, user_meta = _fetch_data(user_start, user_end, mode=mode)
         meta = {**baseline_meta, "tids_baseline": baseline_meta.get("tids"), "tids_user": user_meta.get("tids")}
 
         def filter_category(df: pd.DataFrame) -> pd.DataFrame:
