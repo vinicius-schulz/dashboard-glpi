@@ -46,6 +46,7 @@ function captureOriginalDefaultsOnce() {
     gran: document.getElementById('gran')?.value || '',
     cat: document.getElementById('catFilter')?.value || '',
     assignedGroup: document.getElementById('assignedGroupFilter')?.value || 'todos',
+  status: document.getElementById('statusFilter')?.value || 'todos',
     start: document.getElementById('start')?.value || '',
     end: document.getElementById('end')?.value || '',
     startMonth: document.getElementById('startMonth')?.value || '',
@@ -68,6 +69,7 @@ function saveFilters() {
       gran: document.getElementById('gran')?.value,
       cat: document.getElementById('catFilter')?.value,
       assignedGroup: document.getElementById('assignedGroupFilter')?.value,
+  status: document.getElementById('statusFilter')?.value,
       start: document.getElementById('start')?.value,
       end: document.getElementById('end')?.value,
       startMonth: document.getElementById('startMonth')?.value,
@@ -95,11 +97,13 @@ function loadFilters() {
   captureOriginalDefaultsOnce();
   let parsed = null;
   try { parsed = JSON.parse(localStorage.getItem(FILTERS_KEY) || 'null'); } catch { parsed = null; }
-  if (!parsed) return false;
+    if (!parsed) return false; 
+    document.getElementById('assignedGroupFilter')?.addEventListener('change', () => { saveFilters(); loadData(); });
   try {
     if (parsed.gran && document.getElementById('gran')) document.getElementById('gran').value = parsed.gran;
     if (parsed.cat && document.getElementById('catFilter')) document.getElementById('catFilter').value = parsed.cat;
     if (parsed.assignedGroup && document.getElementById('assignedGroupFilter')) document.getElementById('assignedGroupFilter').value = parsed.assignedGroup;
+  if (parsed.status && document.getElementById('statusFilter')) document.getElementById('statusFilter').value = parsed.status;
     if (parsed.start && document.getElementById('start')) document.getElementById('start').value = parsed.start;
     if (parsed.end && document.getElementById('end')) document.getElementById('end').value = parsed.end;
     if (parsed.startMonth && document.getElementById('startMonth')) document.getElementById('startMonth').value = parsed.startMonth;
@@ -135,6 +139,13 @@ function resetFilters() {
 }
 // Carrega filtros cedo para evitar corrida com primeiro load
 window.addEventListener('DOMContentLoaded', () => { loadFilters(); });
+// Recarregar ao mudar status
+window.addEventListener('DOMContentLoaded', () => {
+  const sf = document.getElementById('statusFilter');
+  if (sf) {
+    sf.addEventListener('change', () => { saveFilters(); loadData(); });
+  }
+});
 const Loader = {
   el: null,
   init() { this.el = document.getElementById('loader'); },
@@ -154,6 +165,17 @@ const Toasts = {
   }
 };
 window.addEventListener('DOMContentLoaded', () => { Loader.init(); Toasts.init(); });
+// Bind core filter change events (gran, cat, group, dates) to auto save + reload
+window.addEventListener('DOMContentLoaded', () => {
+  const bindIds = ['gran','catFilter','assignedGroupFilter','start','end','startMonth','endMonth'];
+  bindIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (el && !el._bindReload) {
+      el.addEventListener('change', () => { saveFilters(); loadData(); });
+      el._bindReload = true;
+    }
+  });
+});
 
 // ---- Widget Layout Manager ----
 const WidgetLayout = (() => {
@@ -959,7 +981,8 @@ async function loadData() {
 
     const catSel = document.getElementById('catFilter').value;
     const assignedSel = (document.getElementById('assignedGroupFilter') && document.getElementById('assignedGroupFilter').value) || 'todos';
-    const r = await fetch(`/api/data?gran=${encodeURIComponent(gran)}&start=${startNorm}&end=${endNorm}&cat=${encodeURIComponent(catSel)}&assigned_group=${encodeURIComponent(assignedSel)}`);
+  const statusSel = (document.getElementById('statusFilter') && document.getElementById('statusFilter').value) || 'todos';
+  const r = await fetch(`/api/data?gran=${encodeURIComponent(gran)}&start=${startNorm}&end=${endNorm}&cat=${encodeURIComponent(catSel)}&assigned_group=${encodeURIComponent(assignedSel)}&status=${encodeURIComponent(statusSel)}`);
     let js = null;
     try { js = await r.clone().json(); } catch { /* ignore parse errors */ }
     if (r.status === 503) {
@@ -1758,6 +1781,7 @@ async function openTicketsModal(source, label, idsList) {
   // Enviar também userStart/userEnd para o backend poder restringir as séries que respeitam filtro
   const catSel = document.getElementById('catFilter').value;
   const assignedSel = document.getElementById('assignedGroupFilter') ? document.getElementById('assignedGroupFilter').value : 'todos';
+  const statusSel = document.getElementById('statusFilter') ? document.getElementById('statusFilter').value : 'todos';
   const params = new URLSearchParams({
     gran,
     start: bstart,
@@ -1767,8 +1791,9 @@ async function openTicketsModal(source, label, idsList) {
     ustart: userStart,
     uend: userEnd,
     baseline: needBaseline ? '1' : '0',
-    cat: catSel
-    , assigned_group: assignedSel
+  cat: catSel,
+  assigned_group: assignedSel,
+  status: statusSel
   });
   if (idsList && idsList.length) params.set('ids', idsList.join(','));
 
