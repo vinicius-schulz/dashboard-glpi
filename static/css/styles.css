@@ -282,7 +282,7 @@ header h1 {
 	display: block;
 	min-height: 400px;
 	padding-top: 8px;
-	margin-top: 8px;
+	margin-top: 12px;
 }
 
 .grid.free-layout .card {
@@ -530,8 +530,8 @@ body.drag-mode {
 	position: absolute;
 	left: 5px;
 	height: 12px;
-	width: 36px;
-	bottom: -12px;
+	width: 50px;
+	bottom: -14px;
 	z-index: 9999;
 	background: #fff;
 	border-bottom: 1px solid #e5e7eb;
