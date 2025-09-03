@@ -192,7 +192,7 @@ header h1 {
 	/* Stack controls on small screens and force preset buttons to occupy separate lines */
 	.controls {
 		flex-direction: column;
-		align-items: center;
+		align-items: start;
 	}
 
 	/* Ensure preset container wraps vertically even if inline style exists */
