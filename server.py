@@ -205,6 +205,281 @@ def _window_filter(df: pd.DataFrame, start: pd.Timestamp, end: pd.Timestamp) -> 
 # --- Helpers for names/mappings ---
 STATUS_MAP = {1: "Novo", 2: "Atribuído", 3: "Planejado", 4: "Pendente", 5: "Resolvido", 6: "Fechado"}
 LEVEL_MAP = {1: "Muito baixo", 2: "Baixo", 3: "Médio", 4: "Alto", 5: "Muito alto"}
+IGNORE_PERIOD_WIDGETS = ["aging","backlog_status","open_today","created_today","resolved_today","updated_today"]
+
+# ---------------------- Helpers de modularização api_data ----------------------
+
+def _current_timezone():
+    """Retorna timezone configurada (ou None)."""
+    try:
+        return zoneinfo.ZoneInfo(os.getenv("APP_TZ", "America/Sao_Paulo"))
+    except Exception:
+        return None
+
+
+def _now_and_today():
+    tz = _current_timezone()
+    now_dt = datetime.now(tz) if tz else datetime.now()
+    return now_dt, pd.Timestamp(now_dt.date())
+
+
+def _parse_user_window(req, today_norm: pd.Timestamp) -> tuple[pd.Timestamp, pd.Timestamp, str, str]:
+    start_s = req.args.get("start")
+    end_s = req.args.get("end")
+    if not start_s or not end_s:
+        start_s = (today_norm - pd.Timedelta(days=30)).date().isoformat()
+        end_s = today_norm.date().isoformat()
+    user_start = pd.Timestamp(start_s).normalize()
+    user_end = pd.Timestamp(end_s).normalize()
+    return user_start, user_end, start_s, end_s
+
+
+def _apply_category_filter(df: pd.DataFrame, cat_filter: str) -> pd.DataFrame:
+    if df is None or df.empty or cat_filter == "todos":
+        return df
+    name_cols = [c for c in ["category_fullname", "category_name", "category_label"] if c in df.columns]
+    if name_cols:
+        s = df[name_cols[0]].astype(str).fillna("")
+    else:
+        if 'category' in df.columns and df['category'].dtype == object:
+            s = df['category'].astype(str).fillna("")
+        else:
+            return df
+    mask_h = s.str.startswith("Holding", na=False)
+    if cat_filter == "holding":
+        return df[mask_h].copy()
+    if cat_filter == "unimed":
+        return df[~mask_h].copy()
+    return df
+
+
+def _apply_assigned_group_filter(df: pd.DataFrame, assigned_group_param: str) -> pd.DataFrame:
+    if df is None or df.empty or assigned_group_param in (None, '', 'todos'):
+        return df
+    param_lower = str(assigned_group_param).strip().lower()
+    if param_lower in ('holding', 'unimed', 'aguardando aprovação'):
+        def _gname(val):
+            if isinstance(val, dict):
+                return (val.get('completename') or val.get('name') or '').strip()
+            return str(val).strip() if val is not None else ''
+        if param_lower == 'holding':
+            mask = df['assigned_group'].apply(lambda v: _gname(v) == 'Suporte Holding') if 'assigned_group' in df.columns else []
+            return df[mask].copy()
+        if param_lower == 'aguardando aprovação':
+            mask = df['assigned_group'].apply(lambda v: _gname(v) == 'Aguardando Aprovação') if 'assigned_group' in df.columns else []
+            return df[mask].copy()
+        if param_lower == 'unimed':
+            mask = df['assigned_group'].apply(lambda v: _gname(v) not in ('Suporte Holding','Aguardando Aprovação')) if 'assigned_group' in df.columns else []
+            return df[mask].copy()
+    try:
+        aid = int(float(assigned_group_param))
+        def match(row):
+            val = row.get('assigned_group')
+            if isinstance(val, dict):
+                try:
+                    return int(val.get('id')) == aid
+                except Exception:
+                    return False
+            try:
+                return int(float(val)) == aid
+            except Exception:
+                return False
+        return df[df.apply(match, axis=1)].copy()
+    except Exception:
+        if 'assigned_group' in df.columns and df['assigned_group'].dtype == object:
+            s = df['assigned_group'].astype(str).fillna('')
+            return df[s == assigned_group_param].copy()
+        return df
+
+
+def _baseline_titles(src_titles_df: pd.DataFrame) -> tuple[list[str], list[dict]]:
+    """Extrai títulos e categorias predominantes da baseline (para SLA)."""
+    if src_titles_df is None or src_titles_df.empty or 'title' not in src_titles_df.columns:
+        return [], []
+    try:
+        title_series = src_titles_df['title'].dropna().astype(str)
+        if 'category' in src_titles_df.columns:
+            cat_col = src_titles_df['category']
+            cat_text = []
+            for v in cat_col:
+                if isinstance(v, dict):
+                    name = v.get('completename') or v.get('name') or ''
+                else:
+                    name = str(v) if v is not None else ''
+                cat_text.append(name)
+            cats = pd.Series(cat_text, index=src_titles_df.index)
+        else:
+            cats = pd.Series([''] * len(src_titles_df), index=src_titles_df.index)
+        tmp = pd.DataFrame({'title': title_series, 'category_text': cats})
+        tmp['category_text'] = tmp['category_text'].fillna('').replace({'None': ''})
+        agg = tmp.groupby('title')['category_text'].agg(lambda s: s.value_counts().index[0] if len(s.value_counts()) else '')
+        baseline_titles = []
+        baseline_titles_detail = []
+        for t, cat in agg.items():
+            title_clean = str(t).strip()
+            if not title_clean:
+                continue
+            baseline_titles.append(title_clean)
+            baseline_titles_detail.append({'title': title_clean, 'category': (cat or '').strip()})
+        baseline_titles.sort(key=lambda x: x.lower())
+        baseline_titles_detail.sort(key=lambda d: d['title'].lower())
+        return baseline_titles, baseline_titles_detail
+    except Exception:
+        return [], []
+
+
+def _assigned_groups_list(src_groups_df: pd.DataFrame) -> list[dict]:
+    if src_groups_df is None or src_groups_df.empty or 'assigned_group' not in src_groups_df.columns:
+        return []
+    try:
+        seen = set(); out = []
+        for val in src_groups_df['assigned_group'].dropna().unique():
+            gid = None; gname = None
+            if isinstance(val, dict):
+                gid = val.get('id')
+                gname = val.get('completename') or val.get('name') or None
+            else:
+                s = str(val)
+                if s.isdigit():
+                    gid = int(s)
+                else:
+                    gname = s
+            key = gid if gid is not None else gname
+            if key is None or key in seen:
+                continue
+            seen.add(key)
+            out.append({"id": gid if gid is not None else gname, "name": gname if gname is not None else (str(gid) if gid is not None else str(gname))})
+        return out
+    except Exception:
+        return []
+
+
+def _map_series_labels(s: pd.Series, mapper: dict) -> pd.Series:
+    if s is None or s.empty:
+        return s
+    mapped = []
+    for k in s.index:
+        try:
+            name = mapper.get(int(k))
+        except Exception:
+            name = mapper.get(str(k)) if isinstance(k, str) else None
+        if name is None:
+            name = str(k)
+        mapped.append(name)
+    out = pd.Series(s.values, index=mapped)
+    return out.groupby(level=0).sum()
+
+
+def _category_stacked(cat_status_pivot: pd.DataFrame) -> dict:
+    payload = {"labels": [], "datasets": []}
+    if cat_status_pivot is None or cat_status_pivot.empty:
+        return payload
+    payload['labels'] = [str(i) for i in cat_status_pivot.index]
+    status_order = [v for _, v in STATUS_MAP.items() if v in cat_status_pivot.columns]
+    for extra in [c for c in cat_status_pivot.columns if c not in status_order]:
+        status_order.append(extra)
+    for st in status_order:
+        vals = cat_status_pivot.get(st)
+        if vals is None:
+            continue
+        payload['datasets'].append({'label': st, 'data': [int(v) for v in vals.values]})
+    return payload
+
+
+def _group_stacked(df_strict: pd.DataFrame) -> dict:
+    payload = {"labels": [], "datasets": []}
+    try:
+        if df_strict is None or df_strict.empty or 'assigned_group' not in df_strict.columns or 'status' not in df_strict.columns:
+            return payload
+        tmp_grp = df_strict[['assigned_group', 'status']].copy()
+        def _gdisplay(v):
+            if isinstance(v, dict):
+                return (v.get('completename') or v.get('name') or '').strip()
+            return str(v).strip() if v is not None else ''
+        tmp_grp['group_name'] = tmp_grp['assigned_group'].apply(_gdisplay).fillna('').replace({'None': ''})
+        tmp_grp['status_name'] = tmp_grp['status'].apply(lambda x: STATUS_MAP.get(int(x), str(x)) if pd.notna(x) else 'Desconhecido')
+        grp_status_pivot = tmp_grp.groupby(['group_name', 'status_name']).size().unstack(fill_value=0)
+        if '' in grp_status_pivot.index and grp_status_pivot.shape[0] > 1:
+            grp_status_pivot = grp_status_pivot.drop(index=[''])
+        if grp_status_pivot.empty:
+            return payload
+        totals = grp_status_pivot.sum(axis=1).sort_values(ascending=False)
+        grp_status_pivot = grp_status_pivot.loc[totals.index]
+        payload['labels'] = [str(i) for i in grp_status_pivot.index]
+        status_order_g = [v for _, v in STATUS_MAP.items() if v in grp_status_pivot.columns]
+        for extra in [c for c in grp_status_pivot.columns if c not in status_order_g]:
+            status_order_g.append(extra)
+        for st in status_order_g:
+            vals = grp_status_pivot.get(st)
+            if vals is None:
+                continue
+            payload['datasets'].append({'label': st, 'data': [int(v) for v in vals.values]})
+        return payload
+    except Exception:
+        return {"labels": [], "datasets": []}
+
+
+def _updated_today_count(df_in: pd.DataFrame, today_norm: pd.Timestamp) -> int:
+    if df_in is None or df_in.empty or 'updated_at' not in df_in.columns:
+        return 0
+    upd = pd.to_datetime(df_in['updated_at'], errors='coerce')
+    if upd.isna().all():
+        return 0
+    prev_bd_loc = previous_business_day(today_norm)
+    today_end_loc = today_norm + pd.Timedelta(days=1)
+    mask_range = (upd >= prev_bd_loc) & (upd < today_end_loc)
+    open_mask = pd.Series([True] * len(df_in), index=df_in.index)
+    if 'solved_at' in df_in.columns:
+        open_mask &= pd.to_datetime(df_in['solved_at'], errors='coerce').isna()
+    if 'closed_at' in df_in.columns:
+        open_mask &= pd.to_datetime(df_in['closed_at'], errors='coerce').isna()
+    return int((mask_range & open_mask).sum())
+
+
+def _empty_payload(meta, baseline_start, baseline_end, user_start, user_end, today_norm, baseline_df, baseline_df_raw):
+    """Payload para caso de user_df vazio (mantendo métricas baseline)."""
+    empty_series = {"labels": [], "data": []}
+    bs_full = backlog_status(baseline_df) if baseline_df is not None and not baseline_df.empty else pd.Series(dtype=float)
+    age_full = aging_buckets(baseline_df) if baseline_df is not None and not baseline_df.empty else pd.Series(dtype=float)
+    sla = sla_solution(baseline_df) if baseline_df is not None and not baseline_df.empty else {}
+    open_today_full = int(baseline_df[baseline_df['solved_at'].isna()].shape[0]) if baseline_df is not None and not baseline_df.empty else 0
+    prev_bd = consecutive_non_business_start(today_norm)
+    today_end = today_norm + pd.Timedelta(days=1)
+    created_today_count = int(((pd.to_datetime(baseline_df['created_at']) >= prev_bd) & (pd.to_datetime(baseline_df['created_at']) < today_end)).sum()) if baseline_df is not None and not baseline_df.empty else 0
+    solved_today_mask = (pd.to_datetime(baseline_df['solved_at'], errors='coerce') >= prev_bd) & (pd.to_datetime(baseline_df['solved_at'], errors='coerce') < today_end) if baseline_df is not None and not baseline_df.empty else pd.Series([], dtype=bool)
+    resolved_today_count = int(solved_today_mask.sum()) if baseline_df is not None and not baseline_df.empty else 0
+    updated_today_count = _updated_today_count(baseline_df, today_norm)
+    baseline_titles, baseline_titles_detail = _baseline_titles(baseline_df_raw)
+    return {
+        "meta": {**meta, "baseline_window": {"start": str(baseline_start.date()), "end": str(baseline_end.date()), "used": True},
+                  "user_window": {"start": str(user_start.date()), "end": str(user_end.date())},
+                  "ignore_period_widgets": IGNORE_PERIOD_WIDGETS},
+        "count": 0,
+        "note": "Sem tickets no intervalo filtrado; exibindo métricas de baseline." if (baseline_df is not None and not baseline_df.empty) else "Nenhum ticket no filtro e baseline vazia.",
+        "series": {
+            "created": empty_series,
+            "resolved": empty_series,
+            "backlog": empty_series,
+            "backlog_trend": empty_series,
+            "category": empty_series,
+            "resolution_hours": empty_series,
+            "resolution_hours_trend": empty_series,
+            "backlog_status": _dict_to_labels_data(bs_full),
+            "aging": _dict_to_labels_data(age_full),
+            "load_by_user": empty_series,
+            "load_by_group": empty_series,
+        },
+        "sla": sla,
+        "open_today": open_today_full,
+        "created_today": created_today_count,
+        "resolved_today": resolved_today_count,
+        "updated_today": updated_today_count,
+        "baseline_titles": baseline_titles,
+        "baseline_titles_detail": baseline_titles_detail,
+        "tickets_sla": [],
+    }
+
+# -------------------- Fim helpers api_data --------------------
 
 def _period_bounds_from_label(label: str, gran: str) -> Tuple[pd.Timestamp, pd.Timestamp]:
     # label is ISO date (start of day or start of week)
@@ -296,26 +571,8 @@ def logout():
 
 @app.get("/api/data")
 def api_data():
-    """Endpoint principal de dados.
-
-    Requisitos novos:
-    - Sempre coletar (por padrão) os ÚLTIMOS 6 MESES de tickets (janela baseline),
-      independentemente do filtro informado na tela, para alimentar widgets que
-      precisam de histórico amplo.
-    - EXCETO: se o range solicitado pelo usuário estiver FORA da janela padrão
-      (isto é, não contido totalmente dentro dos últimos 6 meses). Nesse caso, a
-      coleta usa o range do usuário (não forçamos truncar para 6 meses).
-    - Widgets que DEVEM respeitar o filtro informado na tela (usar df_filtrado):
-        cumGap (created/resolved), backlog (e trend), category, resolutionHours.
-        - Widgets que DEVEM ignorar o filtro e usar SEMPRE a janela baseline de 6 meses
-            (ou o range estendido quando o usuário sai dessa janela): aging, backlogStatus,
-            openToday, createdToday.
-    - Sinalizar nos widgets que ignoram o período com a mensagem
-      "Ignora filtro de período" (markup em index.html cuida da exibição; aqui
-      expomos metadados para possível uso futuro).
-    """
+    """Endpoint principal de dados (refatorado em helpers para legibilidade)."""
     try:
-        # Disponibilidade GLPI
         ok_glpi, _msg = is_glpi_operational(timeout=10)
         if not ok_glpi:
             return jsonify({"mensagem": "O GLPI está temporariamente indisponível. Tente novamente em alguns instantes."}), 503
@@ -324,239 +581,35 @@ def api_data():
         mode = request.args.get("mode", "bulk").lower()
         cat_filter = request.args.get("cat", "todos").lower()
         assigned_group_param = request.args.get('assigned_group', 'todos')
-        gl = gran.lower()
-        freq = "D" if gl.startswith("di") else ("W" if gl.startswith("se") else "M")
+        freq = "D" if gran.lower().startswith("di") else ("W" if gran.lower().startswith("se") else "M")
 
-        # Timezone -> usar data naïve para comparações
-        try:
-            _tz = zoneinfo.ZoneInfo(os.getenv("APP_TZ", "America/Sao_Paulo"))
-        except Exception:
-            _tz = None
-        now_dt = datetime.now(_tz) if _tz else datetime.now()
-        today_norm = pd.Timestamp(now_dt.date())  # naive midnight
+        now_dt, today_norm = _now_and_today()
+        user_start, user_end, start_s, end_s = _parse_user_window(request, today_norm)
 
-        # Intervalo do usuário
-        start_s = request.args.get("start")
-        end_s = request.args.get("end")
-        if not start_s or not end_s:
-            start_s = (today_norm - pd.Timedelta(days=30)).date().isoformat()
-            end_s = today_norm.date().isoformat()
-        user_start = pd.Timestamp(start_s).normalize()
-        user_end = pd.Timestamp(end_s).normalize()
-
-        # Baseline (últimos 6 meses)
         baseline_start = (today_norm - pd.DateOffset(months=6)).normalize()
         baseline_end = today_norm
 
         baseline_df, baseline_meta = _fetch_data(baseline_start, baseline_end, mode=mode)
-        # Guardar baseline bruto (antes de filtros de categoria / grupo) para títulos SLA estáveis
         baseline_df_raw = baseline_df.copy() if (baseline_df is not None and not baseline_df.empty) else baseline_df
 
-        # Otimização: se a janela solicitada pelo usuário está totalmente contida dentro da baseline
-        # evitamos nova ida à API reutilizando o baseline já obtido.
-        if (
-            baseline_df is not None and not baseline_df.empty and
-            user_start >= baseline_start and user_end <= baseline_end
-        ):
+        if (baseline_df is not None and not baseline_df.empty and user_start >= baseline_start and user_end <= baseline_end):
             user_df = _window_filter(baseline_df, user_start, user_end)
-            user_meta = {
-                **baseline_meta,
-                # manter grupos / modo, apenas ajustar contagem específica da janela
-                'tids': len(user_df) if user_df is not None else 0
-            }
+            user_meta = {**baseline_meta, 'tids': len(user_df) if user_df is not None else 0}
         else:
-            # Fora da baseline -> ainda precisamos buscar diretamente
             user_df, user_meta = _fetch_data(user_start, user_end, mode=mode)
         meta = {**baseline_meta, "tids_baseline": baseline_meta.get("tids"), "tids_user": user_meta.get("tids")}
 
-        def filter_category(df: pd.DataFrame) -> pd.DataFrame:
-            if df is None or df.empty or cat_filter == "todos":
-                return df
-            name_cols = [c for c in ["category_fullname", "category_name", "category_label"] if c in df.columns]
-            if name_cols:
-                s = df[name_cols[0]].astype(str).fillna("")
-            else:
-                if 'category' in df.columns and df['category'].dtype == object:
-                    s = df['category'].astype(str).fillna("")
-                else:
-                    return df
-            mask_h = s.str.startswith("Holding", na=False)
-            if cat_filter == "holding":
-                return df[mask_h].copy()
-            if cat_filter == "unimed":
-                return df[~mask_h].copy()
-            return df
-
-        def filter_assigned_group(df: pd.DataFrame) -> pd.DataFrame:
-            if df is None or df.empty or assigned_group_param in (None, '', 'todos'):
-                return df
-            param_lower = str(assigned_group_param).strip().lower()
-            # Valores sintéticos
-            if param_lower in ('holding', 'unimed', 'aguardando aprovação'):
-                # Função para extrair nome textual do grupo
-                def _gname(val):
-                    if isinstance(val, dict):
-                        return (val.get('completename') or val.get('name') or '').strip()
-                    return str(val).strip() if val is not None else ''
-                if param_lower == 'holding':
-                    # Manter apenas "Suporte Holding"
-                    mask = df['assigned_group'].apply(lambda v: _gname(v) == 'Suporte Holding') if 'assigned_group' in df.columns else []
-                    return df[mask].copy()
-                if param_lower == 'aguardando aprovação':
-                    mask = df['assigned_group'].apply(lambda v: _gname(v) == 'Aguardando Aprovação') if 'assigned_group' in df.columns else []
-                    return df[mask].copy()
-                if param_lower == 'unimed':
-                    # Excluir "Suporte Holding" e "Aguardando Aprovação"
-                    mask = df['assigned_group'].apply(lambda v: _gname(v) not in ('Suporte Holding','Aguardando Aprovação')) if 'assigned_group' in df.columns else []
-                    return df[mask].copy()
-            try:
-                aid = int(float(assigned_group_param))
-                def match(row):
-                    val = row.get('assigned_group')
-                    if isinstance(val, dict):
-                        try:
-                            return int(val.get('id')) == aid
-                        except Exception:
-                            return False
-                    try:
-                        return int(float(val)) == aid
-                    except Exception:
-                        return False
-                return df[df.apply(match, axis=1)].copy()
-            except Exception:
-                if 'assigned_group' in df.columns and df['assigned_group'].dtype == object:
-                    s = df['assigned_group'].astype(str).fillna('')
-                    return df[s == assigned_group_param].copy()
-                return df
-
-        # Primeiro aplicamos somente o filtro de categoria; guardamos baseline sem filtro de grupo
-        baseline_df_cat = filter_category(baseline_df)  # baseline filtrado por categoria para métricas que ignoram período
-        user_df_cat = filter_category(user_df)
-
-        # Guardar baseline não filtrado por grupo para montar lista completa de grupos atribuídos
+        # Filtros categoria / grupo
+        baseline_df_cat = _apply_category_filter(baseline_df, cat_filter)
+        user_df_cat = _apply_category_filter(user_df, cat_filter)
         baseline_df_unfiltered_groups = baseline_df_cat.copy() if baseline_df_cat is not None else None
-
-        # Agora aplicamos filtro de grupo (quando selecionado) para as métricas
-        baseline_df = filter_assigned_group(baseline_df_cat)
-        user_df = filter_assigned_group(user_df_cat)
+        baseline_df = _apply_assigned_group_filter(baseline_df_cat, assigned_group_param)
+        user_df = _apply_assigned_group_filter(user_df_cat, assigned_group_param)
 
         if user_df is None or user_df.empty:
-            empty_series = {"labels": [], "data": []}
-            if baseline_df is None or baseline_df.empty:
-                return jsonify({
-                    "meta": {**meta, "baseline_window": {"start": str(baseline_start.date()), "end": str(baseline_end.date()), "used": True},
-                              "user_window": {"start": str(user_start.date()), "end": str(user_end.date())},
-                              "ignore_period_widgets": ["aging","backlog_status","open_today","created_today","resolved_today","updated_today"]},
-                    "count": 0,
-                    "note": "Nenhum ticket no filtro e baseline vazia.",
-                    "series": {k: empty_series for k in ["created","resolved","backlog","backlog_trend","category","resolution_hours","resolution_hours_trend","backlog_status","aging","load_by_user","load_by_group"]},
-                    "sla": {},
-                    "open_today": 0,
-                    "created_today": 0,
-                    "resolved_today": 0,
-                    "updated_today": 0,
-                    "baseline_titles": [],
-                    "tickets_sla": [],
-                })
-            bs_full = backlog_status(baseline_df)
-            age_full = aging_buckets(baseline_df)
-            sla = sla_solution(baseline_df)
-            open_today_full = int(baseline_df[baseline_df['solved_at'].isna()].shape[0])
-            # Created today: include today plus any immediately preceding non-business days
-            prev_bd = consecutive_non_business_start(today_norm)
-            today_end = today_norm + pd.Timedelta(days=1)
-            created_today_mask = (pd.to_datetime(baseline_df['created_at']) >= prev_bd) & (pd.to_datetime(baseline_df['created_at']) < today_end)
-            created_today_count = int(created_today_mask.sum())
-            # Resolved today: include today plus any immediately preceding non-business days
-            today_end = today_norm + pd.Timedelta(days=1)
-            solved_today_mask = (pd.to_datetime(baseline_df['solved_at'], errors='coerce') >= prev_bd) & (pd.to_datetime(baseline_df['solved_at'], errors='coerce') < today_end)
-            resolved_today_count = int(solved_today_mask.sum())
-            # Atualizados hoje (date_mod): incluir sempre HOJE + o dia útil anterior e quaisquer dias não úteis intermediários.
-            def _updated_today_count(df_in: pd.DataFrame) -> int:
-                """Conta tickets ATIVOS (não resolvidos/fechados) atualizados desde o último dia útil.
+            return jsonify(_empty_payload(meta, baseline_start, baseline_end, user_start, user_end, today_norm, baseline_df, baseline_df_raw))
 
-                Exclui tickets com solved_at preenchido (considerados concluídos). Fecha a janela em today_end e
-                inicia em previous_business_day(today_norm), incluindo dias não úteis intermediários.
-                """
-                if df_in is None or df_in.empty or 'updated_at' not in df_in.columns:
-                    return 0
-                upd = pd.to_datetime(df_in['updated_at'], errors='coerce')
-                if upd.isna().all():
-                    return 0
-                prev_bd_loc = previous_business_day(today_norm)
-                today_end_loc = today_norm + pd.Timedelta(days=1)
-                mask_range = (upd >= prev_bd_loc) & (upd < today_end_loc)
-                # Apenas tickets ainda não resolvidos / não fechados
-                open_mask = pd.Series([True] * len(df_in), index=df_in.index)
-                if 'solved_at' in df_in.columns:
-                    open_mask &= pd.to_datetime(df_in['solved_at'], errors='coerce').isna()
-                if 'closed_at' in df_in.columns:
-                    open_mask &= pd.to_datetime(df_in['closed_at'], errors='coerce').isna()
-                return int((mask_range & open_mask).sum())
-            updated_today_count = _updated_today_count(baseline_df)
-            # títulos baseline
-            try:
-                baseline_titles = []
-                baseline_titles_detail = []
-                src_titles_df = baseline_df_raw  # usar baseline bruto para estabilidade
-                if src_titles_df is not None and not src_titles_df.empty and 'title' in src_titles_df.columns:
-                    title_series = src_titles_df['title'].dropna().astype(str)
-                    if 'category' in src_titles_df.columns:
-                        cat_col = src_titles_df['category']
-                        cat_text = []
-                        for v in cat_col:
-                            if isinstance(v, dict):
-                                name = v.get('completename') or v.get('name') or ''
-                            else:
-                                name = str(v) if v is not None else ''
-                            cat_text.append(name)
-                        cats = pd.Series(cat_text, index=src_titles_df.index)
-                    else:
-                        cats = pd.Series([''] * len(src_titles_df), index=src_titles_df.index)
-                    tmp = pd.DataFrame({'title': title_series, 'category_text': cats})
-                    tmp['category_text'] = tmp['category_text'].fillna('').replace({'None': ''})
-                    agg = tmp.groupby('title')['category_text'].agg(lambda s: s.value_counts().index[0] if len(s.value_counts()) else '')
-                    for t, cat in agg.items():
-                        title_clean = str(t).strip()
-                        if not title_clean:
-                            continue
-                        baseline_titles.append(title_clean)
-                        baseline_titles_detail.append({'title': title_clean, 'category': (cat or '').strip()})
-                    baseline_titles.sort(key=lambda x: x.lower())
-                    baseline_titles_detail.sort(key=lambda d: d['title'].lower())
-            except Exception:
-                baseline_titles = []
-                baseline_titles_detail = []
-            return jsonify({
-                "meta": {**meta, "baseline_window": {"start": str(baseline_start.date()), "end": str(baseline_end.date()), "used": True},
-                          "user_window": {"start": str(user_start.date()), "end": str(user_end.date())},
-                          "ignore_period_widgets": ["aging","backlog_status","open_today","created_today","resolved_today","updated_today"]},
-                "count": 0,
-                "note": "Sem tickets no intervalo filtrado; exibindo métricas de baseline.",
-                "series": {
-                    "created": empty_series,
-                    "resolved": empty_series,
-                    "backlog": empty_series,
-                    "backlog_trend": empty_series,
-                    "category": empty_series,
-                    "resolution_hours": empty_series,
-                    "resolution_hours_trend": empty_series,
-                    "backlog_status": _dict_to_labels_data(bs_full),
-                    "aging": _dict_to_labels_data(age_full),
-                    "load_by_user": empty_series,
-                    "load_by_group": empty_series,
-                },
-                "sla": sla,
-                "open_today": open_today_full,
-                "created_today": created_today_count,
-                "resolved_today": resolved_today_count,
-                "updated_today": updated_today_count,
-                "baseline_titles": baseline_titles,
-                "baseline_titles_detail": baseline_titles_detail,
-                "tickets_sla": [],
-            })
-
-        # Janela estendida
+        # Janela estrita / estendida
         created_all = pd.to_datetime(user_df['created_at'], errors='coerce')
         solved_all = pd.to_datetime(user_df['solved_at'], errors='coerce')
         end_boundary = user_end + pd.Timedelta(days=1)
@@ -571,7 +624,6 @@ def api_data():
             _c_ext, _r_ext, backlog_ext = created_resolved(df_extended, freq=freq)
             backlog_trend = backlog_trend_series(backlog_ext)
             cat_filtered = pd.Series(dtype=float)
-            pr_filtered = pd.Series(dtype=float)
             imp_filtered = pd.Series(dtype=float)
             cat_status_pivot = pd.DataFrame()
         else:
@@ -589,173 +641,37 @@ def api_data():
             except Exception:
                 cat_status_pivot = pd.DataFrame()
 
-        # Resolution hours
         solved_dt_ext = pd.to_datetime(df_extended['solved_at'], errors='coerce')
         res_mask = solved_dt_ext.notna() & (solved_dt_ext >= user_start) & (solved_dt_ext < end_boundary)
         df_resolved_window = df_extended[res_mask].copy()
         resolution_hours_series = resolution_time_series(df_resolved_window, freq=freq)
         resolution_hours_trend = backlog_trend_series(resolution_hours_series)
 
-        # Baseline-only metrics
         bs_full = backlog_status(baseline_df)
         age_full = aging_buckets(baseline_df)
         sla = sla_solution(baseline_df)
         open_today_full = int(baseline_df[baseline_df['solved_at'].isna()].shape[0])
-        # Created today (include today and immediately preceding non-business days)
         prev_bd = consecutive_non_business_start(today_norm)
         today_end = today_norm + pd.Timedelta(days=1)
         created_today_mask = (pd.to_datetime(baseline_df['created_at']) >= prev_bd) & (pd.to_datetime(baseline_df['created_at']) < today_end)
         created_today_count = int(created_today_mask.sum())
-        # Resolved today: include today plus any immediately preceding non-business days (same rule as created_today)
         solved_today_mask = (pd.to_datetime(baseline_df['solved_at'], errors='coerce') >= prev_bd) & (pd.to_datetime(baseline_df['solved_at'], errors='coerce') < today_end)
         resolved_today_count = int(solved_today_mask.sum())
-        def _updated_today_count(df_in: pd.DataFrame) -> int:
-            """Conta apenas tickets ainda em aberto atualizados desde o último dia útil (exclui resolvidos/fechados)."""
-            if df_in is None or df_in.empty or 'updated_at' not in df_in.columns:
-                return 0
-            upd = pd.to_datetime(df_in['updated_at'], errors='coerce')
-            if upd.isna().all():
-                return 0
-            prev_bd_loc = previous_business_day(today_norm)
-            today_end_loc = today_norm + pd.Timedelta(days=1)
-            mask_range = (upd >= prev_bd_loc) & (upd < today_end_loc)
-            open_mask = pd.Series([True] * len(df_in), index=df_in.index)
-            if 'solved_at' in df_in.columns:
-                open_mask &= pd.to_datetime(df_in['solved_at'], errors='coerce').isna()
-            if 'closed_at' in df_in.columns:
-                open_mask &= pd.to_datetime(df_in['closed_at'], errors='coerce').isna()
-            return int((mask_range & open_mask).sum())
-        updated_today_count = _updated_today_count(baseline_df)
+        updated_today_count = _updated_today_count(baseline_df, today_norm)
         load = load_by_assignee(df_strict)
 
-        # Lista de grupos (sempre derivada do baseline SEM filtro de grupo para não "encolher" o dropdown)
-        assigned_groups = []
-        try:
-            src_groups_df = baseline_df_unfiltered_groups
-            if src_groups_df is not None and not src_groups_df.empty and 'assigned_group' in src_groups_df.columns:
-                seen = set()
-                for val in src_groups_df['assigned_group'].dropna().unique():
-                    gid = None; gname = None
-                    if isinstance(val, dict):
-                        gid = val.get('id')
-                        gname = val.get('completename') or val.get('name') or None
-                    else:
-                        s = str(val)
-                        if s.isdigit():
-                            gid = int(s)
-                        else:
-                            gname = s
-                    key = gid if gid is not None else gname
-                    if key is None or key in seen:
-                        continue
-                    seen.add(key)
-                    assigned_groups.append({"id": gid if gid is not None else gname, "name": gname if gname is not None else (str(gid) if gid is not None else str(gname))})
-        except Exception:
-            assigned_groups = []
-
-        def map_series_labels(s: pd.Series, mapper: dict):
-            if s is None or s.empty:
-                return s
-            mapped = []
-            for k in s.index:
-                try:
-                    name = mapper.get(int(k))
-                except Exception:
-                    name = mapper.get(str(k)) if isinstance(k, str) else None
-                if name is None:
-                    name = str(k)
-                mapped.append(name)
-            out = pd.Series(s.values, index=mapped)
-            return out.groupby(level=0).sum()
-
-        bs_named = map_series_labels(bs_full, STATUS_MAP)
-    # prioridade removida; ignorar pr_filtered
-        imp_named = map_series_labels(imp_filtered, LEVEL_MAP)
-
-        category_stacked_payload = {"labels": [], "datasets": []}
-        if 'cat_status_pivot' not in locals():
-            cat_status_pivot = pd.DataFrame()
-        if cat_status_pivot is not None and not cat_status_pivot.empty:
-            category_stacked_payload['labels'] = [str(i) for i in cat_status_pivot.index]
-            status_order = [v for _, v in STATUS_MAP.items() if v in cat_status_pivot.columns]
-            for extra in [c for c in cat_status_pivot.columns if c not in status_order]:
-                status_order.append(extra)
-            for st in status_order:
-                vals = cat_status_pivot.get(st)
-                if vals is None:
-                    continue
-                category_stacked_payload['datasets'].append({'label': st, 'data': [int(v) for v in vals.values]})
-
-        # --- Group stacked (assigned group x status) similar to category_stacked ---
-        load_by_group_stacked_payload = {"labels": [], "datasets": []}
-        try:
-            if not df_strict.empty and 'assigned_group' in df_strict.columns and 'status' in df_strict.columns:
-                tmp_grp = df_strict[['assigned_group', 'status']].copy()
-                def _gdisplay(v):
-                    if isinstance(v, dict):
-                        return (v.get('completename') or v.get('name') or '').strip()
-                    return str(v).strip() if v is not None else ''
-                tmp_grp['group_name'] = tmp_grp['assigned_group'].apply(_gdisplay).fillna('').replace({'None': ''})
-                tmp_grp['status_name'] = tmp_grp['status'].apply(lambda x: STATUS_MAP.get(int(x), str(x)) if pd.notna(x) else 'Desconhecido')
-                grp_status_pivot = tmp_grp.groupby(['group_name', 'status_name']).size().unstack(fill_value=0)
-                # Remove linha vazia (sem nome) se existir
-                if '' in grp_status_pivot.index and grp_status_pivot.shape[0] > 1:
-                    grp_status_pivot = grp_status_pivot.drop(index=[''])
-                if not grp_status_pivot.empty:
-                    # Ordenar grupos por total desc
-                    totals = grp_status_pivot.sum(axis=1).sort_values(ascending=False)
-                    grp_status_pivot = grp_status_pivot.loc[totals.index]
-                    load_by_group_stacked_payload['labels'] = [str(i) for i in grp_status_pivot.index]
-                    status_order_g = [v for _, v in STATUS_MAP.items() if v in grp_status_pivot.columns]
-                    for extra in [c for c in grp_status_pivot.columns if c not in status_order_g]:
-                        status_order_g.append(extra)
-                    for st in status_order_g:
-                        vals = grp_status_pivot.get(st)
-                        if vals is None:
-                            continue
-                        load_by_group_stacked_payload['datasets'].append({'label': st, 'data': [int(v) for v in vals.values]})
-        except Exception:
-            load_by_group_stacked_payload = {"labels": [], "datasets": []}
-
-        # baseline titles (6 meses) para configuração SLA manual por título
-        try:
-            baseline_titles = []
-            baseline_titles_detail = []
-            src_titles_df = baseline_df_raw
-            if src_titles_df is not None and not src_titles_df.empty and 'title' in src_titles_df.columns:
-                title_series = src_titles_df['title'].dropna().astype(str)
-                if 'category' in src_titles_df.columns:
-                    cat_col = src_titles_df['category']
-                    cat_text = []
-                    for v in cat_col:
-                        if isinstance(v, dict):
-                            name = v.get('completename') or v.get('name') or ''
-                        else:
-                            name = str(v) if v is not None else ''
-                        cat_text.append(name)
-                    cats = pd.Series(cat_text, index=src_titles_df.index)
-                else:
-                    cats = pd.Series([''] * len(src_titles_df), index=src_titles_df.index)
-                tmp = pd.DataFrame({'title': title_series, 'category_text': cats})
-                tmp['category_text'] = tmp['category_text'].fillna('').replace({'None': ''})
-                agg = tmp.groupby('title')['category_text'].agg(lambda s: s.value_counts().index[0] if len(s.value_counts()) else '')
-                for t, cat in agg.items():
-                    title_clean = str(t).strip()
-                    if not title_clean:
-                        continue
-                    baseline_titles.append(title_clean)
-                    baseline_titles_detail.append({'title': title_clean, 'category': (cat or '').strip()})
-                baseline_titles.sort(key=lambda x: x.lower())
-                baseline_titles_detail.sort(key=lambda d: d['title'].lower())
-        except Exception:
-            baseline_titles = []
-            baseline_titles_detail = []
+        assigned_groups = _assigned_groups_list(baseline_df_unfiltered_groups)
+        bs_named = _map_series_labels(bs_full, STATUS_MAP)
+        imp_named = _map_series_labels(imp_filtered, LEVEL_MAP)  # mantido para futura expansão
+        category_stacked_payload = _category_stacked(cat_status_pivot)
+        load_by_group_stacked_payload = _group_stacked(df_strict)
+        baseline_titles, baseline_titles_detail = _baseline_titles(baseline_df_raw)
 
         payload = {
             "meta": {**meta,
                       "baseline_window": {"start": str(baseline_start.date()), "end": str(baseline_end.date()), "used": True},
                       "user_window": {"start": str(user_start.date()), "end": str(user_end.date())},
-                      "ignore_period_widgets": ["aging","backlog_status","open_today","created_today","resolved_today","updated_today"]},
+                      "ignore_period_widgets": IGNORE_PERIOD_WIDGETS},
             "count": int(len(df_strict)),
             "period": {"start": start_s, "end": end_s, "gran": gran},
             "assigned_groups": assigned_groups,
@@ -922,7 +838,6 @@ def api_tickets():
             sel = df[df['ticket_id'].isin(wanted_ids)].copy()
             used_ids = True
 
-    gran_lower = gran.lower()
     if not used_ids:
         if source in ('created','resolved'):
             ps, pe = _period_bounds_from_label(label, gran)
