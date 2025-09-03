@@ -206,38 +206,6 @@ def _window_filter(df: pd.DataFrame, start: pd.Timestamp, end: pd.Timestamp) -> 
 STATUS_MAP = {1: "Novo", 2: "Atribuído", 3: "Planejado", 4: "Pendente", 5: "Resolvido", 6: "Fechado"}
 LEVEL_MAP = {1: "Muito baixo", 2: "Baixo", 3: "Médio", 4: "Alto", 5: "Muito alto"}
 
-def _resolve_group_name(client: GLPIClient, gid: Any, cache: Dict[int, str]) -> str:
-    try:
-        i = int(gid)
-    except Exception:
-        return ""
-    if i in cache:
-        return cache[i]
-    try:
-        g = client.get_item("Group", i)
-        name = g.get("completename") or g.get("name") or str(i)
-        cache[i] = name
-        return name
-    except Exception:
-        cache[i] = str(i)
-        return cache[i]
-
-def _resolve_category_name(client: GLPIClient, cid: Any, cache: Dict[int, str]) -> str:
-    try:
-        i = int(cid)
-    except Exception:
-        return ""
-    if i in cache:
-        return cache[i]
-    try:
-        c = client.get_item("ITILCategory", i)
-        name = c.get("completename") or c.get("name") or str(i)
-        cache[i] = name
-        return name
-    except Exception:
-        cache[i] = str(i)
-        return cache[i]
-
 def _period_bounds_from_label(label: str, gran: str) -> Tuple[pd.Timestamp, pd.Timestamp]:
     # label is ISO date (start of day or start of week)
     start = pd.Timestamp(label)
@@ -666,7 +634,6 @@ def api_data():
             src_groups_df = baseline_df_unfiltered_groups
             if src_groups_df is not None and not src_groups_df.empty and 'assigned_group' in src_groups_df.columns:
                 seen = set()
-                gids_to_resolve = []
                 for val in src_groups_df['assigned_group'].dropna().unique():
                     gid = None; gname = None
                     if isinstance(val, dict):
@@ -683,26 +650,6 @@ def api_data():
                         continue
                     seen.add(key)
                     assigned_groups.append({"id": gid if gid is not None else gname, "name": gname if gname is not None else (str(gid) if gid is not None else str(gname))})
-                    if gid is not None and (gname is None or gname == str(gid)):
-                        gids_to_resolve.append(gid)
-                if gids_to_resolve and GLPI_URL and GLPI_USER_TOKEN:
-                    client = GLPIClient(GLPI_URL, GLPI_USER_TOKEN)
-                    try:
-                        client.init_session(get_full=False)
-                        cache = {}
-                        for i, ag in enumerate(assigned_groups):
-                            try:
-                                if isinstance(ag.get('id'), int):
-                                    name = _resolve_group_name(client, ag['id'], cache)
-                                    if name:
-                                        assigned_groups[i]['name'] = name
-                            except Exception:
-                                continue
-                    finally:
-                        try:
-                            client.kill_session()
-                        except Exception:
-                            pass
         except Exception:
             assigned_groups = []
 

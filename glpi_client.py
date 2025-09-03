@@ -165,13 +165,3 @@ class GLPIClient:
     def raw_search(self, itemtype: str, params: dict):
         """Faz uma chamada crua à rota search/<itemtype> (retorna Response)."""
         return self._get(f"search/{itemtype}", params=params, timeout=120)
-
-    @timed
-    def get_item(self, itemtype: str, item_id: int):
-        """Obtém um item por ID (ex.: Ticket/123)."""
-        return self._get(f"{itemtype}/{item_id}", params={}, timeout=60).json()
-
-    @timed
-    def get_subitems(self, itemtype: str, item_id: int, subitemtype: str, params: Optional[dict] = None):
-        """Obtém subitens de um item (ex.: Ticket/123/Group_Ticket)."""
-        return self._get(f"{itemtype}/{item_id}/{subitemtype}", params=params or {}, timeout=120).json()
