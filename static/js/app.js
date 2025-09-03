@@ -392,17 +392,26 @@ const WidgetLayout = (() => {
       card.dataset.resizeRegion = reg;
     });
     card.addEventListener('mouseleave', () => { if (!resizing) { card.style.cursor = ''; region = ''; } });
-    card.addEventListener('mousedown', e => {
-      if (e.button !== 0) return;
+    // Support pointer events + touch fallback for resize start so mobile users can resize by touch
+    function startResizeFromEvent(e) {
+      // Normalize touch event to have clientX/clientY
+      let cx = e.clientX, cy = e.clientY;
+      if (e.type === 'touchstart' && e.touches && e.touches[0]) { cx = e.touches[0].clientX; cy = e.touches[0].clientY; }
+      // If mouse, require left button
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
       // only start if on edge region (and not inside interactive header buttons)
       if (!region) return;
       const item = layout.find(x => x.id === id); if (!item) return;
-      resizing = true; card.dataset.resizing = '1'; e.stopPropagation(); e.preventDefault();
-      startX = e.clientX; startY = e.clientY; startW = card.offsetWidth; startH = card.offsetHeight;
+      resizing = true; card.dataset.resizing = '1';
+      e.stopPropagation();
+      try { e.preventDefault(); } catch (err) {}
+      startX = cx; startY = cy; startW = card.offsetWidth; startH = card.offsetHeight;
       startCols = item.cols; startRows = item.rows; startGridX = item.x; startGridY = item.y;
       const snapW = CELL_W / 2, snapH = CELL_H / 2;
       function move(ev) {
-        const dx = ev.clientX - startX; const dy = ev.clientY - startY;
+        let mvX = ev.clientX, mvY = ev.clientY;
+        if (ev.type === 'touchmove' && ev.touches && ev.touches[0]) { mvX = ev.touches[0].clientX; mvY = ev.touches[0].clientY; }
+        const dx = mvX - startX; const dy = mvY - startY;
         let dColsRight = 0, dRowsDown = 0, dColsLeft = 0, dRowsUp = 0;
         if (region.includes('e')) dColsRight = Math.round(dx / snapW);
         if (region.includes('s')) dRowsDown = Math.round(dy / snapH);
@@ -430,11 +439,31 @@ const WidgetLayout = (() => {
         resizing = false; delete card.dataset.resizing; save(layout);
         document.removeEventListener('mousemove', move);
         document.removeEventListener('mouseup', up);
+        document.removeEventListener('touchmove', move, { passive: false });
+        document.removeEventListener('touchend', up);
+        document.removeEventListener('pointermove', move);
+        document.removeEventListener('pointerup', up);
         card.style.cursor = '';
       }
-      document.addEventListener('mousemove', move);
-      document.addEventListener('mouseup', up);
-    });
+      // Attach appropriate move/up listeners for pointer/mouse/touch
+      if (window.PointerEvent) {
+        document.addEventListener('pointermove', move);
+        document.addEventListener('pointerup', up);
+      } else {
+        document.addEventListener('mousemove', move);
+        document.addEventListener('mouseup', up);
+        document.addEventListener('touchmove', move, { passive: false });
+        document.addEventListener('touchend', up);
+      }
+    }
+
+    // Bind start event for resize using Pointer Events when available, otherwise mouse+touch
+    if (window.PointerEvent) {
+      card.addEventListener('pointerdown', startResizeFromEvent);
+    } else {
+      card.addEventListener('mousedown', startResizeFromEvent);
+      card.addEventListener('touchstart', function (t) { try { t.preventDefault(); } catch (e) { } startResizeFromEvent(t); }, { passive: false });
+    }
   }
   function initDrag(card, layout) {
     let startX, startY, origX, origY, previewX, previewY; const id = card.getAttribute('data-widget');
@@ -442,26 +471,60 @@ const WidgetLayout = (() => {
     if (!handle) return;
     handle.classList.add('drag-handle');
     card.dataset.dragHandle = 'widget-actions';
-    handle.addEventListener('mousedown', (e) => {
-      if (e.button !== 0) return;
-      if (e.target && e.target.closest('button')) return; // não arrastar ao clicar ícones
-      const item = layout.find(w => w.id === id); if (!item) return;
+    // Use Pointer Events when available (unifies mouse/touch/stylus). Fallback to mouse+touch.
+    handle.style.touchAction = handle.style.touchAction || 'none'; // prevent browser panning during touch drag
+    function getClientFromEvent(ev) {
+      if (!ev) return { clientX: 0, clientY: 0 };
+      if (ev.touches && ev.touches[0]) return { clientX: ev.touches[0].clientX, clientY: ev.touches[0].clientY };
+      return { clientX: ev.clientX, clientY: ev.clientY };
+    }
+    function onPointerDown(ev) {
+      // If mouse, only left button
+      if (ev.pointerType === 'mouse' && ev.button !== 0) return;
+      if (ev.target && ev.target.closest('button')) return; // don't start drag when clicking icons
       if (card.dataset.resizing === '1' || card.dataset.resizeRegion) return;
-      startX = e.clientX; startY = e.clientY; origX = item.x || 0; origY = item.y || 0; previewX = origX; previewY = origY;
+      const item = layout.find(w => w.id === id); if (!item) return;
+      const pt = getClientFromEvent(ev);
+      startX = pt.clientX; startY = pt.clientY; origX = item.x || 0; origY = item.y || 0; previewX = origX; previewY = origY;
       card.classList.add('dragging'); document.body.classList.add('drag-mode'); card.style.zIndex = 999;
-      function onMove(ev) {
-        const dx = ev.clientX - startX, dy = ev.clientY - startY; const snapW = CELL_W / 2, snapH = CELL_H / 2;
-        const deltaCols = Math.round(dx / snapW), deltaRows = Math.round(dy / snapH);
-        const newX = Math.max(0, origX + deltaCols), newY = Math.max(0, origY + deltaRows);
-        if (newX !== previewX || newY !== previewY) { previewX = newX; previewY = newY; card.style.left = (previewX * snapW) + 'px'; card.style.top = (previewY * snapH) + 'px'; }
+      function onMove(ev2) {
+        try {
+          const p = getClientFromEvent(ev2);
+          const dx = p.clientX - startX, dy = p.clientY - startY; const snapW = CELL_W / 2, snapH = CELL_H / 2;
+          const deltaCols = Math.round(dx / snapW), deltaRows = Math.round(dy / snapH);
+          const newX = Math.max(0, origX + deltaCols), newY = Math.max(0, origY + deltaRows);
+          if (newX !== previewX || newY !== previewY) { previewX = newX; previewY = newY; card.style.left = (previewX * snapW) + 'px'; card.style.top = (previewY * snapH) + 'px'; }
+        } catch (err) { }
       }
       function onUp() {
         const item2 = layout.find(w => w.id === id); if (item2) { item2.x = previewX; item2.y = previewY; if (AUTO_RESOLVE) resolveCollisions(item2, layout); apply(layout); save(layout); }
         card.classList.remove('dragging'); document.body.classList.remove('drag-mode'); card.style.zIndex = '';
-        document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp);
+        if (window.PointerEvent) {
+          document.removeEventListener('pointermove', onMove);
+          document.removeEventListener('pointerup', onUp);
+        } else {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+          document.removeEventListener('touchmove', onMove, { passive: false });
+          document.removeEventListener('touchend', onUp);
+        }
       }
-      document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
-    });
+      if (window.PointerEvent) {
+        document.addEventListener('pointermove', onMove);
+        document.addEventListener('pointerup', onUp);
+      } else {
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+        document.addEventListener('touchmove', onMove, { passive: false });
+        document.addEventListener('touchend', onUp);
+      }
+    }
+    if (window.PointerEvent) {
+      handle.addEventListener('pointerdown', onPointerDown);
+    } else {
+      handle.addEventListener('mousedown', onPointerDown);
+      handle.addEventListener('touchstart', function (t) { try { t.preventDefault(); } catch (e) {} onPointerDown(t); }, { passive: false });
+    }
   }
   function boxesOverlap(a, b) { return !(a.x + a.cols <= b.x || b.x + b.cols <= a.x || a.y + a.rows <= b.y || b.y + b.rows <= a.y); }
   function resolveCollisions(moved, layout) {
