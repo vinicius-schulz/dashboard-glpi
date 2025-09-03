@@ -42,31 +42,33 @@
         <button class="range-btn custom" data-custom="1" title="Intervalo personalizado">Personalizado</button>
       </div>
     </label>
-    <label>Categoria:
-      <select id="catFilter">
-        <option value="todos">Todos</option>
-        <option value="holding">Holding</option>
-        <option value="unimed">Unimed</option>
-      </select>
-    </label>
-    <label>Grupo Atribuído:
-      <select id="assignedGroupFilter">
-        <option value="todos">Todos</option>
-      </select>
-    </label>
-    <label>Status:
-      <select id="statusFilter">
-        <option value="todos">Todos</option>
-        <option value="solucionado">Solucionado</option>
-        <option value="nao_solucionado">Não solucionado</option>
-        <option value="1">Novo</option>
-        <option value="2">Atribuído</option>
-        <option value="3">Planejado</option>
-        <option value="4">Pendente</option>
-        <option value="5">Resolvido</option>
-        <option value="6">Fechado</option>
-      </select>
-    </label>
+    <span id="multiOptionsInputs">
+      <label>Categoria:
+        <select id="catFilter">
+          <option value="todos">Todos</option>
+          <option value="holding">Holding</option>
+          <option value="unimed">Unimed</option>
+        </select>
+      </label>
+      <label>Grupo Atribuído:
+        <select id="assignedGroupFilter">
+          <option value="todos">Todos</option>
+        </select>
+      </label>
+      <label>Status:
+        <select id="statusFilter">
+          <option value="todos">Todos</option>
+          <option value="solucionado">Solucionado</option>
+          <option value="nao_solucionado">Não solucionado</option>
+          <option value="1">Novo</option>
+          <option value="2">Atribuído</option>
+          <option value="3">Planejado</option>
+          <option value="4">Pendente</option>
+          <option value="5">Resolvido</option>
+          <option value="6">Fechado</option>
+        </select>
+      </label>
+    </span>
     <!-- Botão Aplicar removido: atualização agora ocorre automaticamente em mudanças de filtros -->
     <button id="exportBtn" title="Exportar / Imprimir dashboard">Exportar / Imprimir</button>
     <button id="controlsToggle" class="controls-toggle-extern" title="Mostrar/Ocultar filtros"

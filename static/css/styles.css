@@ -147,7 +147,6 @@ header h1 {
 	font-weight: 600;
 	cursor: pointer;
 	height: 34px;
-	display: inline-flex;
 	align-items: center;
 	gap: 6px;
 }
@@ -156,6 +155,7 @@ header h1 {
 	filter: brightness(.92);
 }
 
+.controls span#multiOptionsInputs,
 .controls span#dateRangeInputs,
 .controls span#monthRangeInputs {
 	display: flex;
@@ -163,11 +163,13 @@ header h1 {
 	align-items: flex-end;
 }
 
+.controls span#multiOptionsInputs label,
 .controls span#dateRangeInputs label,
 .controls span#monthRangeInputs label {
 	min-width: 140px;
 }
 
+.controls span#multiOptionsInputs label,
 .controls span#dateRangeInputs input,
 .controls span#monthRangeInputs input {
 	flex: 0 0 24px;
@@ -178,24 +180,10 @@ header h1 {
 	.controls {
 		gap: 12px;
 	}
-
+	.controls span#multiOptionsInputs,	
 	.controls span#dateRangeInputs,
 	.controls span#monthRangeInputs {
 		flex-wrap: wrap;
-	}
-}
-
-@media (max-width: 900px) {
-	.controls {
-		gap: 10px;
-	}
-
-	.controls label {
-		min-width: 140px;
-	}
-
-	.controls #presetRanges {
-		flex: 1 1 100%;
 	}
 }
 
@@ -204,7 +192,7 @@ header h1 {
 	/* Stack controls on small screens and force preset buttons to occupy separate lines */
 	.controls {
 		flex-direction: column;
-		align-items: start;
+		align-items: center;
 	}
 
 	/* Ensure preset container wraps vertically even if inline style exists */
@@ -224,15 +212,23 @@ header h1 {
 		box-sizing: border-box;
 	}
 
+	.controls span#multiOptionsInputs,
 	.controls span#dateRangeInputs,
 	.controls span#monthRangeInputs {
 		width: auto;
+		display: grid;
+	}
+
+	.controls span#multiOptionsInputs label,
+	.controls span#dateRangeInputs  label,
+	.controls span#monthRangeInputs label {
+		min-width: 220px;
 	}
 
 	.controls label,
 	.controls #presetRanges,
 	.controls button#exportBtn {
-		width: auto;
+		min-width: 220px;
 		max-width: 760px;
 	}
 
@@ -612,14 +608,15 @@ body.drag-mode {
 /* Keep the top header inside the layout panel fixed while only the body content scrolls */
 #layoutPanel .modal-top-header {
 	position: sticky;
-	top: 0; /* keep in same place relative to the lp-body's scroll */
+	top: 0;
+	/* keep in same place relative to the lp-body's scroll */
 	z-index: 10;
-    background: var(--bg);
-    padding-top: 10px;
-    padding-left: 10px;
-    padding-right: 10px;
-    padding-bottom: 8px;
-    margin-bottom: 8px;
+	background: var(--bg);
+	padding-top: 10px;
+	padding-left: 10px;
+	padding-right: 10px;
+	padding-bottom: 8px;
+	margin-bottom: 8px;
 }
 
 /* No additional rules required for lp-tabpanes; lp-body controls scrolling. */
