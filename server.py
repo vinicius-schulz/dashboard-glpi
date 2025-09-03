@@ -1080,80 +1080,56 @@ def api_tickets():
         else:
             sel = df_strict
 
-    client = GLPIClient(GLPI_URL, GLPI_USER_TOKEN)
-    client.init_session(get_full=False)
-    try:
-        rows = []
-        for _, r in sel.head(1000).iterrows():
-            tid = int(r.get('ticket_id'))
-            try:
-                t = client.get_item('Ticket', tid)
-            except Exception:
-                t = {}
-            title = t.get('name') or t.get('title') or ''
-            created = t.get('date') or r.get('created_at')
-            updated = t.get('date_mod') or t.get('date_modification') or None
-            status_val = t.get('status') if t.get('status') is not None else r.get('status')
-            status_name = STATUS_MAP.get(int(status_val)) if status_val is not None else ''
-            raw_assigned_group = r.get('assigned_group')
-            assigned_gid = t.get('groups_id_assign') or (raw_assigned_group.get('id') if isinstance(raw_assigned_group, dict) else raw_assigned_group)
-            raw_cat_val = r.get('category')
-            cat_name = ''
-            if raw_cat_val is not None:
-                try:
-                    if isinstance(raw_cat_val, dict):
-                        cand = raw_cat_val.get('completename') or raw_cat_val.get('name') or ''
-                    else:
-                        cand = str(raw_cat_val)
-                    if any(ch.isalpha() for ch in cand):
-                        cat_name = cand
-                except Exception:
-                    pass
-            cat_id = t.get('itilcategories_id') or (raw_cat_val if (isinstance(raw_cat_val, int) or (isinstance(raw_cat_val, str) and raw_cat_val.isdigit())) else None)
-            if not cat_name and cat_id:
-                try:
-                    cat_name = _resolve_category_name(client, cat_id, {})
-                except Exception:
-                    cat_name = ''
-            if cat_name.isdigit():
-                try:
-                    resolved_name = _resolve_category_name(client, cat_name, {})
-                    if resolved_name and not resolved_name.isdigit():
-                        cat_name = resolved_name
-                    else:
-                        cat_name = ''
-                except Exception:
-                    cat_name = ''
-            assigned_group_name = ''
-            if raw_assigned_group is not None:
-                if isinstance(raw_assigned_group, dict):
-                    assigned_group_name = raw_assigned_group.get('completename') or raw_assigned_group.get('name') or ''
-                else:
-                    try:
-                        sgrp = str(raw_assigned_group)
-                        if any(ch.isalpha() for ch in sgrp):
-                            assigned_group_name = sgrp
-                    except Exception:
-                        pass
-            if not assigned_group_name and assigned_gid:
-                try:
-                    assigned_group_name = _resolve_group_name(client, assigned_gid, {})
-                except Exception:
-                    assigned_group_name = ''
-            rows.append({
-                'id': tid,
-                'titulo': title,
-                'status': status_name,
-                'categoria': cat_name,
-                'abertura': created,
-                'ultima_atualizacao': updated,
-                'grupo_atribuido': assigned_group_name,
-            })
-    finally:
+    # Construção otimizada sem chamadas per-ticket: todos os campos necessários já vêm do bulk_search
+    rows = []
+    for _, r in sel.head(1000).iterrows():
         try:
-            client.kill_session()
+            tid = int(r.get('ticket_id'))
         except Exception:
-            pass
+            continue
+        title = (r.get('title') or '').strip()
+        created = r.get('created_at')
+        updated = r.get('updated_at') or r.get('solved_at') or r.get('closed_at')
+        status_val = r.get('status')
+        status_name = ''
+        try:
+            if status_val is not None and str(status_val).isdigit():
+                status_name = STATUS_MAP.get(int(status_val), str(status_val))
+            elif status_val:
+                status_name = str(status_val)
+        except Exception:
+            status_name = str(status_val) if status_val is not None else ''
+
+        # Categoria: pode vir como dict expandido ou id/nome simples
+        raw_cat_val = r.get('category')
+        cat_name = ''
+        if isinstance(raw_cat_val, dict):
+            cat_name = (raw_cat_val.get('completename') or raw_cat_val.get('name') or '').strip()
+        elif raw_cat_val is not None:
+            s = str(raw_cat_val).strip()
+            # Se contém letras, já é nome; se só dígitos fica em branco (evita segunda chamada)
+            if any(ch.isalpha() for ch in s):
+                cat_name = s
+
+        # Grupo atribuído
+        raw_assigned_group = r.get('assigned_group')
+        assigned_group_name = ''
+        if isinstance(raw_assigned_group, dict):
+            assigned_group_name = (raw_assigned_group.get('completename') or raw_assigned_group.get('name') or '').strip()
+        elif raw_assigned_group is not None:
+            sgrp = str(raw_assigned_group).strip()
+            if any(ch.isalpha() for ch in sgrp):
+                assigned_group_name = sgrp
+
+        rows.append({
+            'id': tid,
+            'titulo': title,
+            'status': status_name,
+            'categoria': cat_name,
+            'abertura': created,
+            'ultima_atualizacao': updated,
+            'grupo_atribuido': assigned_group_name,
+        })
 
     return jsonify({
         'meta': meta,
