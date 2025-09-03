@@ -206,22 +206,6 @@ def _window_filter(df: pd.DataFrame, start: pd.Timestamp, end: pd.Timestamp) -> 
 STATUS_MAP = {1: "Novo", 2: "Atribuído", 3: "Planejado", 4: "Pendente", 5: "Resolvido", 6: "Fechado"}
 LEVEL_MAP = {1: "Muito baixo", 2: "Baixo", 3: "Médio", 4: "Alto", 5: "Muito alto"}
 
-def _resolve_user_name(client: GLPIClient, uid: Any, cache: Dict[int, str]) -> str:
-    try:
-        i = int(uid)
-    except Exception:
-        return ""
-    if i in cache:
-        return cache[i]
-    try:
-        u = client.get_item("User", i)
-        name = u.get("name") or u.get("realname") or str(i)
-        cache[i] = name
-        return name
-    except Exception:
-        cache[i] = str(i)
-        return cache[i]
-
 def _resolve_group_name(client: GLPIClient, gid: Any, cache: Dict[int, str]) -> str:
     try:
         i = int(gid)
