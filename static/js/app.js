@@ -1282,7 +1282,7 @@ function generateInsight(widgetId, series, meta) {
   } catch (e) { return ''; }
 }
 
-// --- Help popover for small ❔ buttons ---
+// --- Help popover for small ? buttons ---
 function createHelpPopover(text) {
   const el = document.createElement('div');
   el.className = 'help-popover';

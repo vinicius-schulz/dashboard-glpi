@@ -33,33 +33,6 @@ def bulk_search_observer_tickets(
     """
     if not observer_group_ids:
         return pd.DataFrame()
-
-    # 1. Descobrir dinamicamente IDs dos campos (observer / grupo técnico)
-    if observer_field_id is None or (include_assigned_groups and assigned_group_field_id is None):
-        try:
-            opts = client.list_search_options("Ticket") or {}
-        except Exception:
-            opts = {}
-        if observer_field_id is None:
-            for k, spec in opts.items():
-                if str(k).isdigit():
-                    nm = (spec.get("name") or "").lower()
-                    if "observador" in nm and "grupo" in nm:
-                        try:
-                            observer_field_id = int(k)
-                            break
-                        except Exception:
-                            pass
-        if include_assigned_groups and assigned_group_field_id is None:
-            for k, spec in opts.items():
-                if str(k).isdigit():
-                    nm = (spec.get("name") or "").lower()
-                    if "grupo" in nm and "técnico" in nm:
-                        try:
-                            assigned_group_field_id = int(k)
-                            break
-                        except Exception:
-                            pass
     if observer_field_id is None:
         observer_field_id = 65
     if include_assigned_groups and assigned_group_field_id is None:
@@ -68,37 +41,21 @@ def bulk_search_observer_tickets(
     # 2. Cache de nomes de grupos
     group_name_cache: Dict[int, Optional[str]] = {}
     for gid in observer_group_ids:
-        try:
-            name = client.try_get_group_name(gid) if hasattr(client, "try_get_group_name") else None
-            if not name:
-                g = client.get_item("Group", gid)
-                name = g.get("completename") or g.get("name")
-        except Exception:
-            name = None
-        group_name_cache[gid] = name
+        group_name_cache[gid] = None
 
     rows: List[Dict[str, Any]] = []
     seen_ticket_ids: Set[int] = set()
 
     def _run(field_id: int, role: str):
         for gid, gname in group_name_cache.items():
-            strategies: List[tuple] = []
-            if gname:
-                last_seg = gname.split(" > ")[-1].split("/")[-1].strip()
-                strategies.append(("equals", gname, f"{role}:equals/full"))
-                strategies.append(("contains", gname, f"{role}:contains/full"))
-                if last_seg and last_seg != gname:
-                    strategies.append(("contains", last_seg, f"{role}:contains/last_segment"))
-            strategies.append(("equals", str(gid), f"{role}:equals/id"))
-
-            for searchtype, value, tag in strategies:
                 start = 0
+                tag = f"{role}:equals/id"
                 before = len(rows)
                 while True:
                     params = {
                         "criteria[0][field]": str(field_id),
-                        "criteria[0][searchtype]": searchtype,
-                        "criteria[0][value]": value,
+                        "criteria[0][searchtype]": "equals",
+                        "criteria[0][value]": str(gid),
                         # forcedisplay selecionado para alimentar métricas
                         # 1 = título/name do ticket
                         "forcedisplay[0]": "1",
@@ -169,8 +126,8 @@ def bulk_search_observer_tickets(
                     start = end + 1
                 if len(rows) > before:  # encontrou algo nesta estratégia => parar para próximo grupo
                     break
-            if max_tickets is not None and len(rows) >= max_tickets:
-                break
+            # if max_tickets is not None and len(rows) >= max_tickets:
+            #     break
 
     _run(observer_field_id, role="observer")
     if include_assigned_groups and assigned_group_field_id is not None and (max_tickets is None or len(rows) < max_tickets):

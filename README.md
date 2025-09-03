@@ -9,7 +9,7 @@ Dashboard analítico conectado ao GLPI (API REST) para visualizar e explorar cha
 * Layout livre: arraste, redimensione, oculte widgets, salvos em `localStorage` por navegador.
 * Presets de período (1 semana, mês atual, últimos 3/6 meses etc.) + granularidade Diário / Semanal / Mensal.
 * Filtros de categoria (Holding vs Unimed) quando detectável pela nomenclatura.
-* Ajuda contextual (botão ❔ com popover e tooltip).
+* Ajuda contextual (botão ? com popover e tooltip).
 * Modal detalhado de tickets ao clicar em pontos / barras / contadores.
 * Auto refresh configurável (minutos) por widget de layout.
 * Baseline inteligente de 6 meses para widgets “snapshot” (status, aging, abertos agora, criados hoje).
@@ -37,7 +37,7 @@ Notas:
 
 ## Executar Localmente (Python)
 
-1. Criar e ativar um ambiente virtual (opcional):
+1. Criar e ativar e desativar um ambiente virtual (opcional):
 
 ```bash
 python -m venv venv
@@ -45,6 +45,9 @@ python -m venv venv
 source venv/bin/activate
 # Windows PowerShell
 venv\Scripts\Activate.ps1
+
+# Desativar
+deactivate
 ```
 
 2. Instalar dependências e iniciar o servidor:
@@ -108,7 +111,7 @@ docker push SEU_USUARIO/dashboard-glpi:1.0.0
 | Header | Título do dashboard. Largura ajusta dinamicamente se o layout exceder a viewport. |
 | Barra de filtros | Granularidade (Diário/Semanal/Mensal). Período por datas ou meses. Presets de intervalo (1 semana, mês atual, 3/6 meses etc.). Filtro de categoria. Atualização automática ao alterar qualquer filtro + botão Exportar/Imprimir. |
 | Engrenagem (⚙️) | Abre painel de personalização (mostrar/ocultar widgets, redimensionar, auto-refresh, logout). |
-| Widgets | Cartões com gráficos (Chart.js) ou números grandes (snapshot). Botão ❔ para ajuda (tooltip + popover clicável). |
+| Widgets | Cartões com gráficos (Chart.js) ou números grandes (snapshot). Botão ? para ajuda (tooltip + popover clicável). |
 | Modal de tickets | Clique em ponto/barra/contador abre lista (até 1000 tickets) com ordenação e redimensionamento de colunas. |
 | Exportar/Imprimir | Gera nova janela com HTML formatado (título, meta, cada gráfico como imagem, ajuda e interpretação) e dispara `window.print()`. |
 

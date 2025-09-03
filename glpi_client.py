@@ -161,12 +161,6 @@ class GLPIClient:
         finally:
             self.session_token = None
 
-    # APIs
-    @timed
-    def list_search_options(self, itemtype: str) -> Dict[str, Any]:
-        """Lista metadados de campos pesquisáveis para um itemtype (ex.: Group_Ticket)."""
-        return self._get(f"listSearchOptions/{itemtype}", params={}, timeout=60).json()
-
     @timed
     def raw_search(self, itemtype: str, params: dict):
         """Faz uma chamada crua à rota search/<itemtype> (retorna Response)."""
@@ -181,38 +175,3 @@ class GLPIClient:
     def get_subitems(self, itemtype: str, item_id: int, subitemtype: str, params: Optional[dict] = None):
         """Obtém subitens de um item (ex.: Ticket/123/Group_Ticket)."""
         return self._get(f"{itemtype}/{item_id}/{subitemtype}", params=params or {}, timeout=120).json()
-
-    # ---------------- Métodos auxiliares não-críticos (evitam ruído em log) ----------------
-    @timed
-    def try_get_group_name(self, group_id: int) -> Optional[str]:
-        """Tenta obter nome/completename de um grupo.
-
-        Evita poluir perf.log com erros esperados (403) quando o usuário
-        não tem permissão para ler certos grupos, retornando None em vez de
-        levantar exceção nesses casos.
-        """
-        url = f"{self.base}/Group/{group_id}"
-        try:
-            r = self.session.get(
-                url,
-                headers=self._headers(),
-                params=self._params({}),
-                timeout=30,
-                allow_redirects=False,
-            )
-        except Exception:
-            return None
-        # 403/404 tratados como ausência de permissão/dado
-        if r.status_code in (403, 404):
-            return None
-        if r.is_redirect or r.is_permanent_redirect:
-            return None
-        try:
-            r.raise_for_status()
-        except Exception:
-            return None
-        try:
-            js = r.json()
-        except Exception:
-            return None
-        return js.get("completename") or js.get("name")
