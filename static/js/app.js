@@ -151,7 +151,7 @@ function initAssignedGroupDropdown() {
       wrapper.className = 'checkbox-dropdown';
       wrapper.id = 'assignedGroupDropdown';
       wrapper.dataset.open = 'false';
-      wrapper.innerHTML = `\n        <button type="button" class="chkdd-toggle" id="assignedGroupToggle" aria-haspopup="listbox" aria-expanded="false" title="Selecionar grupos atribuídos">Todos</button>\n        <div class="chkdd-panel hidden" id="assignedGroupPanel" role="listbox" aria-multiselectable="true">\n          <div class="chkdd-search-wrapper"><input type="text" id="assignedGroupSearch" placeholder="Filtrar..." aria-label="Filtrar grupos" /></div>\n          <div class="chkdd-actions">\n            <button type="button" id="assignedGroupSelectAll" class="mini">Marcar todos</button>\n            <button type="button" id="assignedGroupClear" class="mini">Limpar</button>\n          </div>\n          <div class="chkdd-options" id="assignedGroupOptions"></div>\n        </div>\n        <input type="hidden" id="assignedGroupFilter" value="todos" />`; // hidden substitui select
+  wrapper.innerHTML = `\n        <button type="button" class="chkdd-toggle" id="assignedGroupToggle" aria-haspopup="listbox" aria-expanded="false" title="Selecionar grupos atribuídos">Todos</button>\n        <div class="chkdd-panel hidden" id="assignedGroupPanel" role="listbox" aria-multiselectable="true">\n          <div class="chkdd-search-wrapper"><input type="text" id="assignedGroupSearch" placeholder="Filtrar..." aria-label="Filtrar grupos" /></div>\n          <div class="chkdd-actions">\n            <button type="button" id="assignedGroupClear" class="mini">Limpar</button>\n          </div>\n          <div class="chkdd-options" id="assignedGroupOptions"></div>\n        </div>\n        <input type="hidden" id="assignedGroupFilter" value="todos" />`; // hidden substitui select
       legacySel.parentNode.replaceChild(wrapper, legacySel);
     }
   }
@@ -161,7 +161,7 @@ function initAssignedGroupDropdown() {
   const panel = document.getElementById('assignedGroupPanel');
   const optsBox = document.getElementById('assignedGroupOptions');
   const hiddenInput = document.getElementById('assignedGroupFilter');
-  const btnAll = document.getElementById('assignedGroupSelectAll');
+  // Botão 'Marcar todos' removido
   const btnClear = document.getElementById('assignedGroupClear');
   const searchInp = document.getElementById('assignedGroupSearch');
   function closePanel() { panel.classList.add('hidden'); toggleBtn.setAttribute('aria-expanded','false'); dd.dataset.open='false'; }
@@ -201,6 +201,14 @@ function initAssignedGroupDropdown() {
     const val = cb.value; 
     const row = cb.closest('.chkdd-opt'); if (row) { if (cb.checked) row.classList.add('is-checked'); else row.classList.remove('is-checked'); }
     if (val === 'todos') {
+      // Novo comportamento: ao marcar explicitamente 'Todos', marcar todos os demais checkboxes
+      if (cb.checked) {
+        const all = optsBox.querySelectorAll('input[type="checkbox"]');
+        all.forEach(x => { x.checked = true; const r = x.closest('.chkdd-opt'); r && r.classList.add('is-checked'); });
+        // segue para persistência (não remove 'todos' aqui; função de coleta filtrará se necessário)
+        syncHiddenAndPersist();
+        return; // já sincronizado
+      }
       // Se usuário desmarca "Todos" e não há outros, mantém todos selecionados como default
       if (!cb.checked) {
         const any = [...optsBox.querySelectorAll('input[type="checkbox"]')].some(x=> x.value !== 'todos' && x.checked);
@@ -220,12 +228,6 @@ function initAssignedGroupDropdown() {
         }
       }
     }
-    syncHiddenAndPersist();
-  });
-  btnAll && btnAll.addEventListener('click', ()=>{
-    const all = optsBox.querySelectorAll('input[type="checkbox"]');
-    all.forEach(cb=> { cb.checked = true; const row = cb.closest('.chkdd-opt'); row && row.classList.add('is-checked'); });
-    // Mantemos 'todos' marcado junto dos demais (interpretação: seleção abrangente)
     syncHiddenAndPersist();
   });
   btnClear && btnClear.addEventListener('click', ()=>{
