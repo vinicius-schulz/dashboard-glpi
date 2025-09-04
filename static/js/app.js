@@ -45,7 +45,7 @@ function captureOriginalDefaultsOnce() {
   _originalDefaults = {
     gran: document.getElementById('gran')?.value || '',
     cat: document.getElementById('catFilter')?.value || '',
-    assignedGroup: document.getElementById('assignedGroupFilter')?.value || 'todos',
+  assignedGroup: getAssignedGroupSelectedValues && getAssignedGroupSelectedValues().length ? getAssignedGroupSelectedValues() : 'todos',
   status: document.getElementById('statusFilter')?.value || 'todos',
     start: document.getElementById('start')?.value || '',
     end: document.getElementById('end')?.value || '',
@@ -68,7 +68,7 @@ function saveFilters() {
     const data = {
       gran: document.getElementById('gran')?.value,
       cat: document.getElementById('catFilter')?.value,
-      assignedGroup: document.getElementById('assignedGroupFilter')?.value,
+  assignedGroup: getAssignedGroupSelectedValues(),
   status: document.getElementById('statusFilter')?.value,
       start: document.getElementById('start')?.value,
       end: document.getElementById('end')?.value,
@@ -98,11 +98,11 @@ function loadFilters() {
   let parsed = null;
   try { parsed = JSON.parse(localStorage.getItem(FILTERS_KEY) || 'null'); } catch { parsed = null; }
     if (!parsed) return false; 
-    document.getElementById('assignedGroupFilter')?.addEventListener('change', () => { saveFilters(); loadData(); });
+  // eventos de mudança agora tratados dentro do dropdown custom (checkboxes)
   try {
     if (parsed.gran && document.getElementById('gran')) document.getElementById('gran').value = parsed.gran;
     if (parsed.cat && document.getElementById('catFilter')) document.getElementById('catFilter').value = parsed.cat;
-    if (parsed.assignedGroup && document.getElementById('assignedGroupFilter')) document.getElementById('assignedGroupFilter').value = parsed.assignedGroup;
+  if (parsed.assignedGroup) { window._pendingAssignedGroupRestore = Array.isArray(parsed.assignedGroup)? parsed.assignedGroup : [parsed.assignedGroup]; }
   if (parsed.status && document.getElementById('statusFilter')) document.getElementById('statusFilter').value = parsed.status;
     if (parsed.start && document.getElementById('start')) document.getElementById('start').value = parsed.start;
     if (parsed.end && document.getElementById('end')) document.getElementById('end').value = parsed.end;
@@ -139,6 +139,142 @@ function resetFilters() {
 }
 // Carrega filtros cedo para evitar corrida com primeiro load
 window.addEventListener('DOMContentLoaded', () => { loadFilters(); });
+
+// ---- Checkbox Dropdown (Assigned Groups) ----
+function initAssignedGroupDropdown() {
+  const ddExisting = document.getElementById('assignedGroupDropdown');
+  // Fallback: se ainda existir um <select multiple id="assignedGroupFilter"> (layout antigo) converter
+  if (!ddExisting) {
+    const legacySel = document.querySelector('select#assignedGroupFilter[multiple]');
+    if (legacySel) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'checkbox-dropdown';
+      wrapper.id = 'assignedGroupDropdown';
+      wrapper.dataset.open = 'false';
+      wrapper.innerHTML = `\n        <button type="button" class="chkdd-toggle" id="assignedGroupToggle" aria-haspopup="listbox" aria-expanded="false" title="Selecionar grupos atribuídos">Todos</button>\n        <div class="chkdd-panel hidden" id="assignedGroupPanel" role="listbox" aria-multiselectable="true">\n          <div class="chkdd-search-wrapper"><input type="text" id="assignedGroupSearch" placeholder="Filtrar..." aria-label="Filtrar grupos" /></div>\n          <div class="chkdd-actions">\n            <button type="button" id="assignedGroupSelectAll" class="mini">Marcar todos</button>\n            <button type="button" id="assignedGroupClear" class="mini">Limpar</button>\n          </div>\n          <div class="chkdd-options" id="assignedGroupOptions"></div>\n        </div>\n        <input type="hidden" id="assignedGroupFilter" value="todos" />`; // hidden substitui select
+      legacySel.parentNode.replaceChild(wrapper, legacySel);
+    }
+  }
+  const dd = document.getElementById('assignedGroupDropdown');
+  if (!dd || dd._initDone) return; dd._initDone = true;
+  const toggleBtn = document.getElementById('assignedGroupToggle');
+  const panel = document.getElementById('assignedGroupPanel');
+  const optsBox = document.getElementById('assignedGroupOptions');
+  const hiddenInput = document.getElementById('assignedGroupFilter');
+  const btnAll = document.getElementById('assignedGroupSelectAll');
+  const btnClear = document.getElementById('assignedGroupClear');
+  const searchInp = document.getElementById('assignedGroupSearch');
+  function closePanel() { panel.classList.add('hidden'); toggleBtn.setAttribute('aria-expanded','false'); dd.dataset.open='false'; }
+  function openPanel() { panel.classList.remove('hidden'); toggleBtn.setAttribute('aria-expanded','true'); dd.dataset.open='true'; searchInp && searchInp.focus(); }
+  toggleBtn.addEventListener('click', (e)=>{ e.stopPropagation(); if (dd.dataset.open==='true') closePanel(); else openPanel(); });
+  document.addEventListener('click', (e)=>{ if (!dd.contains(e.target)) closePanel(); });
+  document.addEventListener('keydown', (e)=>{ if (e.key==='Escape') closePanel(); });
+  function renderOptions(list) {
+    optsBox.innerHTML='';
+    list.forEach(item=>{
+      const row=document.createElement('label'); row.className='chkdd-opt'; row.setAttribute('data-value', item.value);
+      row.innerHTML=`<input type="checkbox" value="${escapeHtml(item.value)}" ${item.checked? 'checked':''}/> <span>${escapeHtml(item.label)}</span>`;
+  if (item.checked) row.classList.add('is-checked');
+      optsBox.appendChild(row);
+    });
+  }
+  function updateToggleLabel() {
+    const values = getAssignedGroupSelectedValues();
+    if (!values.length || values.includes('todos')) { toggleBtn.textContent='Todos'; return; }
+    if (values.length===1) { toggleBtn.textContent=findAssignedGroupLabel(values[0]) || '1 selecionado'; return; }
+    toggleBtn.textContent = `${values.length} selecionados`;
+  }
+  function syncHiddenAndPersist(fireReload=true){
+    const vals = getAssignedGroupSelectedValues();
+    hiddenInput.value = vals.length? vals.join(',') : 'todos';
+    updateToggleLabel();
+    saveFilters();
+    if (fireReload) {
+      // debounce para permitir múltiplos cliques antes de recarregar
+      if (window._assignedGroupReloadTimer) clearTimeout(window._assignedGroupReloadTimer);
+      window._assignedGroupReloadTimer = setTimeout(()=> { loadData(); }, 450);
+    }
+  }
+  optsBox.addEventListener('change', (e)=>{ 
+    if (!e.target.matches('input[type="checkbox"]')) return; 
+    const cb = e.target; 
+    const val = cb.value; 
+    const row = cb.closest('.chkdd-opt'); if (row) { if (cb.checked) row.classList.add('is-checked'); else row.classList.remove('is-checked'); }
+    if (val === 'todos') {
+      // Se usuário desmarca "Todos" e não há outros, mantém todos selecionados como default
+      if (!cb.checked) {
+        const any = [...optsBox.querySelectorAll('input[type="checkbox"]')].some(x=> x.value !== 'todos' && x.checked);
+        if (!any) { cb.checked = true; row && row.classList.add('is-checked'); }
+      }
+    } else {
+      // Se marcou outro e 'todos' está marcado, apenas remove 'todos' da seleção (mas não força única seleção)
+      if (cb.checked) {
+        const todosCb = optsBox.querySelector('input[type="checkbox"][value="todos"]');
+        if (todosCb && todosCb.checked) { todosCb.checked = false; const tr = todosCb.closest('.chkdd-opt'); tr && tr.classList.remove('is-checked'); }
+      } else {
+        // Se desmarcou e não restou nenhum, reativa 'todos'
+        const any = [...optsBox.querySelectorAll('input[type="checkbox"]')].some(x=> x.value !== 'todos' && x.checked);
+        if (!any) {
+          const todosCb = optsBox.querySelector('input[type="checkbox"][value="todos"]');
+          if (todosCb) { todosCb.checked = true; const tr = todosCb.closest('.chkdd-opt'); tr && tr.classList.add('is-checked'); }
+        }
+      }
+    }
+    syncHiddenAndPersist();
+  });
+  btnAll && btnAll.addEventListener('click', ()=>{
+    const all = optsBox.querySelectorAll('input[type="checkbox"]');
+    all.forEach(cb=> { cb.checked = true; const row = cb.closest('.chkdd-opt'); row && row.classList.add('is-checked'); });
+    // Mantemos 'todos' marcado junto dos demais (interpretação: seleção abrangente)
+    syncHiddenAndPersist();
+  });
+  btnClear && btnClear.addEventListener('click', ()=>{
+    const all = optsBox.querySelectorAll('input[type="checkbox"]');
+    let todosCb = null;
+    all.forEach(cb=> {
+      const row = cb.closest('.chkdd-opt');
+      if (cb.value === 'todos') { todosCb = cb; }
+      cb.checked = false; row && row.classList.remove('is-checked');
+    });
+    if (todosCb) { todosCb.checked = true; const tr = todosCb.closest('.chkdd-opt'); tr && tr.classList.add('is-checked'); }
+    syncHiddenAndPersist(); // hiddenInput recebe 'todos'
+  });
+  searchInp && searchInp.addEventListener('input', ()=>{
+    const q = searchInp.value.toLowerCase();
+    optsBox.querySelectorAll('.chkdd-opt').forEach(row=>{
+      const txt = row.textContent.toLowerCase();
+      row.style.display = txt.includes(q)? '' : 'none';
+    });
+  });
+  // Expor funções globais usadas quando dados chegam do backend
+  window._assignedGroupDropdown = {
+    populate(data, selectedValues){
+      // data: array {value,label}; selectedValues: array de valores previamente escolhidos
+      let restore = Array.isArray(selectedValues) && selectedValues.length ? selectedValues : (window._pendingAssignedGroupRestore || []);
+      // Se restore incluir 'todos' ignore outros
+      if (restore.includes('todos')) restore = ['todos'];
+      const list = data.map(d=> ({...d, checked: restore.length ? restore.includes(d.value) : d.value==='todos'}));
+  renderOptions(list);
+  updateToggleLabel();
+    },
+    rebuildSelection(){ updateToggleLabel(); }
+  };
+}
+function findAssignedGroupLabel(value){
+  const row = document.querySelector(`.chkdd-opt[data-value="${CSS.escape(value)}"] span`);
+  return row ? row.textContent : value;
+}
+function getAssignedGroupSelectedValues(){
+  const cbs = document.querySelectorAll('#assignedGroupOptions input[type="checkbox"]');
+  if (!cbs.length) return [];
+  let vals = [...cbs].filter(cb=> cb.checked).map(cb=> cb.value);
+  if (vals.includes('todos') && vals.length > 1) {
+    // se "todos" está junto com outros, removemos para enviar lista explícita
+    vals = vals.filter(v=> v !== 'todos');
+  }
+  return vals.length ? vals : ['todos'];
+}
+window.addEventListener('DOMContentLoaded', initAssignedGroupDropdown);
 // Recarregar ao mudar status
 window.addEventListener('DOMContentLoaded', () => {
   const sf = document.getElementById('statusFilter');
@@ -167,7 +303,7 @@ const Toasts = {
 window.addEventListener('DOMContentLoaded', () => { Loader.init(); Toasts.init(); });
 // Bind core filter change events (gran, cat, group, dates) to auto save + reload
 window.addEventListener('DOMContentLoaded', () => {
-  const bindIds = ['gran','catFilter','assignedGroupFilter','start','end','startMonth','endMonth'];
+  const bindIds = ['gran','catFilter','start','end','startMonth','endMonth'];
   bindIds.forEach(id => {
     const el = document.getElementById(id);
     if (el && !el._bindReload) {
@@ -980,9 +1116,11 @@ async function loadData() {
     }
 
     const catSel = document.getElementById('catFilter').value;
-    const assignedSel = (document.getElementById('assignedGroupFilter') && document.getElementById('assignedGroupFilter').value) || 'todos';
-  const statusSel = (document.getElementById('statusFilter') && document.getElementById('statusFilter').value) || 'todos';
-  const r = await fetch(`/api/data?gran=${encodeURIComponent(gran)}&start=${startNorm}&end=${endNorm}&cat=${encodeURIComponent(catSel)}&assigned_group=${encodeURIComponent(assignedSel)}&status=${encodeURIComponent(statusSel)}`);
+  let assignedList = 'todos';
+  const selectedGroups = getAssignedGroupSelectedValues();
+  if (selectedGroups && selectedGroups.length && !selectedGroups.includes('todos')) assignedList = selectedGroups.join(',');
+    const statusSel = (document.getElementById('statusFilter') && document.getElementById('statusFilter').value) || 'todos';
+    const r = await fetch(`/api/data?gran=${encodeURIComponent(gran)}&start=${startNorm}&end=${endNorm}&cat=${encodeURIComponent(catSel)}&assigned_group=${encodeURIComponent(assignedList)}&status=${encodeURIComponent(statusSel)}`);
     let js = null;
     try { js = await r.clone().json(); } catch { /* ignore parse errors */ }
     if (r.status === 503) {
@@ -1105,37 +1243,25 @@ async function loadData() {
 
     const s = js.series || {};
     lastSeries = s;
-    // Populate assigned group filter if backend provided
+    // Populate checkbox dropdown for assigned groups
     try {
-      const sel = document.getElementById('assignedGroupFilter');
-      if (sel && s && typeof js === 'object' && js.assigned_groups) {
-        const previous = sel.value || 'todos';
-        // Limpar e reconstruir para garantir ordem solicitada
-        sel.innerHTML = '';
-        function addOpt(value, label) {
-          const o = document.createElement('option');
-          o.value = value; o.textContent = label; sel.appendChild(o);
-        }
-        addOpt('todos', 'Todos');
-        addOpt('Holding', 'Holding');
-        addOpt('Unimed', 'Unimed');
-        // Precisamos saber se existe realmente o grupo "Aguardando Aprovação" na base para exibir a opção
-        const rawGroups = js.assigned_groups.map(g => ({ id: g.id, name: (g.name || '').trim() }));
-        const aguardGroup = rawGroups.find(g => g.name.toLowerCase() === 'aguardando aprovação');
-        if (aguardGroup) addOpt('Aguardando Aprovação', 'Aguardando Aprovação');
-        // Restante em ordem alfabética, excluindo itens já tratados e o grupo "Suporte Holding"
-        const exclude = new Set(['suporte holding', 'aguardando aprovação']);
-        const remaining = rawGroups
-          .filter(g => !exclude.has(g.name.toLowerCase()))
-          .sort((a, b) => a.name.localeCompare(b.name));
-        remaining.forEach(g => {
-          // Usar id para filtros originais
-          addOpt(String(g.id), g.name);
-        });
-        // Restaurar seleção se ainda existir
-        if (sel.querySelector(`option[value="${previous}"]`)) sel.value = previous; else sel.value = 'todos';
+      if (js.assigned_groups && window._assignedGroupDropdown) {
+        const currentSel = getAssignedGroupSelectedValues();
+        const raw = js.assigned_groups.map(g=> ({ id: g.id, name: (g.name||'').trim() }));
+        const aguard = raw.find(g=> g.name.toLowerCase() === 'aguardando aprovação');
+        const exclude = new Set(['suporte holding']);
+        const remaining = raw.filter(g=> !exclude.has(g.name.toLowerCase()) && g.name.toLowerCase() !== 'aguardando aprovação')
+          .sort((a,b)=> a.name.localeCompare(b.name));
+        const data = [
+          { value:'todos', label:'Todos' },
+          { value:'Holding', label:'Holding' },
+          { value:'Unimed', label:'Unimed' },
+          ...(aguard? [{ value:'Aguardando Aprovação', label:'Aguardando Aprovação'}]:[]),
+          ...remaining.map(g=> ({ value:String(g.id), label:g.name }))
+        ];
+        window._assignedGroupDropdown.populate(data, currentSel);
       }
-    } catch (e) { /* ignore populate errors */ }
+    } catch(e) { /* ignore */ }
     // Line charts
     if (s.created && s.resolved && s.created.data && s.resolved.data && s.created.data.length && s.resolved.data.length && document.getElementById('chartCumGap')) {
       const cumCreated = []; const cumResolved = []; const gap = [];
@@ -1780,7 +1906,9 @@ async function openTicketsModal(source, label, idsList) {
 
   // Enviar também userStart/userEnd para o backend poder restringir as séries que respeitam filtro
   const catSel = document.getElementById('catFilter').value;
-  const assignedSel = document.getElementById('assignedGroupFilter') ? document.getElementById('assignedGroupFilter').value : 'todos';
+  let assignedSel='todos';
+  const vals=getAssignedGroupSelectedValues();
+  if (vals && vals.length && !vals.includes('todos')) assignedSel = vals.join(',');
   const statusSel = document.getElementById('statusFilter') ? document.getElementById('statusFilter').value : 'todos';
   const params = new URLSearchParams({
     gran,

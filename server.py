@@ -254,9 +254,29 @@ def _apply_category_filter(df: pd.DataFrame, cat_filter: str) -> pd.DataFrame:
 
 
 def _apply_assigned_group_filter(df: pd.DataFrame, assigned_group_param: str) -> pd.DataFrame:
+    """Suporta agora múltiplos grupos separados por vírgula.
+    Regras especiais (holding/unimed/aguardando aprovação) aplicam-se somente se parâmetro único.
+    Quando múltiplo: concatena resultados (OR lógico) mantendo unicidade.
+    """
     if df is None or df.empty or assigned_group_param in (None, '', 'todos'):
         return df
-    param_lower = str(assigned_group_param).strip().lower()
+    raw = str(assigned_group_param).strip()
+    if ',' in raw:
+        parts = [p.strip() for p in raw.split(',') if p.strip()]
+        if not parts:
+            return df
+        frames = []
+        for p in parts:
+            try:
+                sub = _apply_assigned_group_filter(df, p)  # reuse single logic recursively
+                if sub is not None and not sub.empty:
+                    frames.append(sub)
+            except Exception:
+                continue
+        if not frames:
+            return df
+        return pd.concat(frames).drop_duplicates(subset=['ticket_id']) if 'ticket_id' in df.columns else pd.concat(frames).drop_duplicates()
+    param_lower = raw.lower()
     if param_lower in ('holding', 'unimed', 'aguardando aprovação'):
         def _gname(val):
             if isinstance(val, dict):
@@ -826,23 +846,49 @@ def api_tickets():
     def filter_assigned_group(df_in: pd.DataFrame) -> pd.DataFrame:
         if df_in is None or df_in.empty or assigned_group_param in (None, '', 'todos'):
             return df_in
-        param_lower = str(assigned_group_param).strip().lower()
+        raw = str(assigned_group_param).strip()
+        if ',' in raw:
+            parts = [p.strip() for p in raw.split(',') if p.strip() and p.lower() != 'todos']
+            if not parts:
+                return df_in
+            frames = []
+            for p in parts:
+                tmp_param = p  # single value reuse logic below
+                # Temporariamente aplicar mesma função recursivamente sem vírgulas
+                try:
+                    single_df = filter_assigned_group(df_in.assign(_tmp_col=1))  # dummy call (will be ignored)
+                except Exception:
+                    single_df = None
+                # Implementar chamando bloco único manualmente
+                frames.append(filter_assigned_group_single(df_in, tmp_param))
+            merged = pd.concat(frames) if frames else df_in
+            if 'ticket_id' in merged.columns:
+                merged = merged.drop_duplicates(subset=['ticket_id'])
+            else:
+                merged = merged.drop_duplicates()
+            return merged
+        return filter_assigned_group_single(df_in, raw)
+
+    def filter_assigned_group_single(df_in: pd.DataFrame, single_param: str) -> pd.DataFrame:
+        if df_in is None or df_in.empty or single_param in (None, '', 'todos'):
+            return df_in
+        param_lower = str(single_param).strip().lower()
         if param_lower in ('holding', 'unimed', 'aguardando aprovação'):
             def _gname(val):
                 if isinstance(val, dict):
                     return (val.get('completename') or val.get('name') or '').strip()
                 return str(val).strip() if val is not None else ''
-            if param_lower == 'holding':
-                mask = df_in['assigned_group'].apply(lambda v: _gname(v) == 'Suporte Holding') if 'assigned_group' in df_in.columns else []
-                return df_in[mask].copy()
-            if param_lower == 'aguardando aprovação':
-                mask = df_in['assigned_group'].apply(lambda v: _gname(v) == 'Aguardando Aprovação') if 'assigned_group' in df_in.columns else []
-                return df_in[mask].copy()
-            if param_lower == 'unimed':
-                mask = df_in['assigned_group'].apply(lambda v: _gname(v) not in ('Suporte Holding','Aguardando Aprovação')) if 'assigned_group' in df_in.columns else []
-                return df_in[mask].copy()
+        if param_lower == 'holding':
+            mask = df_in['assigned_group'].apply(lambda v: _gname(v) == 'Suporte Holding') if 'assigned_group' in df_in.columns else []
+            return df_in[mask].copy()
+        if param_lower == 'aguardando aprovação':
+            mask = df_in['assigned_group'].apply(lambda v: _gname(v) == 'Aguardando Aprovação') if 'assigned_group' in df_in.columns else []
+            return df_in[mask].copy()
+        if param_lower == 'unimed':
+            mask = df_in['assigned_group'].apply(lambda v: _gname(v) not in ('Suporte Holding','Aguardando Aprovação')) if 'assigned_group' in df_in.columns else []
+            return df_in[mask].copy()
         try:
-            aid = int(float(assigned_group_param))
+            aid = int(float(single_param))
             def match(row):
                 val = row.get('assigned_group')
                 if isinstance(val, dict):
@@ -858,7 +904,7 @@ def api_tickets():
         except Exception:
             if 'assigned_group' in df_in.columns and df_in['assigned_group'].dtype == object:
                 s = df_in['assigned_group'].astype(str).fillna('')
-                return df_in[s == assigned_group_param].copy()
+                return df_in[s == single_param].copy()
             return df_in
 
     df = filter_assigned_group(df)

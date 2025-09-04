@@ -51,9 +51,20 @@
         </select>
       </label>
       <label>Grupo Atribuído:
-        <select id="assignedGroupFilter">
-          <option value="todos">Todos</option>
-        </select>
+        <div class="checkbox-dropdown" id="assignedGroupDropdown" data-open="false">
+          <button type="button" class="chkdd-toggle" id="assignedGroupToggle" aria-haspopup="listbox" aria-expanded="false" title="Selecionar grupos atribuídos">Todos</button>
+          <div class="chkdd-panel hidden" id="assignedGroupPanel" role="listbox" aria-multiselectable="true">
+            <div class="chkdd-search-wrapper"><input type="text" id="assignedGroupSearch" placeholder="Filtrar..." aria-label="Filtrar grupos" /></div>
+            <div class="chkdd-actions">
+              <button type="button" id="assignedGroupSelectAll" class="mini">Marcar todos</button>
+              <button type="button" id="assignedGroupClear" class="mini">Limpar</button>
+            </div>
+            <div class="chkdd-options" id="assignedGroupOptions">
+              <!-- opções injetadas via JS -->
+            </div>
+          </div>
+          <input type="hidden" id="assignedGroupFilter" value="todos" />
+        </div>
       </label>
       <label>Status:
         <select id="statusFilter">
