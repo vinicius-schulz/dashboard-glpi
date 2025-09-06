@@ -250,14 +250,92 @@ def resolution_time_series(df: pd.DataFrame, freq: str = "D", work_start: int = 
         return pd.Series(dtype=float)
 
     sub = pd.DataFrame({
-        "created_at": created[mask],
-        "resolved_at": resolved[mask],
+        "created_at": created[mask].astype('datetime64[ns]'),
+        "resolved_at": resolved[mask].astype('datetime64[ns]'),
     })
 
-    def compute_row(r):
-        return business_hours_between(r["created_at"], r["resolved_at"], start_hour=work_start, end_hour=work_end)
+    # --- Performance otimização ---
+    # A abordagem anterior chamava business_hours_between (loop dia-a-dia) para cada linha.
+    # Isso escala como O(n * dias_entre_datas). Aqui calculamos horas úteis em O(n) usando:
+    # 1. Calendário de dias úteis pré-computado entre a menor data de criação e maior de resolução.
+    # 2. Fórmula: horas = horas_parciais_dia_inicial + horas_parciais_dia_final + dias_uteis_internos * horas_dia.
+    #    Onde dias_uteis_internos excluem o primeiro e último dia.
+    if sub.empty:
+        return pd.Series(dtype=float)
 
-    sub["lead_hours"] = sub.apply(compute_row, axis=1)
+    work_hours_per_day = work_end - work_start
+
+    created_vals = sub['created_at'].values
+    resolved_vals = sub['resolved_at'].values
+
+    # Pré-calendário de dias entre min(created) e max(resolved)
+    cal_start = pd.Timestamp(min(created_vals.min(), resolved_vals.min())).normalize()
+    cal_end = pd.Timestamp(max(created_vals.max(), resolved_vals.max())).normalize()
+    all_days = pd.date_range(cal_start, cal_end, freq='D')
+    # Map de dia útil
+    biz_flags = {d: is_business_day(d) for d in all_days}
+    # Prefix sum para contar dias úteis rapidamente
+    biz_array = np.array([1 if biz_flags[d] else 0 for d in all_days], dtype=int)
+    biz_cum = np.concatenate([[0], biz_array.cumsum()])  # len = len(all_days)+1
+    # Índice rápido: (date - cal_start).days  -> posição em all_days
+
+    def business_days_between_fast(start_day: pd.Timestamp, end_day: pd.Timestamp) -> int:
+        # conta dias úteis entre start (inclusive) e end (exclusive)
+        if end_day <= start_day:
+            return 0
+        i_start = (start_day - cal_start).days
+        i_end = (end_day - cal_start).days
+        if i_start < 0 or i_end > len(all_days):
+            # fallback para função original se algo sair do range (improvável)
+            return business_days_between(start_day, end_day)
+        return int(biz_cum[i_end] - biz_cum[i_start])
+
+    day_start_time = datetime.time(hour=work_start)
+    day_end_time = datetime.time(hour=work_end)
+
+    def fast_hours(s: pd.Timestamp, e: pd.Timestamp) -> float:
+        if pd.isna(s) or pd.isna(e) or e <= s:
+            return 0.0
+        ds = s.normalize(); de = e.normalize()
+        # Mesma data
+        if ds == de:
+            if not biz_flags.get(ds, False):
+                return 0.0
+            ds_start = pd.Timestamp(datetime.datetime.combine(ds.date(), day_start_time))
+            ds_end = pd.Timestamp(datetime.datetime.combine(ds.date(), day_end_time))
+            start_int = max(s, ds_start)
+            end_int = min(e, ds_end)
+            if end_int <= start_int:
+                return 0.0
+            return (end_int - start_int).total_seconds() / 3600.0
+        # Diferentes dias
+        hours = 0.0
+        # Dia inicial
+        if biz_flags.get(ds, False):
+            ds_start = pd.Timestamp(datetime.datetime.combine(ds.date(), day_start_time))
+            ds_end = pd.Timestamp(datetime.datetime.combine(ds.date(), day_end_time))
+            start_int = max(s, ds_start)
+            if ds_end > start_int:
+                hours += (ds_end - start_int).total_seconds() / 3600.0
+        # Dia final
+        if biz_flags.get(de, False):
+            de_start = pd.Timestamp(datetime.datetime.combine(de.date(), day_start_time))
+            de_end = pd.Timestamp(datetime.datetime.combine(de.date(), day_end_time))
+            end_int = min(e, de_end)
+            if end_int > de_start:
+                hours += (end_int - de_start).total_seconds() / 3600.0
+        # Dias completos no meio
+        if (de - ds).days > 1:
+            mid_start = ds + pd.Timedelta(days=1)
+            mid_end = de  # exclusivo
+            full_days = business_days_between_fast(mid_start, mid_end)
+            if full_days > 0:
+                hours += full_days * work_hours_per_day
+        return hours
+
+    # Computa horas em list comprehension (evita DataFrame.apply overhead)
+    lead_hours = [fast_hours(pd.Timestamp(s), pd.Timestamp(e)) for s, e in zip(created_vals, resolved_vals)]
+    sub['lead_hours'] = lead_hours
 
     # Agrupar pela data de resolução
     sub.index = pd.to_datetime(sub["resolved_at"]).dt.normalize()
