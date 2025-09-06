@@ -264,6 +264,16 @@
           </div>
           <p style="font-size:12px;color:#475569;margin-top:0">Outras preferências continuarão sendo adicionadas aqui.
           </p>
+          <hr style="margin:14px 0;border:none;border-top:1px solid #e2e8f0" />
+          <h4 style="margin:0 0 6px">Prompt para Análise com IA</h4>
+          <p style="font-size:12px;color:#475569;margin:0 0 8px;line-height:1.35">Use o texto abaixo para solicitar a uma LLM (ex.: ChatGPT, Claude, Gemini) uma análise dos dados atualmente filtrados. O conteúdo inclui filtros aplicados, métricas snapshot e séries completas retornadas pela API. Você pode editar antes de copiar.</p>
+          <div style="display:flex;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+            <button type="button" id="refreshAiPromptBtn" class="mini" title="Regenerar prompt com dados atuais">Atualizar Prompt</button>
+            <button type="button" id="copyAiPromptBtn" class="mini" title="Copiar prompt para a área de transferência">Copiar</button>
+            <span id="aiPromptStatus" style="font-size:11px;color:#64748b;align-self:center"></span>
+          </div>
+          <textarea id="aiAnalysisPrompt" readonly style="width:100%;min-height:240px;font-size:11px;font-family:Consolas,monospace;line-height:1.4;padding:8px;border:1px solid #cbd5e1;border-radius:6px;resize:vertical;white-space:pre"></textarea>
+          <p style="font-size:11px;color:#64748b;margin:6px 0 0">Privacidade: o conteúdo contém valores agregados de tickets. Revise antes de enviar a um serviço externo.</p>
         </div>
         <div class="lp-pane hidden" data-pane="sla">
           <h4 style="margin:4px 0 12px">Baseline de Títulos (últimos 6 meses)</h4>

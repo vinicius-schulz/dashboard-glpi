@@ -2019,3 +2019,62 @@ function initControlsToggle() {
   });
 }
 window.addEventListener('DOMContentLoaded', initControlsToggle);
+
+// === AI Prompt Builder (Análise dos dados filtrados) ===
+function buildAiPrompt() {
+  try {
+    const filters = (() => {
+      const gran = document.getElementById('gran')?.value || '';
+      const cat = document.getElementById('catFilter')?.value || '';
+      const status = document.getElementById('statusFilter')?.value || '';
+      const start = document.getElementById('start')?.value || '';
+      const end = document.getElementById('end')?.value || '';
+      const startMonth = document.getElementById('startMonth')?.value || '';
+      const endMonth = document.getElementById('endMonth')?.value || '';
+      const assigned = getAssignedGroupSelectedValues ? getAssignedGroupSelectedValues() : [];
+      return { gran, categoria: cat, status, periodo: { start, end, startMonth, endMonth }, grupos_atribuidos: assigned };
+    })();
+    const snapshot = {
+      open_today: typeof (window.lastMeta && window.lastMeta.open_today) === 'number' ? window.lastMeta.open_today : undefined,
+      meta: lastMeta || {},
+      counters: {
+        open_today: parseNumberSafe(document.getElementById('openTodayValue')?.textContent),
+        created_today: parseNumberSafe(document.getElementById('createdTodayValue')?.textContent),
+        resolved_today: parseNumberSafe(document.getElementById('resolvedTodayValue')?.textContent),
+        updated_today: parseNumberSafe(document.getElementById('updatedTodayValue')?.textContent),
+        awaiting_approval: parseNumberSafe(document.getElementById('awaitingApprovalValue')?.textContent)
+      }
+    };
+    const series = lastSeries || {};
+    const payload = { descricao: 'Contexto completo do dashboard GLPI filtrado', filtros: filters, snapshot, series };
+    const instructions = `Objetivo: Analisar os dados de tickets GLPI fornecidos (em JSON) e gerar insights acionáveis.\n` +
+      `1. Identifique tendências (crescimento ou redução de backlog, tempo médio de resolução, concentração por status/categoria/grupo).\n` +
+      `2. Aponte potenciais riscos (ex.: aumento de aging em faixas altas, gap cumulativo crescente, status pendente dominante).\n` +
+      `3. Sugira ações priorizadas (máx 6) para melhoria operacional.\n` +
+      `4. Caso dados aparentem inconsistências, indique validações recomendadas.\n` +
+      `Responda em português com seções: Resumo Executivo, Tendências, Riscos, Recomendações, Observações de Qualidade de Dados.`;
+    return instructions + '\n\n### DADOS_JSON\n' + JSON.stringify(payload, null, 2);
+  } catch (e) {
+    return 'Falha ao gerar prompt: ' + e;
+  }
+}
+function parseNumberSafe(txt){ if(!txt) return undefined; const n = parseInt(String(txt).replace(/\D+/g,'')||''); return isNaN(n)? undefined : n; }
+function updateAiPromptTextarea(){
+  const ta = document.getElementById('aiAnalysisPrompt');
+  if(!ta) return; ta.value = buildAiPrompt();
+  const st = document.getElementById('aiPromptStatus'); if(st) { st.textContent = 'Gerado em ' + new Date().toLocaleTimeString(); }
+}
+window.addEventListener('DOMContentLoaded', ()=>{
+  const refreshBtn = document.getElementById('refreshAiPromptBtn');
+  const copyBtn = document.getElementById('copyAiPromptBtn');
+  if (refreshBtn && !refreshBtn._aiBound) { refreshBtn._aiBound = true; refreshBtn.addEventListener('click', ()=> { updateAiPromptTextarea(); Toasts.push('info','Prompt atualizado'); }); }
+  if (copyBtn && !copyBtn._aiBound) { copyBtn._aiBound = true; copyBtn.addEventListener('click', async ()=> { const ta = document.getElementById('aiAnalysisPrompt'); if(!ta) return; try { ta.select(); ta.setSelectionRange(0, ta.value.length); await navigator.clipboard.writeText(ta.value); Toasts.push('success','Prompt copiado'); } catch(e){ Toasts.push('error','Falha ao copiar'); } }); }
+});
+// Hook pós loadData para atualizar prompt automaticamente quando dados mudarem
+(function(){
+  const originalLoadData = loadData;
+  loadData = async function(){
+    await originalLoadData.apply(this, arguments);
+    updateAiPromptTextarea();
+  };
+})();
