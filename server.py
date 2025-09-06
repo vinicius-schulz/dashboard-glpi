@@ -205,7 +205,7 @@ def _window_filter(df: pd.DataFrame, start: pd.Timestamp, end: pd.Timestamp) -> 
 # --- Helpers for names/mappings ---
 STATUS_MAP = {1: "Novo", 2: "Atribuído", 3: "Planejado", 4: "Pendente", 5: "Resolvido", 6: "Fechado"}
 LEVEL_MAP = {1: "Muito baixo", 2: "Baixo", 3: "Médio", 4: "Alto", 5: "Muito alto"}
-IGNORE_PERIOD_WIDGETS = ["aging","backlog_status","open_today","created_today","resolved_today","updated_today"]
+IGNORE_PERIOD_WIDGETS = ["aging","backlog_status","open_today","created_today","resolved_today","updated_today","awaiting_approval"]
 
 # ---------------------- Helpers de modularização api_data ----------------------
 
@@ -470,6 +470,22 @@ def _empty_payload(meta, baseline_start, baseline_end, user_start, user_end, tod
     resolved_today_count = int(solved_today_mask.sum()) if baseline_df is not None and not baseline_df.empty else 0
     updated_today_count = _updated_today_count(baseline_df, today_norm)
     baseline_titles, baseline_titles_detail = _baseline_titles(baseline_df_raw)
+    def _count_awaiting(dfref):
+        try:
+            if dfref is None or dfref.empty or 'assigned_group' not in dfref.columns:
+                return 0
+            def _g(v):
+                if isinstance(v, dict):
+                    return (v.get('completename') or v.get('name') or '').strip()
+                return str(v).strip() if v is not None else ''
+            names = dfref['assigned_group'].apply(_g).astype(str)
+            # match se o texto contiver "aguardando aprovação" em qualquer parte (case-insensitive)
+            mask_group = names.str.casefold().str.contains('aguardando aprovação')
+            mask_open = pd.to_datetime(dfref.get('solved_at'), errors='coerce').isna() if 'solved_at' in dfref.columns else pd.Series([True]*len(dfref), index=dfref.index)
+            return int((mask_group & mask_open).sum())
+        except Exception:
+            return 0
+    awaiting_appr = _count_awaiting(baseline_df)
     return {
         "meta": {**meta, "baseline_window": {"start": str(baseline_start.date()), "end": str(baseline_end.date()), "used": True},
                   "user_window": {"start": str(user_start.date()), "end": str(user_end.date())},
@@ -494,6 +510,7 @@ def _empty_payload(meta, baseline_start, baseline_end, user_start, user_end, tod
         "created_today": created_today_count,
         "resolved_today": resolved_today_count,
         "updated_today": updated_today_count,
+    "awaiting_approval": awaiting_appr,
         "baseline_titles": baseline_titles,
         "baseline_titles_detail": baseline_titles_detail,
         "tickets_sla": [],
@@ -724,6 +741,22 @@ def api_data():
         solved_today_mask = (pd.to_datetime(baseline_df['solved_at'], errors='coerce') >= prev_bd) & (pd.to_datetime(baseline_df['solved_at'], errors='coerce') < today_end)
         resolved_today_count = int(solved_today_mask.sum())
         updated_today_count = _updated_today_count(baseline_df, today_norm)
+        # Novo: quantidade de tickets em aberto cujo grupo atribuído é "Aguardando Aprovação" (ignora filtro de período)
+        def _count_awaiting(dfref):
+            try:
+                if dfref is None or dfref.empty or 'assigned_group' not in dfref.columns:
+                    return 0
+                def _g(v):
+                    if isinstance(v, dict):
+                        return (v.get('completename') or v.get('name') or '').strip()
+                    return str(v).strip() if v is not None else ''
+                names = dfref['assigned_group'].apply(_g).astype(str)
+                mask_group = names.str.casefold().str.contains('aguardando aprovação')
+                mask_open = pd.to_datetime(dfref.get('solved_at'), errors='coerce').isna() if 'solved_at' in dfref.columns else pd.Series([True]*len(dfref), index=dfref.index)
+                return int((mask_group & mask_open).sum())
+            except Exception:
+                return 0
+        awaiting_approval_count = _count_awaiting(baseline_df_unfiltered_groups)
         load = load_by_assignee(df_strict)
 
         assigned_groups = _assigned_groups_list(baseline_df_unfiltered_groups)
@@ -776,6 +809,7 @@ def api_data():
             'created_today': created_today_count,
             'resolved_today': resolved_today_count,
             'updated_today': updated_today_count,
+            'awaiting_approval': awaiting_approval_count,
             'baseline_titles': baseline_titles,
             'baseline_titles_detail': baseline_titles_detail,
             'tickets_sla': tickets_sla,
@@ -1040,6 +1074,14 @@ def api_tickets():
                 sel = df[open_mask_modal & (upd_dt >= prev_bd) & (upd_dt < end_today)]
             else:
                 sel = pd.DataFrame()
+        elif source == 'awaiting_approval':
+            def _g(v):
+                if isinstance(v, dict):
+                    return (v.get('completename') or v.get('name') or '').strip()
+                return str(v).strip() if v is not None else ''
+            solved_dt_all = pd.to_datetime(df['solved_at'], errors='coerce') if 'solved_at' in df.columns else pd.Series([pd.NaT]*len(df), index=df.index)
+            mask_open = solved_dt_all.isna()
+            sel = df[mask_open & df['assigned_group'].apply(_g).eq('Aguardando Aprovação')]
         elif source in ('category'):
             base = df_strict
             col = source
