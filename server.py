@@ -878,6 +878,7 @@ def api_tickets():
 
     # Grupo atribuído
     def filter_assigned_group(df_in: pd.DataFrame) -> pd.DataFrame:
+        """Filtra por um ou múltiplos grupos atribuídos (separados por vírgula) sem recursão infinita."""
         if df_in is None or df_in.empty or assigned_group_param in (None, '', 'todos'):
             return df_in
         raw = str(assigned_group_param).strip()
@@ -885,17 +886,11 @@ def api_tickets():
             parts = [p.strip() for p in raw.split(',') if p.strip() and p.lower() != 'todos']
             if not parts:
                 return df_in
-            frames = []
-            for p in parts:
-                tmp_param = p  # single value reuse logic below
-                # Temporariamente aplicar mesma função recursivamente sem vírgulas
-                try:
-                    single_df = filter_assigned_group(df_in.assign(_tmp_col=1))  # dummy call (will be ignored)
-                except Exception:
-                    single_df = None
-                # Implementar chamando bloco único manualmente
-                frames.append(filter_assigned_group_single(df_in, tmp_param))
-            merged = pd.concat(frames) if frames else df_in
+            frames = [filter_assigned_group_single(df_in, p) for p in parts]
+            frames = [f for f in frames if f is not None and not f.empty]
+            if not frames:
+                return df_in
+            merged = pd.concat(frames, ignore_index=True)
             if 'ticket_id' in merged.columns:
                 merged = merged.drop_duplicates(subset=['ticket_id'])
             else:
