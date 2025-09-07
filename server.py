@@ -730,6 +730,28 @@ def api_data():
         resolution_hours_series = resolution_time_series(df_resolved_window, freq=freq)
         resolution_hours_trend = backlog_trend_series(resolution_hours_series)
 
+        # --- Recorte explícito das séries para o intervalo solicitado pelo usuário ---
+        def _clip_daily_fill(s: pd.Series, start: pd.Timestamp, end: pd.Timestamp, freq_code: str) -> pd.Series:
+            if s is None or s.empty:
+                if freq_code == 'D':
+                    idx_full = pd.date_range(start.normalize(), end.normalize(), freq='D')
+                    return pd.Series([0]*len(idx_full), index=idx_full)
+                return s
+            if isinstance(s.index, pd.DatetimeIndex):
+                # Filtra limites (inclusive)
+                s = s[(s.index.normalize() >= start.normalize()) & (s.index.normalize() <= end.normalize())]
+                if freq_code == 'D':
+                    idx_full = pd.date_range(start.normalize(), end.normalize(), freq='D')
+                    s = s.reindex(idx_full, fill_value=0)
+            return s
+
+        created = _clip_daily_fill(created, user_start, user_end, freq)
+        resolved = _clip_daily_fill(resolved, user_start, user_end, freq)
+        backlog_ext = _clip_daily_fill(backlog_ext, user_start, user_end, freq)
+        backlog_trend = _clip_daily_fill(backlog_trend, user_start, user_end, freq)
+        resolution_hours_series = _clip_daily_fill(resolution_hours_series, user_start, user_end, freq)
+        resolution_hours_trend = _clip_daily_fill(resolution_hours_trend, user_start, user_end, freq)
+
         bs_full = backlog_status(baseline_df)
         age_full = aging_buckets(baseline_df)
         sla = sla_solution(baseline_df)
