@@ -41,7 +41,7 @@ from business_calendar import previous_business_day, business_days_between, cons
 
 load_dotenv()
 GLPI_URL = os.getenv("GLPI_URL", "").rstrip("/")
-GLPI_USER_TOKEN = os.getenv("GLPI_USER_TOKEN", "")
+GLPI_USER_TOKEN = os.getenv("GLPI_USER_TOKEN", "") 
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 
