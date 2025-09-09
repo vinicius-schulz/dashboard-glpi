@@ -13,44 +13,147 @@ body {
 }
 
 /* Checkbox dropdown for Assigned Groups */
-.checkbox-dropdown { position: relative; display: inline-block; }
+.checkbox-dropdown {
+	position: relative;
+	display: inline-block;
+}
+
 .checkbox-dropdown .chkdd-toggle {
-	background:#f8fafc;
-	border:1px solid #cbd5e1;
-	border-radius:8px;
-	padding:6px 10px;
-	font-size:13px;
-	cursor:pointer;
-	width:100%;
-	text-align:left;
-	line-height:1.2;
-	min-height:34px;
-	display:flex;
-	align-items:center;
-	justify-content:space-between;
-	gap:8px;
-	font-weight:400;
-	box-shadow:0 1px 0 rgba(255,255,255,0.4) inset;
+	background: #f8fafc;
+	border: 1px solid #cbd5e1;
+	border-radius: 8px;
+	padding: 6px 10px;
+	font-size: 13px;
+	cursor: pointer;
+	width: 100%;
+	text-align: left;
+	line-height: 1.2;
+	min-height: 34px;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	font-weight: 400;
+	box-shadow: 0 1px 0 rgba(255, 255, 255, 0.4) inset;
 	transition: border-color .15s, background .15s, box-shadow .15s;
 }
-.checkbox-dropdown .chkdd-toggle:hover { background:#f1f5f9; }
-.checkbox-dropdown .chkdd-toggle:focus-visible { outline:none; border-color:#0ea5e9; box-shadow:0 0 0 2px rgba(14,165,233,0.25); background:#fff; }
-.checkbox-dropdown .chkdd-toggle:after { content:'▾'; float:right; opacity:.5; }
-.checkbox-dropdown[data-open="true"] .chkdd-toggle:after { content:'▴'; }
-.checkbox-dropdown[data-open="true"] .chkdd-toggle { background:#fff; border-color:#0ea5e9; box-shadow:0 0 0 2px rgba(14,165,233,0.25); }
-.checkbox-dropdown .chkdd-panel { position:absolute; z-index:40; top:100%; left:0; width:320px; max-height:320px; background:#fff; box-shadow:0 6px 18px -4px rgba(0,0,0,.15),0 2px 4px rgba(0,0,0,.08); border:1px solid #dbe3f0; border-radius:6px; padding:8px; margin-top:4px; }
-.checkbox-dropdown .chkdd-panel.hidden { display:none; }
-.chkdd-search-wrapper { margin-bottom:6px; }
-.chkdd-search-wrapper input { width:100%; padding:5px 0px; border:1px solid #cbd5e1; border-radius:4px; }
-.chkdd-actions { display:flex; gap:6px; margin-bottom:6px; }
-.chkdd-actions .mini { font-size:11px; background:#f1f5f9; border:1px solid #cbd5e1; padding:3px 6px; border-radius:4px; cursor:pointer; }
-.chkdd-options { display:flex; flex-direction:column; gap:2px; max-height:250px; overflow:auto; }
-.chkdd-opt { display:flex; align-items:center; gap:8px; font-size:12px; padding:4px 8px; cursor:pointer; border-radius:4px; line-height:1.3; flex-direction: row !important;}
-.chkdd-opt:hover { background:#f1f5f9; }
-.chkdd-opt.is-checked { background:#eef6ff; border-color:#bfdbfe; }
-.chkdd-opt input { cursor:pointer; margin:0; width:14px; height:20px !important; }
-.chkdd-opt span { flex:1; }
-.chkdd-opt input:focus-visible { outline:2px solid #2563eb; outline-offset:2px; }
+
+.checkbox-dropdown .chkdd-toggle:hover {
+	background: #f1f5f9;
+}
+
+.checkbox-dropdown .chkdd-toggle:focus-visible {
+	outline: none;
+	border-color: #0ea5e9;
+	box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.25);
+	background: #fff;
+}
+
+.checkbox-dropdown .chkdd-toggle:after {
+	content: '▾';
+	float: right;
+	opacity: .5;
+}
+
+.checkbox-dropdown[data-open="true"] .chkdd-toggle:after {
+	content: '▴';
+}
+
+.checkbox-dropdown[data-open="true"] .chkdd-toggle {
+	background: #fff;
+	border-color: #0ea5e9;
+	box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.25);
+}
+
+.checkbox-dropdown .chkdd-panel {
+	position: absolute;
+	z-index: 40;
+	top: 100%;
+	left: 0;
+	width: 320px;
+	max-height: 320px;
+	background: #fff;
+	box-shadow: 0 6px 18px -4px rgba(0, 0, 0, .15), 0 2px 4px rgba(0, 0, 0, .08);
+	border: 1px solid #dbe3f0;
+	border-radius: 6px;
+	padding: 8px;
+	margin-top: 4px;
+}
+
+.checkbox-dropdown .chkdd-panel.hidden {
+	display: none;
+}
+
+.chkdd-search-wrapper {
+	margin-bottom: 6px;
+}
+
+.chkdd-search-wrapper input {
+	width: 100%;
+	padding: 5px 0px;
+	border: 1px solid #cbd5e1;
+	border-radius: 4px;
+}
+
+.chkdd-actions {
+	display: flex;
+	gap: 6px;
+	margin-bottom: 6px;
+}
+
+.chkdd-actions .mini {
+	font-size: 11px;
+	background: #f1f5f9;
+	border: 1px solid #cbd5e1;
+	padding: 3px 6px;
+	border-radius: 4px;
+	cursor: pointer;
+}
+
+.chkdd-options {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	max-height: 250px;
+	overflow: auto;
+}
+
+.chkdd-opt {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 12px;
+	padding: 4px 8px;
+	cursor: pointer;
+	border-radius: 4px;
+	line-height: 1.3;
+	flex-direction: row !important;
+}
+
+.chkdd-opt:hover {
+	background: #f1f5f9;
+}
+
+.chkdd-opt.is-checked {
+	background: #eef6ff;
+	border-color: #bfdbfe;
+}
+
+.chkdd-opt input {
+	cursor: pointer;
+	margin: 0;
+	width: 14px;
+	height: 20px !important;
+}
+
+.chkdd-opt span {
+	flex: 1;
+}
+
+.chkdd-opt input:focus-visible {
+	outline: 2px solid #2563eb;
+	outline-offset: 2px;
+}
 
 /* Theme variables (added so components using var(--*) render correctly) */
 :root {
@@ -220,7 +323,8 @@ header h1 {
 	.controls {
 		gap: 12px;
 	}
-	.controls span#multiOptionsInputs,	
+
+	.controls span#multiOptionsInputs,
 	.controls span#dateRangeInputs,
 	.controls span#monthRangeInputs {
 		flex-wrap: wrap;
@@ -260,7 +364,7 @@ header h1 {
 	}
 
 	.controls span#multiOptionsInputs label,
-	.controls span#dateRangeInputs  label,
+	.controls span#dateRangeInputs label,
 	.controls span#monthRangeInputs label {
 		min-width: 220px;
 	}

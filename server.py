@@ -18,6 +18,7 @@ import requests
 
 import pandas as pd
 from flask import Flask, jsonify, render_template, request, session, redirect, url_for
+from urllib.parse import urlparse
 from authlib.integrations.flask_client import OAuth
 from dotenv import load_dotenv
 
@@ -271,6 +272,25 @@ def require_login():
             return jsonify({'error': 'Unauthorized'}), 401
         return jsonify({'error': 'Unauthorized'}), 401, {'WWW-Authenticate': 'Basic realm="Dashboard"'}
     return redirect(url_for('login'))
+
+
+def _external_base_url() -> str:
+    """Retorna a URL base pública para redirecionamentos (ex.: https://dashboard.exemplo.com).
+
+    Preferimos derivar de OIDC_REDIRECT_URI para evitar host/porta internos em ambientes com Ingress/Proxy.
+    Fallback: request.url_root.
+    """
+    try:
+        if OIDC_REDIRECT_URI:
+            p = urlparse(OIDC_REDIRECT_URI)
+            if p.scheme and p.netloc:
+                return f"{p.scheme}://{p.netloc}"
+    except Exception:
+        pass
+    try:
+        return (request.url_root or '').rstrip('/')
+    except Exception:
+        return ''
 
 
 def _series_to_labels_data(s: pd.Series) -> Dict[str, Any]:
@@ -807,8 +827,8 @@ def logout():
     except Exception:
         id_token = None
         refresh_token = None
-    # Preserve base URL for redirect before clearing session
-    post_logout_redirect = request.url_root.rstrip('/')
+    # Preserve base URL para redirect (público)
+    post_logout_redirect = _external_base_url()
     session.clear()
     if ENABLE_AUTH and OIDC_CONFIGURED:
         try:
