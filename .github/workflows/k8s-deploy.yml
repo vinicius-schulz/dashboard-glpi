@@ -8,11 +8,11 @@ jobs:
   deploy:
     runs-on: [self-hosted, k8s, prod]
     env:
-      # Non-sensitive configuration should be set as repository Variables (Settings → Variables):
-      # DOCKERHUB_USERNAME, IMAGE_REPOSITORY (optional), DASHBOARD_ENABLE_AUTHENTICATION,
-      # GLPI_URL, DEBUG_SEARCH_OPTIONS, URL_DASHBOARD
-      # Sensitive values must be stored as repository Secrets: DASHBOARD_ADMIN, DASHBOARD_PASSWORD,
-      # DOCKERHUB_TOKEN, GLPI_USER_TOKEN
+  # Non-sensitive configuration should be set as repository Variables (Settings → Variables):
+  # DOCKERHUB_USERNAME, IMAGE_REPOSITORY (optional), DASHBOARD_ENABLE_AUTHENTICATION,
+  # GLPI_URL, DEBUG_SEARCH_OPTIONS, URL_DASHBOARD, OIDC_CLIENT_ID, REALM_NAME
+  # Sensitive values must be stored as repository Secrets: DOCKERHUB_TOKEN, GLPI_USER_TOKEN,
+  # OIDC_CLIENT_SECRET, FLASK_SECRET_KEY
       NAMESPACE: dashboard-glpi
       DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
       IMAGE_REPOSITORY: ${{ vars.IMAGE_REPOSITORY }}
@@ -62,13 +62,17 @@ jobs:
         env:
           IMAGE_REPOSITORY: ${{ steps.vars.outputs.IMAGE_REPOSITORY }}
           IMAGE_VERSION: ${{ steps.vars.outputs.IMAGE_VERSION }}
-          DASHBOARD_ADMIN: ${{ secrets.DASHBOARD_ADMIN }}
-          DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_PASSWORD }}
           GLPI_USER_TOKEN: ${{ secrets.GLPI_USER_TOKEN }}
           DASHBOARD_ENABLE_AUTHENTICATION: ${{ env.DASHBOARD_ENABLE_AUTHENTICATION }}
           GLPI_URL: ${{ env.GLPI_URL }}
           DEBUG_SEARCH_OPTIONS: ${{ env.DEBUG_SEARCH_OPTIONS }}
           URL_DASHBOARD: ${{ env.URL_DASHBOARD }}
+          OIDC_CLIENT_ID: ${{ vars.OIDC_CLIENT_ID }}
+          REALM_NAME: ${{ vars.REALM_NAME }}
+          OIDC_CLIENT_SECRET: ${{ secrets.OIDC_CLIENT_SECRET }}
+          FLASK_SECRET_KEY: ${{ secrets.FLASK_SECRET_KEY }}
+          OIDC_SCOPES: ${{ vars.OIDC_SCOPES }}
+          OIDC_VERIFY_TLS: ${{ vars.OIDC_VERIFY_TLS }}
         run: |
           set -euo pipefail
           mkdir -p k8s/prd/output
@@ -79,24 +83,36 @@ jobs:
           sed -i "s|<IMAGE_VERSION>|${IMAGE_VERSION}|g"     k8s/prd/output/03-deployment.yaml
 
           # base64 para 'data:'
-          DASH_ADMIN_B64=$(printf '%s' "${DASHBOARD_ADMIN}" | base64 | tr -d '\n')
-          DASH_PASS_B64=$(printf '%s' "${DASHBOARD_PASSWORD}" | base64 | tr -d '\n')
           GLPI_TOKEN_B64=$(printf '%s' "${GLPI_USER_TOKEN}"   | base64 | tr -d '\n')
+          OIDC_CLIENT_SECRET_B64=$(printf '%s' "${OIDC_CLIENT_SECRET:-}" | base64 | tr -d '\n')
+          FLASK_SECRET_KEY_B64=$(printf '%s' "${FLASK_SECRET_KEY:-}" | base64 | tr -d '\n')
 
-          # substituição EM <PLACEHOLDERS> (sem aspas)
-          sed -i "s|<DASHBOARD_ADMIN>|${DASH_ADMIN_B64}|g"   k8s/prd/output/01-secrets.yaml
-          sed -i "s|<DASHBOARD_PASSWORD>|${DASH_PASS_B64}|g" k8s/prd/output/01-secrets.yaml
-          sed -i "s|<GLPI_USER_TOKEN>|${GLPI_TOKEN_B64}|g"   k8s/prd/output/01-secrets.yaml
+          # defaults
+          OIDC_CLIENT_ID=${OIDC_CLIENT_ID:-dashboard-glpi}
+          REALM_NAME=${REALM_NAME:-uvxp}
+
+          # substituição EM <PLACEHOLDERS> (sem aspas) - Secrets
+          sed -i "s|<GLPI_USER_TOKEN>|${GLPI_TOKEN_B64}|g"           k8s/prd/output/01-secrets.yaml
+          sed -i "s|<OIDC_CLIENT_SECRET>|${OIDC_CLIENT_SECRET_B64}|g" k8s/prd/output/01-secrets.yaml
+          sed -i "s|<FLASK_SECRET_KEY>|${FLASK_SECRET_KEY_B64}|g"     k8s/prd/output/01-secrets.yaml
 
           # configmap / ingress
           sed -i "s|<DASHBOARD_ENABLE_AUTHENTICATION>|${DASHBOARD_ENABLE_AUTHENTICATION}|g" k8s/prd/output/02-configmap.yaml
           sed -i "s|<GLPI_URL>|${GLPI_URL}|g" k8s/prd/output/02-configmap.yaml
           sed -i "s|<DEBUG_SEARCH_OPTIONS>|${DEBUG_SEARCH_OPTIONS}|g" k8s/prd/output/02-configmap.yaml
+          sed -i "s|<CLIENT_ID>|${OIDC_CLIENT_ID}|g" k8s/prd/output/02-configmap.yaml
+          sed -i "s|<REALM_NAME>|${REALM_NAME}|g" k8s/prd/output/02-configmap.yaml
+          sed -i "s|<OIDC_SCOPES>|${OIDC_SCOPES:-openid profile email}|g" k8s/prd/output/02-configmap.yaml
+          sed -i "s|<OIDC_VERIFY_TLS>|${OIDC_VERIFY_TLS:-true}|g" k8s/prd/output/02-configmap.yaml
+          sed -i "s|<DASHBOARD_DOMAIN>|${URL_DASHBOARD}|g" k8s/prd/output/02-configmap.yaml
           sed -i "s|<URL_DASHBOARD>|${URL_DASHBOARD}|g" k8s/prd/output/05-ingress.yaml
 
-          # sanity check: não pode sobrar '<DASHBOARD_...>'
-          if grep -R "<DASHBOARD_\|<GLPI_USER_TOKEN>" k8s/prd/output/01-secrets.yaml; then
+          # sanity check: não pode sobrar placeholders
+          if grep -R "<GLPI_USER_TOKEN>\|<OIDC_CLIENT_SECRET>\|<FLASK_SECRET_KEY>" k8s/prd/output/01-secrets.yaml; then
             echo "Placeholders de Secret não foram substituídos"; exit 1
+          fi
+          if grep -R "<CLIENT_ID>\|<REALM_NAME>\|<OIDC_SCOPES>\|<OIDC_VERIFY_TLS>\|<DASHBOARD_DOMAIN>\|<DASHBOARD_ENABLE_AUTHENTICATION>\|<GLPI_URL>\|<DEBUG_SEARCH_OPTIONS>" k8s/prd/output/02-configmap.yaml; then
+            echo "Placeholders de ConfigMap não foram substituídos"; exit 1
           fi
 
       - name: Setup kubectl

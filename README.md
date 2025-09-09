@@ -28,6 +28,19 @@ DASHBOARD_ENABLE_AUTHENTICATION=true   # defina false/0/off para desabilitar log
 DASHBOARD_ADMIN=admin                  # obrigatório se auth habilitada
 DASHBOARD_PASSWORD=troca_essa_senha    # obrigatório se auth habilitada
 FLASK_SECRET_KEY=uma_chave_complexa    # recomendado em produção
+
+### Autenticação via Keycloak (OIDC)
+
+Variáveis de ambiente suportadas:
+
+- DASHBOARD_ENABLE_AUTHENTICATION: `true|false`
+- OIDC_ISSUER_URL: `https://auth.uvxp.com.br/realms/<REALM>`
+- OIDC_CLIENT_ID: ID do client (conf. no Keycloak)
+- OIDC_CLIENT_SECRET: Segredo do client (conf. no Keycloak)
+- OIDC_REDIRECT_URI: `https://<DOMINIO_DASHBOARD>/auth/callback`
+- OIDC_SCOPES: `openid profile email` (padrão)
+
+Ingress deve apontar para o domínio público do dashboard para que o Redirect URI funcione corretamente.
 ```
 Notas:
 * Se `DASHBOARD_ENABLE_AUTHENTICATION=false`, `/login` é ignorado e o dashboard abre direto.

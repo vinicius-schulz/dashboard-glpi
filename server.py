@@ -12,11 +12,13 @@ from __future__ import annotations
 import os
 from typing import Any, Dict, Tuple
 from datetime import datetime
+import time
 import zoneinfo
 import requests
 
 import pandas as pd
 from flask import Flask, jsonify, render_template, request, session, redirect, url_for
+from authlib.integrations.flask_client import OAuth
 from dotenv import load_dotenv
 
 from glpi_client import GLPIClient
@@ -52,6 +54,72 @@ app.secret_key = os.getenv('FLASK_SECRET_KEY') or os.urandom(24)
 # When False, the app does not require login and serves the dashboard directly.
 DASHBOARD_ENABLE_AUTHENTICATION = os.getenv('DASHBOARD_ENABLE_AUTHENTICATION', 'true')
 ENABLE_AUTH = str(DASHBOARD_ENABLE_AUTHENTICATION).strip().lower() in ('1', 'true', 'yes', 'on')
+
+# OIDC (Keycloak) configuration
+OIDC_ISSUER_URL = os.getenv('OIDC_ISSUER_URL')
+OIDC_CLIENT_ID = os.getenv('OIDC_CLIENT_ID')
+OIDC_CLIENT_SECRET = os.getenv('OIDC_CLIENT_SECRET')
+OIDC_REDIRECT_URI = os.getenv('OIDC_REDIRECT_URI')
+OIDC_SCOPES = os.getenv('OIDC_SCOPES', 'openid profile email')
+OIDC_VERIFY_TLS = str(os.getenv('OIDC_VERIFY_TLS', 'true')).strip().lower() in ('1','true','yes','on')
+OIDC_CA_BUNDLE = os.getenv('OIDC_CA_BUNDLE')  # caminho para arquivo .pem com CA(s)
+if OIDC_CA_BUNDLE:
+    # remove aspas acidentais e espaços
+    OIDC_CA_BUNDLE = OIDC_CA_BUNDLE.strip().strip('"').strip("'")
+
+"""Ajuste global do Requests para OIDC (antes de criar o cliente)."""
+if OIDC_CA_BUNDLE:
+    # Força requests (incl. Authlib) a usar este CA bundle
+    os.environ['REQUESTS_CA_BUNDLE'] = OIDC_CA_BUNDLE
+    os.environ['SSL_CERT_FILE'] = OIDC_CA_BUNDLE
+    os.environ['CURL_CA_BUNDLE'] = OIDC_CA_BUNDLE
+elif not OIDC_VERIFY_TLS:
+    # Desabilita verificação (apenas para DEV)
+    os.environ['PYTHONHTTPSVERIFY'] = '0'
+
+oauth = OAuth(app)
+OIDC_CONFIGURED = bool(OIDC_ISSUER_URL and OIDC_CLIENT_ID and OIDC_CLIENT_SECRET and OIDC_REDIRECT_URI)
+if ENABLE_AUTH and OIDC_CONFIGURED:
+    issuer = OIDC_ISSUER_URL.rstrip('/')
+    kc_base = f"{issuer}/protocol/openid-connect"
+    server_metadata = {
+        'issuer': issuer,
+        'authorization_endpoint': f"{kc_base}/auth",
+        'token_endpoint': f"{kc_base}/token",
+        'userinfo_endpoint': f"{kc_base}/userinfo",
+        'end_session_endpoint': f"{kc_base}/logout",
+        'jwks_uri': f"{kc_base}/certs",
+        'revocation_endpoint': f"{kc_base}/revoke",
+        'introspection_endpoint': f"{kc_base}/token/introspect",
+        'scopes_supported': ['openid','profile','email'],
+        'response_types_supported': ['code','code id_token','id_token'],
+        'grant_types_supported': ['authorization_code','refresh_token'],
+    }
+    oauth.register(
+        name='keycloak',
+        client_id=OIDC_CLIENT_ID,
+        client_secret=OIDC_CLIENT_SECRET,
+        server_metadata=server_metadata,
+        authorize_url=server_metadata['authorization_endpoint'],
+        access_token_url=server_metadata['token_endpoint'],
+        api_base_url=issuer,
+        client_kwargs={'scope': OIDC_SCOPES},
+    )
+    # Ajusta explicitamente a verificação TLS na sessão do cliente
+    try:
+        client = oauth.create_client('keycloak')
+        if client is not None:
+            client.session.verify = (OIDC_CA_BUNDLE if OIDC_CA_BUNDLE else (True if OIDC_VERIFY_TLS else False))
+    except Exception:
+        pass
+
+# Harden session cookies in production
+if os.getenv('FLASK_ENV', 'production') == 'production':
+    app.config.update(
+        SESSION_COOKIE_SECURE=True,
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE='Lax',
+    )
 
 
 def is_glpi_operational(timeout: int = 5) -> Tuple[bool, str]:
@@ -106,7 +174,13 @@ def check_credentials(user: str, pwd: str) -> bool:
 
 
 def is_authenticated() -> bool:
-    # session first
+    # OIDC session (preferred)
+    if session.get('user'):
+        if _validate_oidc_session():
+            return True
+        # If invalid, session was cleared by validator
+        return False
+    # legacy session
     if session.get('auth'):
         return True
     # HTTP Basic header
@@ -116,16 +190,85 @@ def is_authenticated() -> bool:
     return False
 
 
+def _validate_oidc_session() -> bool:
+    """Valida a sessão OIDC: expiração do access_token e status no IdP via userinfo.
+
+    Se inválido ou revogado, limpa a sessão e retorna False.
+    """
+    try:
+        if not (ENABLE_AUTH and OIDC_CONFIGURED):
+            return True
+        tok = session.get('token') or {}
+        access_token = tok.get('access_token')
+        if not access_token:
+            session.clear()
+            return False
+        # Expiração local
+        obtained_at = session.get('token_obtained_at')
+        expires_in = tok.get('expires_in')
+        try:
+            if obtained_at is not None and expires_in is not None:
+                exp_ts = int(obtained_at) + int(expires_in)
+                if time.time() >= (exp_ts - 15):  # 15s de margem
+                    session.clear()
+                    return False
+        except Exception:
+            pass
+        issuer = (OIDC_ISSUER_URL or '').rstrip('/')
+        userinfo_url = f"{issuer}/protocol/openid-connect/userinfo"
+        introspect_url = f"{issuer}/protocol/openid-connect/token/introspect"
+        verify_opt = (OIDC_CA_BUNDLE if OIDC_CA_BUNDLE else (True if OIDC_VERIFY_TLS else False))
+        try:
+            # 1) Tenta introspecção (mais explícito para detectar revogação)
+            try:
+                ir = requests.post(introspect_url, data={'client_id': OIDC_CLIENT_ID, 'client_secret': OIDC_CLIENT_SECRET, 'token': access_token}, timeout=5, verify=verify_opt)
+                if ir.status_code == 200:
+                    irj = ir.json()
+                    if isinstance(irj, dict) and not irj.get('active', False):
+                        session.clear();
+                        return False
+            except Exception:
+                pass
+            # 2) Fallback: userinfo (401/403 indica token inválido/revogado)
+            r = requests.get(userinfo_url, headers={'Authorization': f'Bearer {access_token}'}, timeout=5, verify=verify_opt)
+            if r.status_code == 200:
+                # opcional: atualizar user info
+                try:
+                    ui = r.json()
+                    if isinstance(ui, dict):
+                        session['user'] = {
+                            'sub': ui.get('sub'),
+                            'name': ui.get('name') or ui.get('preferred_username'),
+                            'email': ui.get('email'),
+                        }
+                except Exception:
+                    pass
+                return True
+            # 401/403 ou outros => inválido
+            session.clear()
+            return False
+        except Exception:
+            # Em erro de rede, por segurança, considerar inválido para forçar re-login
+            session.clear()
+            return False
+    except Exception:
+        session.clear()
+        return False
+
+
 @app.before_request
 def require_login():
     if not ENABLE_AUTH:
         return None
     path = request.path or ''
-    if path.startswith('/static/') or path == '/favicon.ico' or path.startswith('/login') or path == '/health':
+    if path.startswith('/static/') or path == '/favicon.ico' or path.startswith('/login') or path.startswith('/auth/callback') or path.startswith('/logout') or path in ('/health','/ready'):
         return None
     if is_authenticated():
         return None
     if path.startswith('/api/'):
+        # For APIs, do not trigger browser auth if OIDC is configured
+        if OIDC_CONFIGURED:
+            return jsonify({'error': 'Unauthorized'}), 401
         return jsonify({'error': 'Unauthorized'}), 401, {'WWW-Authenticate': 'Basic realm="Dashboard"'}
     return redirect(url_for('login'))
 
@@ -571,39 +714,136 @@ def health():
         return jsonify({"status": "error", "error": str(e)}), 500
 
 
+@app.get("/ready")
+def ready():
+    """Readiness probe para Kubernetes."""
+    try:
+        ok_glpi, _msg = is_glpi_operational(timeout=5)
+        if not ok_glpi:
+            return jsonify({"status": "degraded", "glpi": False}), 503
+        if ENABLE_AUTH and OIDC_CONFIGURED and 'keycloak' not in oauth._clients:
+            return jsonify({"status": "degraded", "auth": False}), 503
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    # Simple form-based login; also accept Basic Auth
-    notice = None
-    # Se autenticação estiver desativada, não faz sentido exibir tela de login
+    # Se OIDC configurado, redireciona para Keycloak; caso contrário, mantém login legado se credenciais estiverem setadas
     if not ENABLE_AUTH:
         return redirect(url_for('index'))
-    if not DASHBOARD_ADMIN or not DASHBOARD_PASSWORD:
-        notice = 'Autenticação não configurada no servidor. Defina DASHBOARD_ADMIN e DASHBOARD_PASSWORD para habilitar o login.'
+    if OIDC_CONFIGURED and 'keycloak' in oauth._clients:
+        return oauth.keycloak.authorize_redirect(redirect_uri=OIDC_REDIRECT_URI)
+    # fallback legado
+    notice = None
+    if not (DASHBOARD_ADMIN and DASHBOARD_PASSWORD):
+        return jsonify({'error': 'OIDC não configurado e login legado indisponível'}), 503
     if request.method == 'GET':
         return render_template('login.html', notice=notice)
-    # POST
-    user = request.form.get('user')
-    pwd = request.form.get('password')
-    if not DASHBOARD_ADMIN or not DASHBOARD_PASSWORD:
-        # explicit feedback if server not configured
-        return render_template('login.html', error='Autenticação não configurada. Contate o administrador.', notice=notice), 503
+    user = request.form.get('user'); pwd = request.form.get('password')
     if not user or not pwd:
         return render_template('login.html', error='Informe usuário e senha.', notice=notice), 400
     if check_credentials(user, pwd):
         session['auth'] = True
         return redirect(url_for('index'))
-    # invalid credentials -> provide clear feedback
     return render_template('login.html', error='Usuário ou senha inválidos. Verifique e tente novamente.', notice=notice), 401
+
+
+@app.route('/auth/callback', methods=['GET'])
+def auth_callback():
+    if not ENABLE_AUTH:
+        return redirect(url_for('index'))
+    if not (OIDC_CONFIGURED and 'keycloak' in oauth._clients):
+        return jsonify({'error': 'OIDC não configurado no servidor'}), 503
+    try:
+        # Troca o authorization code manualmente (requests) para evitar validação de id_token/jwks
+        auth_code = request.args.get('code')
+        if not auth_code:
+            return jsonify({'error': 'Código de autorização ausente no callback'}), 400
+        issuer = (OIDC_ISSUER_URL or '').rstrip('/')
+        oidc_base = f"{issuer}/protocol/openid-connect"
+        token_url = f"{oidc_base}/token"
+        userinfo_url = f"{oidc_base}/userinfo"
+        verify_opt = (OIDC_CA_BUNDLE if OIDC_CA_BUNDLE else (True if OIDC_VERIFY_TLS else False))
+        data = {
+            'grant_type': 'authorization_code',
+            'code': auth_code,
+            'redirect_uri': OIDC_REDIRECT_URI,
+            'client_id': OIDC_CLIENT_ID,
+            'client_secret': OIDC_CLIENT_SECRET,
+        }
+        tr = requests.post(token_url, data=data, timeout=15, verify=verify_opt)
+        tr.raise_for_status()
+        token = tr.json()
+        access_token = token.get('access_token')
+        if not access_token:
+            return jsonify({'error': 'Access token não retornado pelo servidor OIDC'}), 400
+        ur = requests.get(userinfo_url, headers={'Authorization': f'Bearer {access_token}'}, timeout=15, verify=verify_opt)
+        ur.raise_for_status()
+        userinfo = ur.json() if ur.headers.get('content-type','').lower().startswith('application/json') else {}
+        # Salva sessão de usuário e tokens
+        session['user'] = {
+            'sub': userinfo.get('sub'),
+            'name': userinfo.get('name') or userinfo.get('preferred_username'),
+            'email': userinfo.get('email'),
+        }
+        session['token'] = token
+        session['token_obtained_at'] = int(time.time())
+        return redirect(url_for('index'))
+    except Exception as e:
+        return jsonify({'error': f'Falha no callback OIDC: {e}'}), 400
 
 
 @app.get('/logout')
 def logout():
-    session.pop('auth', None)
-    # Se auth desativada, voltar direto para index
-    if not ENABLE_AUTH:
-        return redirect(url_for('index'))
-    return redirect(url_for('login'))
+    # Limpa sessão e tenta RP-initiated logout no Keycloak
+    id_token = None
+    refresh_token = None
+    try:
+        tok = session.get('token') or {}
+        id_token = tok.get('id_token')
+        refresh_token = tok.get('refresh_token') or tok.get('refreshToken')
+    except Exception:
+        id_token = None
+        refresh_token = None
+    # Preserve base URL for redirect before clearing session
+    post_logout_redirect = request.url_root.rstrip('/')
+    session.clear()
+    if ENABLE_AUTH and OIDC_CONFIGURED:
+        try:
+            end_session = None
+            if 'keycloak' in oauth._clients:
+                end_session = oauth.keycloak.load_server_metadata().get('end_session_endpoint')
+            if not end_session:
+                issuer = (OIDC_ISSUER_URL or '').rstrip('/')
+                end_session = f"{issuer}/protocol/openid-connect/logout"
+        except Exception:
+            issuer = (OIDC_ISSUER_URL or '').rstrip('/')
+            end_session = f"{issuer}/protocol/openid-connect/logout"
+
+        if end_session and id_token:
+            from urllib.parse import urlencode
+            params = {
+                'post_logout_redirect_uri': post_logout_redirect,
+                'id_token_hint': id_token,
+                'client_id': OIDC_CLIENT_ID,
+            }
+            return redirect(f"{end_session}?{urlencode(params)}")
+        elif end_session and refresh_token:
+            # Faz POST para invalidar refresh_token (encerra sessão no IdP)
+            verify_opt = (OIDC_CA_BUNDLE if OIDC_CA_BUNDLE else (True if OIDC_VERIFY_TLS else False))
+            try:
+                requests.post(
+                    end_session,
+                    data={'client_id': OIDC_CLIENT_ID, 'refresh_token': refresh_token},
+                    timeout=10,
+                    verify=verify_opt,
+                )
+            except Exception:
+                pass
+            return redirect(post_logout_redirect)
+    return redirect(url_for('index'))
 
 
 @app.get("/api/data")

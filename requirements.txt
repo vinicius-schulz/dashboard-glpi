@@ -3,4 +3,5 @@ pandas>=2.2
 python-dotenv>=1.0
 tenacity>=8.2
 Flask>=3.0
+Authlib>=1.3
 

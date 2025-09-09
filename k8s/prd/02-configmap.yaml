@@ -7,3 +7,10 @@ data:
   DASHBOARD_ENABLE_AUTHENTICATION: '<DASHBOARD_ENABLE_AUTHENTICATION>'
   GLPI_URL: '<GLPI_URL>'
   DEBUG_SEARCH_OPTIONS: '<DEBUG_SEARCH_OPTIONS>'
+  OIDC_ISSUER_URL: 'https://auth.uvxp.com.br/realms/<REALM_NAME>'
+  OIDC_CLIENT_ID: '<CLIENT_ID>'
+  OIDC_REDIRECT_URI: 'https://<DASHBOARD_DOMAIN>/auth/callback'
+  OIDC_SCOPES: '<OIDC_SCOPES>'
+  OIDC_VERIFY_TLS: '<OIDC_VERIFY_TLS>'
+  # Caminho do bundle montado via ConfigMap (ver 06-ca-bundle.yaml)
+  OIDC_CA_BUNDLE: '/etc/ssl/custom/fullchain_with_root.pem'

@@ -24,6 +24,9 @@ spec:
                 name: dashboard-glpi-config
             - secretRef:
                 name: dashboard-glpi-secret
+          env:
+            - name: OIDC_CA_BUNDLE
+              value: "/etc/ssl/custom/fullchain_with_root.pem"
           ports:
           - name: http
             containerPort: 8000
@@ -51,3 +54,14 @@ spec:
             limits:
               cpu: "2"
               memory: "500Mi"
+          volumeMounts:
+            - name: ca-bundle
+              mountPath: /etc/ssl/custom
+              readOnly: true
+      volumes:
+        - name: ca-bundle
+          configMap:
+            name: dashboard-glpi-ca-bundle
+            items:
+              - key: fullchain_with_root.pem
+                path: fullchain_with_root.pem
