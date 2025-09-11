@@ -204,6 +204,32 @@ def _validate_oidc_session() -> bool:
         if not access_token:
             session.clear()
             return False
+        # Helper: tenta refresh com refresh_token do Keycloak
+        def _try_refresh(current_token: dict) -> bool:
+            try:
+                refresh_token = (current_token or {}).get('refresh_token') or (current_token or {}).get('refreshToken')
+                if not refresh_token:
+                    return False
+                issuer = (OIDC_ISSUER_URL or '').rstrip('/')
+                token_url = f"{issuer}/protocol/openid-connect/token"
+                verify_opt = (OIDC_CA_BUNDLE if OIDC_CA_BUNDLE else (True if OIDC_VERIFY_TLS else False))
+                data = {
+                    'grant_type': 'refresh_token',
+                    'refresh_token': refresh_token,
+                    'client_id': OIDC_CLIENT_ID,
+                    'client_secret': OIDC_CLIENT_SECRET,
+                }
+                rr = requests.post(token_url, data=data, timeout=10, verify=verify_opt)
+                if rr.status_code != 200:
+                    return False
+                new_tok = rr.json() or {}
+                if not new_tok.get('access_token'):
+                    return False
+                session['token'] = new_tok
+                session['token_obtained_at'] = int(time.time())
+                return True
+            except Exception:
+                return False
         # Expiração local
         obtained_at = session.get('token_obtained_at')
         expires_in = tok.get('expires_in')
@@ -211,8 +237,13 @@ def _validate_oidc_session() -> bool:
             if obtained_at is not None and expires_in is not None:
                 exp_ts = int(obtained_at) + int(expires_in)
                 if time.time() >= (exp_ts - 15):  # 15s de margem
-                    session.clear()
-                    return False
+                    # tenta refresh silencioso; se falhar, encerra sessão
+                    if not _try_refresh(tok):
+                        session.clear()
+                        return False
+                    # refresh ok -> atualiza access_token para validações seguintes
+                    tok = session.get('token') or {}
+                    access_token = tok.get('access_token')
         except Exception:
             pass
         issuer = (OIDC_ISSUER_URL or '').rstrip('/')
@@ -226,8 +257,12 @@ def _validate_oidc_session() -> bool:
                 if ir.status_code == 200:
                     irj = ir.json()
                     if isinstance(irj, dict) and not irj.get('active', False):
-                        session.clear();
-                        return False
+                        # tentar refresh e revalidar uma vez
+                        if not _try_refresh(tok):
+                            session.clear();
+                            return False
+                        tok = session.get('token') or {}
+                        access_token = tok.get('access_token')
             except Exception:
                 pass
             # 2) Fallback: userinfo (401/403 indica token inválido/revogado)
@@ -245,6 +280,24 @@ def _validate_oidc_session() -> bool:
                 except Exception:
                     pass
                 return True
+            if r.status_code in (401, 403):
+                # tenta um refresh e retry do userinfo
+                if _try_refresh(tok):
+                    tok = session.get('token') or {}
+                    access_token = tok.get('access_token')
+                    r2 = requests.get(userinfo_url, headers={'Authorization': f'Bearer {access_token}'}, timeout=5, verify=verify_opt)
+                    if r2.status_code == 200:
+                        try:
+                            ui = r2.json()
+                            if isinstance(ui, dict):
+                                session['user'] = {
+                                    'sub': ui.get('sub'),
+                                    'name': ui.get('name') or ui.get('preferred_username'),
+                                    'email': ui.get('email'),
+                                }
+                        except Exception:
+                            pass
+                        return True
             # 401/403 ou outros => inválido
             session.clear()
             return False

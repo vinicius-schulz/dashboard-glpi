@@ -1,5 +1,29 @@
 let charts = {};
 const UI_BASE = document.body.getAttribute('data-ui-base') || '';
+// Centraliza fetch com tratamento de 401 (redireciona para login) e mensagens amigáveis
+async function safeFetch(input, init) {
+  const res = await fetch(input, init);
+  if (res.status === 401) {
+    try { Toasts && Toasts.push && Toasts.push('warn', 'Sessão expirada. Redirecionando para login...'); } catch {}
+    // Redireciona para a página de login do app (server fará o fluxo OIDC)
+    window.location.href = '/login';
+    // retorna uma Response dummy para evitar exceções em chamadas aguardando json
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+  }
+  return res;
+}
+
+// Opcional: ping periódico leve para manter sessão ativa enquanto a aba está em uso
+// (não substitui refresh_token no backend; apenas evita ociosidade extrema)
+let _keepAliveTimer = null;
+function startKeepAlive() {
+  try { if (_keepAliveTimer) clearInterval(_keepAliveTimer); } catch {}
+  _keepAliveTimer = setInterval(() => {
+    // Usa HEAD se suportado; em alguns ambientes, GET é mais seguro
+    fetch('/ready', { method: 'GET', cache: 'no-store' }).catch(() => {});
+  }, 5 * 60 * 1000); // a cada 5 min
+}
+window.addEventListener('DOMContentLoaded', startKeepAlive);
 // ---- Tooltip custom para badge-period (ignora filtro de período) ----
 function initBadgePeriodTooltips() {
   // Use the same popover implementation as help buttons (createHelpPopover)
@@ -1128,7 +1152,7 @@ async function loadData() {
   const selectedGroups = getAssignedGroupSelectedValues();
   if (selectedGroups && selectedGroups.length && !selectedGroups.includes('todos')) assignedList = selectedGroups.join(',');
     const statusSel = (document.getElementById('statusFilter') && document.getElementById('statusFilter').value) || 'todos';
-    const r = await fetch(`/api/data?gran=${encodeURIComponent(gran)}&start=${startNorm}&end=${endNorm}&cat=${encodeURIComponent(catSel)}&assigned_group=${encodeURIComponent(assignedList)}&status=${encodeURIComponent(statusSel)}`);
+  const r = await safeFetch(`/api/data?gran=${encodeURIComponent(gran)}&start=${startNorm}&end=${endNorm}&cat=${encodeURIComponent(catSel)}&assigned_group=${encodeURIComponent(assignedList)}&status=${encodeURIComponent(statusSel)}`);
     let js = null;
     try { js = await r.clone().json(); } catch { /* ignore parse errors */ }
     if (r.status === 503) {
@@ -1944,7 +1968,7 @@ async function openTicketsModal(source, label, idsList) {
   Loader.show('Carregando chamados...');
   document.body.style.cursor = 'progress';
   try {
-    const r = await fetch(`/api/tickets?${params.toString()}`);
+  const r = await safeFetch(`/api/tickets?${params.toString()}`);
     let js = null;
     try { js = await r.clone().json(); } catch { /* ignore */ }
     if (r.status === 503) {
