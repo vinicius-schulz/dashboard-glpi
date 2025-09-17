@@ -356,6 +356,7 @@ const WidgetLayout = (() => {
     , { id: 'load_by_group', cols: 8, rows: 8, visible: true }
     , { id: 'resolutionHours', cols: 8, rows: 8, visible: true }
     , { id: 'slaBuckets', cols: 8, rows: 8, visible: true }
+    , { id: 'createdPeriod', cols: 8, rows: 8, visible: true }
 
   ].map((w, i) => ({ ...w, order: i }));
   // Grid cell size (px) for snap positioning
@@ -966,6 +967,12 @@ window.addEventListener('DOMContentLoaded', () => {
     ap.style.cursor = 'pointer';
     ap.addEventListener('click', () => openTicketsModal('awaiting_approval', 'Aguardando Aprovação'));
   }
+  // Novo: contador "Criados no período" abre modal com tickets criados dentro da janela atual (respeitando filtros)
+  const cpp = document.getElementById('createdPeriodValue');
+  if (cpp) {
+    cpp.style.cursor = 'pointer';
+    cpp.addEventListener('click', () => openTicketsModal('created_period', 'Criados no período'));
+  }
 });
 
 // ---- Month range controls for "Mensal" granularity ----
@@ -1276,6 +1283,15 @@ async function loadData() {
       const el5 = document.getElementById('awaitingApprovalValue');
       if (el5) el5.textContent = js.awaiting_approval.toLocaleString('pt-BR');
     }
+    // Novo: contador de "Criados no período" respeitando filtros atuais
+    try {
+      if (js && js.series && js.series.created && Array.isArray(js.series.created.data)) {
+        // Somatório da série strict de criados (já respeita janela e filtros)
+        const totalCreated = js.series.created.data.reduce((acc, v) => acc + Number(v || 0), 0);
+        const elCP = document.getElementById('createdPeriodValue');
+        if (elCP) elCP.textContent = Number(totalCreated || 0).toLocaleString('pt-BR');
+      }
+    } catch {}
 
     const s = js.series || {};
     lastSeries = s;
@@ -1961,7 +1977,16 @@ async function openTicketsModal(source, label, idsList) {
   });
   if (idsList && idsList.length) params.set('ids', idsList.join(','));
 
-  modal.title.textContent = idsList && idsList.length ? `Chamados — SLA ${label}` : `Chamados — ${source} · ${label}`;
+  // Título amigável por fonte
+  let titleText;
+  if (idsList && idsList.length) {
+    titleText = `Chamados — SLA ${label}`;
+  } else if (source === 'created_period') {
+    titleText = 'Chamados — Criados no período';
+  } else {
+    titleText = `Chamados — ${source} · ${label}`;
+  }
+  modal.title.textContent = titleText;
   modal.info.textContent = 'Carregando...';
   modal.rows.innerHTML = '';
   modal.show();
